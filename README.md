@@ -17,3 +17,6 @@ A multipurpose web tool for users to interface with their progression series. Th
 - mysql database
 - discord bot to post pairings/standings/etc. such that the discord server is the 'source of truth' for prog info due to instability of web pages
 - banlist image generator - no idea what this is going to be right now but something that will generate a banlist image once it has been voted on (see if ygoprog has an api otherwise ffmpeg maybe) or just generate a webpage and screenshot the result or something
+
+## Notes 
+- figure out how to cache results from yugioh api to store images!!important
