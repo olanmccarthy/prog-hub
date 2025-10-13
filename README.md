@@ -16,4 +16,4 @@ A multipurpose web tool for users to interface with their progression series. Th
 ## Services - scripts/microservices needed that are not the webpage
 - mysql database
 - discord bot to post pairings/standings/etc. such that the discord server is the 'source of truth' for prog info due to instability of web pages
-- banlist image generator - no idea what this is going to be right now but something that will generate a banlist image once it has been voted on (see if ygoprog has an api otherwise ffmpeg maybe)
+- banlist image generator - no idea what this is going to be right now but something that will generate a banlist image once it has been voted on (see if ygoprog has an api otherwise ffmpeg maybe) or just generate a webpage and screenshot the result or something
