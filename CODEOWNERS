@@ -1,0 +1,11 @@
+# Global rule — default owners for everything
+*       @olanmccarthy
+
+# Frontend folder owners
+/src/app/     @frontend-team
+
+# Database / backend logic owners
+/src/lib/     @backend-team @olanmccarthy
+
+# Docs are owned by specific users
+/docs/        @techwriter
