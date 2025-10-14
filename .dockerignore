@@ -1,0 +1,7 @@
+node_modules
+.gitignore
+.prettierrc
+Dockerfile
+README.md
+architecture
+.next
