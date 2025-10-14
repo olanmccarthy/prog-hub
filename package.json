@@ -9,16 +9,21 @@
     "prepare": "husky install",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",
     "docker:down": "docker compose down",
-
     "docker:dev:build": "docker compose -f docker-compose.dev.yml build",
     "docker:dev:up": "docker compose -f docker-compose.dev.yml up",
-    "docker:dev:down": "docker compose -f docker-compose.dev.yml down"
+    "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
+    "typeorm": "npx typeorm-ts-node-commonjs",
+    "migration:generate": "npm run typeorm -- migration:generate ./src/migrations/AutoMigration -d ./src/lib/data-source.ts",
+    "migration:run": "npm run typeorm -- migration:run -d ./src/lib/data-source.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d ./src/lib/data-source.ts"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.4",
     "mysql2": "^3.15.2",
     "next": "15.5.5",
     "react": "19.1.0",
