@@ -18,12 +18,15 @@ Kill the containers: `npm run docker:down`
 
 ### Architecture
 Check /architecture for detailed diagrams of webpage structure, db schema and basic wirefrmaes
+
 Front End:
 - NextJS + Typescript
 - Material UI for component styling
+
 Back End:
 - NextJS Server Actions where possible
 - NextJS serving api routes if needed
+
 Database:
 - MySQL with TypeORM
 
