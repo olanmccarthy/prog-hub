@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { AppDataSource } from '@/lib/data-source';
-import { User } from '@/entities/User';
+import { User } from '@/src/entities/User';
 
 export async function GET() {
   if (!AppDataSource.isInitialized) await AppDataSource.initialize();

@@ -1,12 +1,12 @@
 import { DataSource } from "typeorm";
-import { Player } from "@/entities/Player";
-import { Decklist } from "@/entities/Decklist";
-import { Session } from "@/entities/Session";
-import { Banlist } from "@/entities/Banlist";
-import { BanlistSuggestion } from "@/entities/BanlistSuggestion";
-import { BanlistSuggestionVote } from "@/entities/BanlistSuggestionVote";
-import { Pairing } from "@/entities/Pairing";
-import { VictoryPoint } from "@/entities/VictoryPoint";
+import { Player } from "@/src/entities/Player";
+import { Decklist } from "@/src/entities/Decklist";
+import { Session } from "@/src/entities/Session";
+import { Banlist } from "@/src/entities/Banlist";
+import { BanlistSuggestion } from "@/src/entities/BanlistSuggestion";
+import { BanlistSuggestionVote } from "@/src/entities/BanlistSuggestionVote";
+import { Pairing } from "@/src/entities/Pairing";
+import { VictoryPoint } from "@/src/entities/VictoryPoint";
 
 export const AppDataSource = new DataSource({
   type: "mysql",
