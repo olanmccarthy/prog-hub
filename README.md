@@ -10,7 +10,7 @@ Kill the containers: `npm run docker:dev:down`
 
 Avoid using other commands to ensure consistency with production
 
-### Production:
+### Production:
 Start the containers: `npm run docker:up` this command will **not** hot reload so use above commands in developemnt
 Kill the containers: `npm run docker:down`
 
