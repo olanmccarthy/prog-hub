@@ -1,13 +1,31 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* VS Code Dark Mode Color Palette */
+  /* Background colors */
+  --bg-primary: #1e1e1e;        /* Main background */
+  --bg-secondary: #252526;      /* Sidebar, elevated surfaces */
+  --bg-tertiary: #2d2d30;       /* Hover states, borders */
+  --bg-elevated: #2d2d2d;       /* Cards, panels */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Text colors */
+  --text-primary: #cccccc;      /* Main text */
+  --text-secondary: #858585;    /* Secondary text, disabled */
+  --text-bright: #ffffff;       /* Emphasized text */
+
+  /* Accent colors */
+  --accent-blue: #007acc;       /* Primary accent - links, buttons */
+  --accent-blue-hover: #1a8fd9; /* Hover state for blue */
+  --accent-blue-dark: #005a9e;  /* Active/pressed state */
+
+  /* UI element colors */
+  --border-color: #3e3e42;      /* Borders, dividers */
+  --input-bg: #3c3c3c;          /* Input fields */
+  --input-border: #3e3e42;      /* Input borders */
+
+  /* Status colors (optional for future use) */
+  --success: #4ec9b0;           /* Success states */
+  --warning: #dcdcaa;           /* Warning states */
+  --error: #f48771;             /* Error states */
+  --info: #75beff;              /* Info states */
 }
 
 html,
@@ -17,9 +35,11 @@ body {
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -31,12 +51,35 @@ body {
 }
 
 a {
-  color: inherit;
+  color: var(--accent-blue);
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+a:hover {
+  color: var(--accent-blue-hover);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #424242;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) var(--bg-primary);
 }
