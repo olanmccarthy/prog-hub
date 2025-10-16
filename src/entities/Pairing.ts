@@ -1,22 +1,25 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from "typeorm";
-import { Session } from "./Session";
-import { Player } from "./Player";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from "typeorm";
+import type { Session } from "./Session";
+import type { Player } from "./Player";
 
 @Entity({ name: "pairings" })
 export class Pairing {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Session, (s) => s.pairings)
+  @ManyToOne("Session", "pairings")
+  @JoinColumn({ name: "session_id" })
   session!: Session;
 
   @Column()
   round!: number;
 
-  @ManyToOne(() => Player, (p) => p.pairingsAsPlayer1)
+  @ManyToOne("Player", "pairingsAsPlayer1")
+  @JoinColumn({ name: "player1_id" })
   player1!: Player;
 
-  @ManyToOne(() => Player, (p) => p.pairingsAsPlayer2)
+  @ManyToOne("Player", "pairingsAsPlayer2")
+  @JoinColumn({ name: "player2_id" })
   player2!: Player;
 
   @Column()

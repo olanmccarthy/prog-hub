@@ -1,13 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from "typeorm";
-import { Session } from "./Session";
-import { BanlistSuggestion } from "./BanlistSuggestion";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn } from "typeorm";
+import type { Session } from "./Session";
+import type { BanlistSuggestion } from "./BanlistSuggestion";
 
 @Entity({ name: "banlists" })
 export class Banlist {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Session, (s) => s.banlists)
+  @ManyToOne("Session", "banlists")
+  @JoinColumn({ name: "session_id" })
   session!: Session;
 
   @Column("json")
@@ -22,6 +23,6 @@ export class Banlist {
   @Column("json")
   unlimited!: string[];
 
-  @OneToMany(() => BanlistSuggestion, (s) => s.banlist)
+  @OneToMany("BanlistSuggestion", "banlist")
   suggestions!: BanlistSuggestion[];
 }

@@ -1,16 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from "typeorm";
-import { Player } from "./Player";
-import { Session } from "./Session";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from "typeorm";
+import type { Player } from "./Player";
+import type { Session } from "./Session";
 
 @Entity({ name: "decklists" })
 export class Decklist {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Player, (p) => p.decklists)
+  @ManyToOne("Player", "decklists")
+  @JoinColumn({ name: "player_id" })
   player!: Player;
 
-  @ManyToOne(() => Session, (s) => s.decklists)
+  @ManyToOne("Session", "decklists")
+  @JoinColumn({ name: "session_id" })
   session!: Session;
 
   @Column("json")

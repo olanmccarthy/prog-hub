@@ -6,8 +6,15 @@
   --bg-tertiary: #2d2d30;       /* Hover states, borders */
   --bg-elevated: #2d2d2d;       /* Cards, panels */
 
+  /* Grey scale for cards and UI elements */
+  --grey-100: #3a3a3a;          /* Light grey for cards */
+  --grey-200: #333333;          /* Medium grey */
+  --grey-300: #2d2d2d;          /* Darker grey */
+  --grey-400: #252526;          /* Even darker grey */
+  --grey-badge: #404040;        /* Badge background */
+
   /* Text colors */
-  --text-primary: #cccccc;      /* Main text */
+  --text-primary: #ffffff;      /* Main text - white for dark theme */
   --text-secondary: #858585;    /* Secondary text, disabled */
   --text-bright: #ffffff;       /* Emphasized text */
 

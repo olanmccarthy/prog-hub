@@ -1,10 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from "typeorm";
-import { Decklist } from "./Decklist";
-import { BanlistSuggestion } from "./BanlistSuggestion";
-import { BanlistSuggestionVote } from "./BanlistSuggestionVote";
-import { Session } from "./Session";
-import { Pairing } from "./Pairing";
-import { VictoryPoint } from "./VictoryPoint";
+import type { Decklist } from "./Decklist";
+import type { BanlistSuggestion } from "./BanlistSuggestion";
+import type { BanlistSuggestionVote } from "./BanlistSuggestionVote";
+import type { Pairing } from "./Pairing";
+import type { VictoryPoint } from "./VictoryPoint";
 
 @Entity({ name: "players" })
 export class Player {
@@ -15,21 +14,21 @@ export class Player {
   name!: string;
 
   // Relationships
-  @OneToMany(() => Decklist, (decklist) => decklist.player)
+  @OneToMany("Decklist", "player")
   decklists!: Decklist[];
 
-  @OneToMany(() => BanlistSuggestion, (s) => s.player)
+  @OneToMany("BanlistSuggestion", "player")
   suggestions!: BanlistSuggestion[];
 
-  @OneToMany(() => BanlistSuggestionVote, (v) => v.player)
+  @OneToMany("BanlistSuggestionVote", "player")
   votes!: BanlistSuggestionVote[];
 
-  @OneToMany(() => Pairing, (p) => p.player1)
+  @OneToMany("Pairing", "player1")
   pairingsAsPlayer1!: Pairing[];
 
-  @OneToMany(() => Pairing, (p) => p.player2)
+  @OneToMany("Pairing", "player2")
   pairingsAsPlayer2!: Pairing[];
 
-  @OneToMany(() => VictoryPoint, (v) => v.player)
+  @OneToMany("VictoryPoint", "player")
   victoryPoints!: VictoryPoint[];
 }

@@ -1,15 +1,17 @@
-import { Entity, PrimaryGeneratedColumn, ManyToOne } from "typeorm";
-import { Player } from "./Player";
-import { BanlistSuggestion } from "./BanlistSuggestion";
+import { Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from "typeorm";
+import type { Player } from "./Player";
+import type { BanlistSuggestion } from "./BanlistSuggestion";
 
 @Entity({ name: "banlist_suggestion_votes" })
 export class BanlistSuggestionVote {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Player, (p) => p.votes)
+  @ManyToOne("Player", "votes")
+  @JoinColumn({ name: "player_id" })
   player!: Player;
 
-  @ManyToOne(() => BanlistSuggestion, (s) => s.votes)
+  @ManyToOne("BanlistSuggestion", "votes")
+  @JoinColumn({ name: "suggestion_id" })
   suggestion!: BanlistSuggestion;
 }
