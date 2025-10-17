@@ -1,6 +1,6 @@
 "use server";
 
-import { AppDataSource } from "@lib/data-source";
+import { getDataSource } from "@lib/data-source";
 import { Pairing } from "@entities/Pairing";
 import { Session } from "@entities/Session";
 import { getCurrentUser } from "@lib/auth";
@@ -37,14 +37,12 @@ export async function getPairings(
   sessionId?: number
 ): Promise<GetPairingsResult> {
   try {
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
+    const dataSource = await getDataSource();
 
     // If no sessionId provided, get the current session (latest session)
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const sessionRepo = AppDataSource.getRepository(Session);
+      const sessionRepo = dataSource.getRepository(Session);
       const sessions = await sessionRepo.find({
         select: ["id", "number", "date"],
         order: { date: "DESC" },
@@ -60,7 +58,7 @@ export async function getPairings(
       currentSessionId = sessions[0].id;
     }
 
-    const pairingRepo = AppDataSource.getRepository(Pairing);
+    const pairingRepo = dataSource.getRepository(Pairing);
     const pairings = await pairingRepo.find({
       where: { session: { id: currentSessionId } },
       relations: ["player1", "player2", "session"],
@@ -112,9 +110,7 @@ export async function updatePairing(
       };
     }
 
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
+    const dataSource = await getDataSource();
 
     if (!pairingId || player1wins === undefined || player2wins === undefined) {
       return {
@@ -123,7 +119,7 @@ export async function updatePairing(
       };
     }
 
-    const pairingRepo = AppDataSource.getRepository(Pairing);
+    const pairingRepo = dataSource.getRepository(Pairing);
     const pairing = await pairingRepo.findOne({
       where: { id: pairingId },
       relations: ["player1", "player2"],

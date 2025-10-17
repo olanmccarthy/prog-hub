@@ -1,6 +1,6 @@
 "use server";
 
-import { AppDataSource } from "@lib/data-source";
+import { getDataSource } from "@lib/data-source";
 import { Pairing } from "@entities/Pairing";
 import { Session } from "@entities/Session";
 import { getCurrentUser } from "@lib/auth";
@@ -55,14 +55,12 @@ export async function getStandings(
   sessionId?: number
 ): Promise<GetStandingsResult> {
   try {
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
+    const dataSource = await getDataSource();
 
     // If no sessionId provided, get the current session (latest session)
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const sessionRepo = AppDataSource.getRepository(Session);
+      const sessionRepo = dataSource.getRepository(Session);
       const sessions = await sessionRepo.find({
         select: ["id", "number", "date"],
         order: { date: "DESC" },
@@ -78,7 +76,7 @@ export async function getStandings(
       currentSessionId = sessions[0].id;
     }
 
-    const pairingRepo = AppDataSource.getRepository(Pairing);
+    const pairingRepo = dataSource.getRepository(Pairing);
     const pairings = await pairingRepo.find({
       where: { session: { id: currentSessionId } },
       relations: ["player1", "player2"],
@@ -220,11 +218,8 @@ function sortWithTiebreakers(
 
 export async function getSessions(): Promise<GetSessionsResult> {
   try {
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
-
-    const sessionRepo = AppDataSource.getRepository(Session);
+    const dataSource = await getDataSource();
+    const sessionRepo = dataSource.getRepository(Session);
     const sessions = await sessionRepo.find({
       select: ["id", "number", "date"],
       order: { date: "DESC" },
@@ -274,11 +269,8 @@ export interface IsFinalizedResult {
  */
 export async function checkIsFinalized(sessionId: number): Promise<IsFinalizedResult> {
   try {
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
-
-    const sessionRepo = AppDataSource.getRepository(Session);
+    const dataSource = await getDataSource();
+    const sessionRepo = dataSource.getRepository(Session);
     const session = await sessionRepo.findOne({
       where: { id: sessionId },
     });
@@ -326,12 +318,9 @@ export async function checkIsAdmin(): Promise<IsAdminResult> {
  */
 export async function canFinalizeStandings(sessionId: number): Promise<CanFinalizeResult> {
   try {
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
-
-    const sessionRepo = AppDataSource.getRepository(Session);
-    const pairingRepo = AppDataSource.getRepository(Pairing);
+    const dataSource = await getDataSource();
+    const sessionRepo = dataSource.getRepository(Session);
+    const pairingRepo = dataSource.getRepository(Pairing);
 
     // Get the current (most recent) session
     const sessions = await sessionRepo.find({
@@ -392,9 +381,7 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
       };
     }
 
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
+    const dataSource = await getDataSource();
 
     // Validate that standings can be finalized
     const canFinalize = await canFinalizeStandings(sessionId);
@@ -424,7 +411,7 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
       };
     }
 
-    const sessionRepo = AppDataSource.getRepository(Session);
+    const sessionRepo = dataSource.getRepository(Session);
     const session = await sessionRepo.findOne({
       where: { id: sessionId },
     });

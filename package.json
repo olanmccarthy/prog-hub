@@ -44,5 +44,10 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.4",
     "typescript": "^5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   }
 }

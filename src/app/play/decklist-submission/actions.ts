@@ -1,6 +1,6 @@
 "use server";
 
-import { AppDataSource } from "@lib/data-source";
+import { getDataSource } from "@lib/data-source";
 import { Decklist } from "@entities/Decklist";
 import { Session } from "@entities/Session";
 import { getCurrentUser } from "@lib/auth";
@@ -36,11 +36,8 @@ export interface CurrentSessionResult {
  */
 export async function getCurrentSession(): Promise<CurrentSessionResult> {
   try {
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
-
-    const sessionRepo = AppDataSource.getRepository(Session);
+    const dataSource = await getDataSource();
+    const sessionRepo = dataSource.getRepository(Session);
     const sessions = await sessionRepo.find({
       order: { date: "DESC" },
       take: 1,
@@ -82,9 +79,7 @@ export async function getMyDecklist(): Promise<GetDecklistResult> {
       };
     }
 
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
+    const dataSource = await getDataSource();
 
     const sessionResult = await getCurrentSession();
     if (!sessionResult.success || !sessionResult.sessionId) {
@@ -94,7 +89,7 @@ export async function getMyDecklist(): Promise<GetDecklistResult> {
       };
     }
 
-    const decklistRepo = AppDataSource.getRepository(Decklist);
+    const decklistRepo = dataSource.getRepository(Decklist);
     const decklist = await decklistRepo.findOne({
       where: {
         player: { id: currentUser.playerId },
@@ -145,10 +140,6 @@ export async function submitDecklist(
       };
     }
 
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
-
     // Validate deck structure
     if (maindeck.length < 40 || maindeck.length > 60) {
       return {
@@ -171,6 +162,8 @@ export async function submitDecklist(
       };
     }
 
+    const dataSource = await getDataSource();
+
     const sessionResult = await getCurrentSession();
     if (!sessionResult.success || !sessionResult.sessionId) {
       return {
@@ -179,7 +172,7 @@ export async function submitDecklist(
       };
     }
 
-    const decklistRepo = AppDataSource.getRepository(Decklist);
+    const decklistRepo = dataSource.getRepository(Decklist);
 
     // Check if user already has a decklist for this session
     const existingDecklist = await decklistRepo.findOne({

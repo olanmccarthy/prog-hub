@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AppDataSource } from '@lib/data-source';
+import { getDataSource } from '@lib/data-source';
 import { Player } from '@entities/Player';
 
 export async function POST(request: NextRequest) {
@@ -13,13 +13,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize database connection if not already initialized
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
-
-    // Get player repository
-    const playerRepository = AppDataSource.getRepository(Player);
+    // Get database connection and player repository
+    const dataSource = await getDataSource();
+    const playerRepository = dataSource.getRepository(Player);
 
     // Find player by name
     const player = await playerRepository.findOne({
@@ -57,7 +53,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set('session', JSON.stringify({ playerId: player.id, playerName: player.name, isAdmin: player.isAdmin }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'strict',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     });

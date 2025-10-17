@@ -1,5 +1,5 @@
 # prog-hub
-A multipurpose web tool for users to interface with their progression series. There will not be seperate api service as we can handle api requests within nestjs. Will use TypeORM to better utilise TS and SQL.
+A multipurpose web tool for users to interface with their progression series. There will not be seperate api service as we can handle api requests within Next.js. Will use TypeORM to better utilise TS and SQL.
 
 ## How to Run
 

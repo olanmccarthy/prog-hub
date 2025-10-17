@@ -46,6 +46,7 @@ CREATE TABLE decklists (
     STORED,
   CONSTRAINT fk_decklists_player FOREIGN KEY (player_id) REFERENCES players(id),
   CONSTRAINT fk_decklists_session FOREIGN KEY (session_id) REFERENCES sessions(id),
+  UNIQUE KEY unique_player_session (player_id, session_id),
   INDEX idx_decklists_player (player_id),
   INDEX idx_decklists_session (session_id),
   INDEX idx_decklists_maindeck_first (maindeck_first)
@@ -122,6 +123,7 @@ CREATE TABLE pairings (
   CONSTRAINT fk_pairings_session FOREIGN KEY (session_id) REFERENCES sessions(id),
   CONSTRAINT fk_pairings_player1 FOREIGN KEY (player1_id) REFERENCES players(id),
   CONSTRAINT fk_pairings_player2 FOREIGN KEY (player2_id) REFERENCES players(id),
+  INDEX idx_pairings_session_round (session_id, round),
   INDEX idx_pairings_session (session_id),
   INDEX idx_pairings_round (round)
 );

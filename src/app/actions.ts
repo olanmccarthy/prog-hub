@@ -1,6 +1,6 @@
 "use server";
 
-import { AppDataSource } from "@lib/data-source";
+import { getDataSource } from "@lib/data-source";
 import { Session } from "@entities/Session";
 import { Banlist } from "@entities/Banlist";
 import type { BanlistData } from "@lib/deckValidator";
@@ -14,12 +14,9 @@ interface GetMostRecentBanlistResult {
 
 export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult> {
   try {
-    if (!AppDataSource.isInitialized) {
-      await AppDataSource.initialize();
-    }
-
-    const sessionRepo = AppDataSource.getRepository(Session);
-    const banlistRepo = AppDataSource.getRepository(Banlist);
+    const dataSource = await getDataSource();
+    const sessionRepo = dataSource.getRepository(Session);
+    const banlistRepo = dataSource.getRepository(Banlist);
 
     // Get the most recent session
     const sessions = await sessionRepo.find({
