@@ -112,10 +112,24 @@ The `schema.sql` file contains the canonical MySQL schema with:
 ### Docker Configuration
 
 **Two-container setup**:
-1. **MySQL container** (`mysql_db_dev`): Port 3306, initializes with `schema.sql`
-2. **Next.js container** (`next_app_dev`): Port 3000, volume-mounted for hot reload
+1. **MySQL container** (`mysql_db_dev` for dev, `mysql_db_prod` for prod): Port 3306, initializes with `schema.sql` and `test_data.sql` (dev only)
+2. **Next.js container** (`next_app_dev` for dev, `next_app_prod` for prod): Port 3000, volume-mounted for hot reload in dev
 
 The dev configuration (`docker-compose.dev.yml`) mounts the entire project directory excluding `node_modules`, enabling instant code changes without rebuilds.
+
+**Connecting to containers**:
+```bash
+# Connect to Next.js app container
+docker exec -it next_app_dev /bin/sh
+
+# Connect to MySQL container
+docker exec -it mysql_db_dev /bin/bash
+
+# Connect to MySQL database directly
+docker exec -it mysql_db_dev mysql -u appuser -p
+# Password: apppass
+# Then: USE appdb;
+```
 
 ## Important Configuration Details
 
@@ -130,9 +144,16 @@ The dev configuration (`docker-compose.dev.yml`) mounts the entire project direc
 - **`useDefineForClassFields: false`**: Required for TypeORM decorator compatibility
 
 ### Environment Variables
-- Database credentials in `.env` and `.env.production`
-- `NODE_ENV=development` set in dev container
-- Reference `docker-compose.dev.yml` for default MySQL credentials
+- Database credentials in `.env` (dev) and `.env.production` (prod)
+- All environments use standardized `DB_*` variable names:
+  - `DB_HOST`: Database host (default: `db` for Docker)
+  - `DB_PORT`: Database port (default: `3306`)
+  - `DB_USER`: Database user (default: `appuser`)
+  - `DB_PASSWORD`: Database password (default: `apppass` for dev)
+  - `DB_NAME`: Database name (default: `appdb`)
+  - `MYSQL_ROOT_PASSWORD`: MySQL root password (Docker only, default: `root` for dev)
+- `NODE_ENV`: Set to `development` or `production`
+- Connection string format: `mysql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`
 
 ### TypeORM Data Source
 The file `src/lib/data-source.ts` exports:
