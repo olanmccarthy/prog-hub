@@ -24,7 +24,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prod
     container_name: next_app_prod
     restart: unless-stopped
     ports:

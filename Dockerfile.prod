@@ -8,7 +8,8 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
-RUN npm run build
+# Build without turbopack for production compatibility
+RUN npx next build
 
 # --- Production stage ---
 FROM node:20-alpine

@@ -2,6 +2,16 @@ node_modules
 .gitignore
 .prettierrc
 Dockerfile
+Dockerfile.dev
+Dockerfile.prod
 README.md
+CLAUDE.md
+DEPLOYMENT.md
 architecture
 .next
+.git
+.husky
+*.md
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
