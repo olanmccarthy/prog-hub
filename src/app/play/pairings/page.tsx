@@ -12,7 +12,7 @@ import {
   Alert,
   Stack,
 } from "@mui/material";
-import { getPairings, updatePairing, PairingData } from "@/src/app/actions/pairings";
+import { getPairings, updatePairing, PairingData } from "./actions";
 
 type GroupBy = "round" | "player";
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AppDataSource } from '@/src/lib/data-source';
+import { AppDataSource } from '@/lib/data-source';
 import { Player } from '@/src/entities/Player';
 
 export async function POST(request: NextRequest) {

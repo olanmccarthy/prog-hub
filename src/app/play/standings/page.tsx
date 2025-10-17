@@ -19,7 +19,7 @@ import {
   MenuItem,
   SelectChangeEvent,
 } from "@mui/material";
-import { getStandings, PlayerStanding, getSessions, SessionInfo } from "@/src/app/actions/standings";
+import { getStandings, PlayerStanding, getSessions, SessionInfo } from "./actions";
 
 export default function StandingsPage() {
   const [standings, setStandings] = useState<PlayerStanding[]>([]);
