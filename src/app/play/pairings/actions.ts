@@ -1,9 +1,9 @@
 "use server";
 
-import { AppDataSource } from "@/lib/data-source";
-import { Pairing } from "@/src/entities/Pairing";
-import { Session } from "@/src/entities/Session";
-import { getCurrentUser } from "@/src/lib/auth";
+import { AppDataSource } from "@lib/data-source";
+import { Pairing } from "@entities/Pairing";
+import { Session } from "@entities/Session";
+import { getCurrentUser } from "@lib/auth";
 
 export interface PairingData {
   id: number;

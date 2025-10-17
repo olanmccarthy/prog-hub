@@ -25,7 +25,7 @@ import {
   DialogActions,
 } from "@mui/material";
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { getStandings, PlayerStanding, getSessions, SessionInfo, canFinalizeStandings, finalizeStandings, checkIsAdmin } from "./actions";
+import { getStandings, PlayerStanding, getSessions, SessionInfo, canFinalizeStandings, finalizeStandings, checkIsAdmin, checkIsFinalized } from "./actions";
 
 export default function StandingsPage() {
   const [standings, setStandings] = useState<PlayerStanding[]>([]);
@@ -35,6 +35,7 @@ export default function StandingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [canFinalize, setCanFinalize] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
 
@@ -47,6 +48,7 @@ export default function StandingsPage() {
     if (selectedSessionId !== null) {
       fetchStandings(selectedSessionId);
       checkCanFinalize(selectedSessionId);
+      checkFinalized(selectedSessionId);
     }
   }, [selectedSessionId]);
 
@@ -65,6 +67,15 @@ export default function StandingsPage() {
       setCanFinalize(result.canFinalize);
     } catch (err) {
       console.error('Error checking finalize status:', err);
+    }
+  };
+
+  const checkFinalized = async (sessionId: number) => {
+    try {
+      const result = await checkIsFinalized(sessionId);
+      setIsFinalized(result.isFinalized);
+    } catch (err) {
+      console.error('Error checking finalized status:', err);
     }
   };
 
@@ -124,6 +135,7 @@ export default function StandingsPage() {
       if (result.success) {
         setConfirmDialogOpen(false);
         setCanFinalize(false);
+        setIsFinalized(true);
         // Refresh standings
         await fetchStandings(selectedSessionId);
       } else {
@@ -348,19 +360,27 @@ export default function StandingsPage() {
             variant="contained"
             startIcon={<CheckCircleIcon />}
             onClick={handleFinalizeClick}
-            disabled={!canFinalize || finalizing}
+            disabled={isFinalized || !canFinalize || finalizing}
             sx={{
-              backgroundColor: canFinalize ? 'var(--accent-primary)' : 'var(--grey-300)',
+              backgroundColor: isFinalized
+                ? '#4caf50'
+                : canFinalize
+                  ? 'var(--accent-primary)'
+                  : 'var(--grey-300)',
               '&:hover': {
-                backgroundColor: canFinalize ? 'var(--accent-hover)' : 'var(--grey-300)',
+                backgroundColor: isFinalized
+                  ? '#4caf50'
+                  : canFinalize
+                    ? 'var(--accent-hover)'
+                    : 'var(--grey-300)',
               },
               '&:disabled': {
-                backgroundColor: 'var(--grey-300)',
-                color: 'var(--text-secondary)',
+                backgroundColor: isFinalized ? '#4caf50' : 'var(--grey-300)',
+                color: isFinalized ? '#ffffff' : 'var(--text-secondary)',
               },
             }}
           >
-            {finalizing ? 'Finalizing...' : 'Finalize Standings'}
+            {finalizing ? 'Finalizing...' : isFinalized ? 'Standings Finalized' : 'Finalize Standings'}
           </Button>
         </Box>
       )}

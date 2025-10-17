@@ -23,4 +23,7 @@ export class Decklist {
 
   @Column("json")
   extradeck!: string[];
+
+  @Column({ type: "datetime", default: () => "CURRENT_TIMESTAMP" })
+  submittedAt!: Date;
 }

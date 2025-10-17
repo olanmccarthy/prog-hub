@@ -1,9 +1,9 @@
 "use server";
 
-import { AppDataSource } from "@/lib/data-source";
-import { Pairing } from "@/src/entities/Pairing";
-import { Session } from "@/src/entities/Session";
-import { getCurrentUser } from "@/src/lib/auth";
+import { AppDataSource } from "@lib/data-source";
+import { Pairing } from "@entities/Pairing";
+import { Session } from "@entities/Session";
+import { getCurrentUser } from "@lib/auth";
 import { revalidatePath } from "next/cache";
 
 export interface PlayerStanding {
@@ -263,6 +263,45 @@ export interface FinalizeResult {
 
 export interface IsAdminResult {
   isAdmin: boolean;
+}
+
+export interface IsFinalizedResult {
+  isFinalized: boolean;
+}
+
+/**
+ * Check if standings for a session are finalized
+ */
+export async function checkIsFinalized(sessionId: number): Promise<IsFinalizedResult> {
+  try {
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+    }
+
+    const sessionRepo = AppDataSource.getRepository(Session);
+    const session = await sessionRepo.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      return { isFinalized: false };
+    }
+
+    // Check if all placement fields are filled (meaning standings are finalized)
+    const isFinalized = !!(
+      session.first &&
+      session.second &&
+      session.third &&
+      session.fourth &&
+      session.fifth &&
+      session.sixth
+    );
+
+    return { isFinalized };
+  } catch (error) {
+    console.error("Error checking finalized status:", error);
+    return { isFinalized: false };
+  }
 }
 
 /**

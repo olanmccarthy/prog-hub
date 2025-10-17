@@ -48,7 +48,7 @@ npm run migration:run        # Run pending migrations
 npm run migration:revert     # Revert last migration
 ```
 
-**Note**: Migrations require TypeORM data source configuration in `src/lib/data-source.ts` (currently missing).
+**Note**: TypeORM data source is configured in `src/lib/data-source.ts` with a singleton pattern via `getDataSource()`.
 
 ## Architecture
 
@@ -57,20 +57,25 @@ npm run migration:revert     # Revert last migration
 The application uses TypeORM entities that map to MySQL tables defined in `schema.sql`. The data model centers around progression "sessions" (tournaments):
 
 **Core Entities** (in `src/entities/`):
-- **Player**: Tournament participants
-- **Session**: A progression tournament event with top 6 placements (first through sixth)
-- **Decklist**: Player's deck for a session (maindeck, sidedeck, extradeck as JSON arrays)
+- **Player**: Tournament participants with authentication (name, password, isAdmin)
+- **Session**: A progression tournament event with top 6 placements stored as nullable integers (first through sixth)
+- **Decklist**: Player's deck for a session (maindeck, sidedeck, extradeck as JSON string arrays, submittedAt timestamp)
 - **Banlist**: Card restrictions for a session (banned, limited, semilimited, unlimited as JSON arrays)
 - **BanlistSuggestion**: Player-submitted banlist changes for voting
 - **BanlistSuggestionVote**: Votes on banlist suggestions
-- **Pairing**: Match pairings for each round of a session
+- **Pairing**: Match pairings for each round of a session with win counts
 - **VictoryPoint**: Victory points awarded to players per session
 
 **Key Relationships**:
-- Sessions store top 6 placements as foreign keys to Player
-- Decklists belong to both a Player and a Session
+- Sessions store top 6 placements as nullable integer foreign keys (not relations)
+- Decklists belong to both a Player and a Session with a submittedAt timestamp
 - Banlists belong to Sessions and have many BanlistSuggestions
 - Pairings link two players (player1, player2) with win counts for a specific session/round
+
+**Important TypeORM Notes**:
+- Use `find()` with `take: 1` instead of `findOne()` when ordering without a where clause
+- All `findOne()` calls must include a `where` clause to avoid TypeORM errors
+- Session placement fields are stored as nullable integers, not Player relations
 
 ### Type System
 
@@ -83,12 +88,18 @@ This separation allows for flexible type usage in frontend code without ORM depe
 ### Application Structure
 
 - **`src/app/`**: Next.js App Router pages and layouts
-  - `src/app/api/`: API route handlers (Next.js API routes)
-  - Example: `src/app/api/user/route.ts` demonstrates TypeORM repository pattern
+  - `src/app/api/auth/login/`: Authentication API route
+  - `src/app/admin/`: Admin-only pages (player management, prog actions)
+  - `src/app/play/`: Player pages (pairings, standings, decklist submission)
+  - Each page directory contains an `actions.ts` file with server actions
 - **`src/entities/`**: TypeORM entity definitions with decorators
 - **`src/types/`**: TypeScript type definitions
-- **`src/lib/`**: Expected location for shared utilities (e.g., `data-source.ts` for TypeORM config)
-- **`src/migrations/`**: TypeORM migrations (directory exists in migration commands but not yet created)
+- **`src/lib/`**: Shared utilities
+  - `auth.ts`: Session-based authentication using cookies
+  - `ydkParser.ts`: Yu-Gi-Oh .ydk deck file parser and validator
+  - `deckValidator.ts`: Deck validation against banlist restrictions
+  - `data-source.ts`: TypeORM DataSource configuration with singleton pattern
+- **`src/components/`**: Shared React components (AppHeader, YdkUploadBox)
 
 ### Database Schema
 
@@ -110,7 +121,12 @@ The dev configuration (`docker-compose.dev.yml`) mounts the entire project direc
 
 ### TypeScript
 - **Decorators enabled**: `experimentalDecorators: true` and `emitDecoratorMetadata: true` required for TypeORM
-- **Path aliases**: `@/*` maps to project root
+- **Path aliases**:
+  - `@/*` maps to project root
+  - `@entities/*` maps to `src/entities/*`
+  - `@lib/*` maps to `src/lib/*`
+  - `@components/*` maps to `src/components/*`
+  - `@types/*` maps to `src/types/*`
 - **`useDefineForClassFields: false`**: Required for TypeORM decorator compatibility
 
 ### Environment Variables
@@ -119,20 +135,31 @@ The dev configuration (`docker-compose.dev.yml`) mounts the entire project direc
 - Reference `docker-compose.dev.yml` for default MySQL credentials
 
 ### TypeORM Data Source
-The API route at `src/app/api/user/route.ts` references `@/lib/data-source` which should export `AppDataSource` (TypeORM DataSource instance). This file needs to be created with MySQL connection configuration.
+The file `src/lib/data-source.ts` exports:
+- `AppDataSource`: TypeORM DataSource instance with MySQL configuration
+- `getDataSource()`: Singleton helper function that initializes the connection once and reuses it
 
-## Planned Features (from README)
+**Important**: Always use `getDataSource()` in server actions to avoid multiple connection attempts. Use `AppDataSource` directly in API routes for backward compatibility.
 
-The application will include these pages/features:
-- Central home page with todo list and upcoming session info
-- Admin page for player management and session control
+## Implemented Features
+
+### Completed Pages:
+- **Homepage**: Deck validator with .ydk upload that checks against the most recent banlist
+- **Admin Pages**:
+  - Player List: CRUD operations for players (add, rename, delete, change passwords)
+  - Prog Actions: Start new prog sessions with validation and round-robin pairing generation
+- **Play Pages**:
+  - Pairings: View and update match results for the current session
+  - Standings: View ranked standings with tiebreakers, finalize standings (admin only)
+  - Decklist Submission: Upload .ydk files with validation and submission
+- **Authentication**: Session-based login with cookies
+
+### Features Still To Implement:
+- Todo list and upcoming session info on homepage
 - Stats browsing page
-- Deck submission and validation pages
 - Banlist submission and voting pages
-- Pairings display and results submission
-- Standings page with custom algorithm
 
-Future services planned:
+### Future Services:
 - Discord bot for posting pairings/standings
 - Banlist image generator for voted results
 
@@ -143,17 +170,62 @@ Future services planned:
 - **Turbopack**: Next.js uses Turbopack for faster builds (`--turbopack` flag in build/dev scripts)
 - **Card data caching**: README mentions need to cache Yu-Gi-Oh API results for card images
 
-## Missing Components
+## Code Patterns
 
-When setting up TypeORM integration, you'll need to create:
-1. `src/lib/data-source.ts`: TypeORM DataSource configuration with MySQL connection
-2. `src/migrations/`: Directory for generated migrations
-3. Environment variable validation/loading mechanism
+### Server Actions Pattern (Preferred)
+Server actions are located in `actions.ts` files within page directories:
+```typescript
+"use server";
 
-## API Pattern
+import { getDataSource } from "@lib/data-source";
+import { Entity } from "@entities/Entity";
+import { getCurrentUser } from "@lib/auth";
+import { revalidatePath } from "next/cache";
 
-API routes should follow the pattern in `src/app/api/user/route.ts`:
-1. Initialize AppDataSource if not already initialized
-2. Get repository from AppDataSource
-3. Perform database operations
-4. Return NextResponse.json()
+export async function myAction(): Promise<Result> {
+  try {
+    const dataSource = await getDataSource();
+    const repo = dataSource.getRepository(Entity);
+    // Perform operations
+    revalidatePath("/relevant/path");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Error message" };
+  }
+}
+```
+
+### API Routes Pattern (Legacy)
+API routes use `AppDataSource` directly:
+```typescript
+if (!AppDataSource.isInitialized) {
+  await AppDataSource.initialize();
+}
+const repo = AppDataSource.getRepository(Entity);
+```
+
+### Authentication
+- Use `getCurrentUser()` from `@lib/auth` in server actions
+- Returns `{ playerId, playerName, isAdmin }` or null
+- Check `isAdmin` for admin-only operations
+
+### YDK File Parsing
+Use the shared parser from `@lib/ydkParser`:
+```typescript
+import { parseYdkFromFile } from "@lib/ydkParser";
+const result = await parseYdkFromFile(file);
+// Returns ParsedDeck with maindeck, sidedeck, extradeck as number arrays
+```
+
+### Deck Validation
+Use the shared validator from `@lib/deckValidator`:
+```typescript
+import { validateDeckAgainstBanlist, type BanlistData } from "@lib/deckValidator";
+const validation = validateDeckAgainstBanlist(maindeck, sidedeck, extradeck, banlist);
+// Returns { isLegal: boolean, errors: string[], warnings: string[] }
+```
+
+### Reusable Components
+- **YdkUploadBox** (`@components/YdkUploadBox`): Reusable .ydk file upload with validation
+  - Props: `banlist`, `sessionNumber`, `onValidationComplete`, `showSubmitButton`, `onSubmit`
+  - Handles file parsing, deck validation, and optional submission

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AppDataSource } from '@/lib/data-source';
-import { Player } from '@/src/entities/Player';
+import { AppDataSource } from '@lib/data-source';
+import { Player } from '@entities/Player';
 
 export async function POST(request: NextRequest) {
   try {

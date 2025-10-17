@@ -23,19 +23,22 @@ INSERT INTO sessions (id, number, date, first, second, third, fourth, fifth, six
   (2, 2, '2025-02-15 10:00:00', 3, 1, 6, 2, 5, 4);
 
 -- =====================================
--- BANLISTS (one per session)
+-- BANLISTS (one per session, using prog.lflist.conf format)
 -- =====================================
+-- Session 1 Banlist (prog format)
 INSERT INTO banlists (id, session_id, banned, limited, semilimited, unlimited) VALUES
   (1, 1,
-    '["Pot of Greed", "Graceful Charity", "Change of Heart", "Imperial Order"]',
-    '["Monster Reborn", "Dark Hole", "Raigeki"]',
-    '["Mystical Space Typhoon", "Book of Moon"]',
+    '["82301904", "17330916", "91020571", "21593977", "27415516", "78010363", "14878871", "8903700", "53797637", "26202165", "89185742", "34206604", "93369354", "52068432", "94977269", "50321796", "54719828", "46772449", "34086406", "87910978", "4031928", "60682203", "17375316", "53129443", "44763025", "23557835", "42703248", "79571449", "18144506", "19613556", "85602018", "46411259", "37520316", "83764718", "74191942", "55144522", "12580477", "54447022", "42829885", "70368879", "14087893", "14733538", "48130397", "27770341", "31222701", "81674782", "77565204", "34906152", "41482598", "70828912", "45986603", "57728570", "17484499", "3280747", "64697231", "61740673", "30241314", "93016201", "5851097", "41420027"]',
+    '["72989439", "31178212", "92746535", "40318957", "20758643", "89463537", "72892473", "81439173", "33782437", "67169062", "35027493", "54974237", "83555666", "53582587", "84749824"]',
+    '["29401950", "94192409"]',
     '[]'
   ),
+-- Session 2 Banlist (same as session 1, with example of cards moved to unlimited)
+-- In a real scenario, this would reflect changes from player voting
   (2, 2,
-    '["Pot of Greed", "Graceful Charity", "Change of Heart", "Imperial Order", "Monster Reborn"]',
-    '["Dark Hole", "Raigeki", "Harpie\'s Feather Duster"]',
-    '["Mystical Space Typhoon", "Book of Moon", "Called by the Grave"]',
+    '["82301904", "17330916", "91020571", "21593977", "27415516", "78010363", "14878871", "8903700", "53797637", "26202165", "89185742", "34206604", "93369354", "52068432", "94977269", "50321796", "54719828", "46772449", "34086406", "87910978", "4031928", "60682203", "17375316", "53129443", "44763025", "23557835", "42703248", "79571449", "18144506", "19613556", "85602018", "46411259", "37520316", "83764718", "74191942", "55144522", "12580477", "54447022", "42829885", "70368879", "14087893", "14733538", "48130397", "27770341", "31222701", "81674782", "77565204", "34906152", "41482598", "70828912", "45986603", "57728570", "17484499", "3280747", "64697231", "61740673", "30241314", "93016201", "5851097", "41420027"]',
+    '["72989439", "31178212", "92746535", "40318957", "20758643", "89463537", "72892473", "81439173", "33782437", "67169062", "35027493", "54974237", "83555666", "53582587", "84749824"]',
+    '["29401950", "94192409"]',
     '[]'
   );
 
@@ -51,7 +54,7 @@ INSERT INTO decklists (id, player_id, session_id, maindeck, sidedeck, extradeck)
   (2, 2, 1,
     '["Maxx \\"C\\"", "Maxx \\"C\\"", "Maxx \\"C\\"", "Ash Blossom & Joyous Spring", "Ash Blossom & Joyous Spring", "Ash Blossom & Joyous Spring", "Eldlich the Golden Lord", "Eldlich the Golden Lord", "Eldlich the Golden Lord", "Huaquero of the Golden Land", "Huaquero of the Golden Land", "Eldlixir of Scarlet Sanguine", "Eldlixir of Scarlet Sanguine", "Eldlixir of Scarlet Sanguine", "Eldlixir of Black Awakening", "Eldlixir of Black Awakening", "Cursed Eldland", "Cursed Eldland", "Cursed Eldland", "Golden Land Forever!", "Golden Land Forever!", "Golden Land Forever!", "Conquistador of the Golden Land", "Conquistador of the Golden Land", "Guardian of the Golden Land", "Guardian of the Golden Land", "Solemn Judgment", "Solemn Strike", "Solemn Strike", "Solemn Strike", "Imperial Order", "Skill Drain", "Skill Drain", "Skill Drain", "Gozen Match", "Gozen Match", "Gozen Match", "Rivalry of Warlords", "Rivalry of Warlords", "Rivalry of Warlords"]',
     '["Nibiru, the Primal Being", "Nibiru, the Primal Being", "Nibiru, the Primal Being", "Droll & Lock Bird", "Droll & Lock Bird", "Ghost Ogre & Snow Rabbit", "Ghost Ogre & Snow Rabbit", "Cosmic Cyclone", "Cosmic Cyclone", "Cosmic Cyclone", "Red Reboot", "Red Reboot", "Red Reboot", "Evenly Matched", "Evenly Matched"]',
-    '["Elder Entity N\'tss", "Tornado Dragon", "Tornado Dragon", "Abyss Dweller", "Abyss Dweller", "Number 41: Bagooska the Terribly Tired Tapir", "Constellar Pleiades", "Knightmare Phoenix", "Knightmare Unicorn", "I:P Masquerena", "Apollousa, Bow of the Goddess", "Accesscode Talker", "Underworld Goddess of the Closed World", "Vampire Sucker", "Selene, Queen of the Master Magicians"]'
+    '["Tornado Dragon", "Tornado Dragon", "Abyss Dweller", "Abyss Dweller", "Number 41: Bagooska the Terribly Tired Tapir", "Constellar Pleiades", "Knightmare Phoenix", "Knightmare Unicorn", "I:P Masquerena", "Apollousa, Bow of the Goddess", "Accesscode Talker", "Underworld Goddess of the Closed World", "Vampire Sucker", "Selene, Queen of the Master Magicians"]'
   ),
   (3, 3, 1,
     '["Elemental HERO Stratos", "Elemental HERO Stratos", "Elemental HERO Stratos", "Elemental HERO Shadow Mist", "Elemental HERO Shadow Mist", "Elemental HERO Shadow Mist", "Elemental HERO Honest Neos", "Elemental HERO Honest Neos", "Elemental HERO Solid Soldier", "Elemental HERO Solid Soldier", "Elemental HERO Solid Soldier", "Vision HERO Faris", "Vision HERO Faris", "Vision HERO Faris", "Vision HERO Increase", "Vision HERO Vyon", "Vision HERO Vyon", "Vision HERO Vyon", "Destiny HERO - Malicious", "Destiny HERO - Malicious", "Destiny HERO - Celestial", "Destiny HERO - Celestial", "Destiny HERO - Celestial", "Destiny HERO - Drawhand", "Ash Blossom & Joyous Spring", "Ash Blossom & Joyous Spring", "Ash Blossom & Joyous Spring", "E - Emergency Call", "E - Emergency Call", "E - Emergency Call", "A Hero Lives", "Mask Change", "Mask Change", "Polymerization", "Fusion Destiny", "Fusion Destiny", "Fusion Destiny", "Called by the Grave", "Called by the Grave", "Called by the Grave"]',

@@ -39,6 +39,7 @@ CREATE TABLE decklists (
   maindeck JSON NOT NULL,
   sidedeck JSON NOT NULL,
   extradeck JSON NOT NULL,
+  submittedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- Example: index the first card for fast searches
   maindeck_first VARCHAR(255)
     GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(maindeck, '$[0]')))

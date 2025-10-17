@@ -1,12 +1,12 @@
 'use server';
 
-import { getDataSource } from '@/lib/data-source';
-import { Session } from '@/src/entities/Session';
-import { Player } from '@/src/entities/Player';
-import { Banlist } from '@/src/entities/Banlist';
-import { Decklist } from '@/src/entities/Decklist';
-import { BanlistSuggestion } from '@/src/entities/BanlistSuggestion';
-import { Pairing } from '@/src/entities/Pairing';
+import { getDataSource } from '@lib/data-source';
+import { Session } from '@entities/Session';
+import { Player } from '@entities/Player';
+import { Banlist } from '@entities/Banlist';
+import { Decklist } from '@entities/Decklist';
+import { BanlistSuggestion } from '@entities/BanlistSuggestion';
+import { Pairing } from '@entities/Pairing';
 import { revalidatePath } from 'next/cache';
 
 export interface RequirementStatus {

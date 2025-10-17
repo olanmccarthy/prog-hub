@@ -1,7 +1,7 @@
 'use server';
 
-import { getDataSource } from '@/lib/data-source';
-import { Player } from '@/src/entities/Player';
+import { getDataSource } from '@lib/data-source';
+import { Player } from '@entities/Player';
 import { revalidatePath } from 'next/cache';
 
 export interface PlayerData {
