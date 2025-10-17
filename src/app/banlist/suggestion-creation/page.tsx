@@ -12,11 +12,12 @@ import {
   Card,
   IconButton,
   Autocomplete,
+  Snackbar,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { getMostRecentBanlist, getPlayerId } from '@/src/app/banlist/actions';
-import { BanlistSuggestion } from '@/src/types';
+import { getMostRecentBanlist } from '@/src/app/banlist/actions';
+import { createBanlistSuggestion, CreateSuggestionInput } from './actions';
 
 const mockCardSuggestions = [
   'Dark Magician',
@@ -133,8 +134,9 @@ function useSuggestionFields(initialValue: string[] = []) {
 export default function BanlistSuggestionCreationPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [playerId, setPlayerId] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [banlistId, setBanlistId] = useState<number | null>(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -144,27 +146,17 @@ export default function BanlistSuggestionCreationPage() {
     try {
       setLoading(true);
       setError('');
-
-      const [user, banlistResult] = await Promise.all([
-        getPlayerId(),
-        getMostRecentBanlist(),
-      ]);
-
-      if (!user?.playerId) {
-        setError('Not authenticated');
-        return;
+      const banlistResult = await getMostRecentBanlist();
+      if (banlistResult.success && banlistResult.banlist) {
+        setBanlistId(banlistResult.banlist.id);
+      } else {
+        setError(banlistResult.error || 'Failed to fetch most recent banlist');
       }
-
-      if (!banlistResult.success || !banlistResult.banlist) {
-        setError(banlistResult.error || 'Failed to fetch banlist');
-        return;
-      }
-
-      setPlayerId(user.playerId);
-      setBanlistId(banlistResult.banlist.id);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to load initial data',
+        err instanceof Error
+          ? err.message
+          : 'Failed to load most recent banlist',
       );
     } finally {
       setLoading(false);
@@ -176,41 +168,88 @@ export default function BanlistSuggestionCreationPage() {
   const semilimited = useSuggestionFields();
   const unlimited = useSuggestionFields();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  const validateBanlistSuggestion = (
+    banlist: CreateSuggestionInput,
+  ): { isValid: boolean; error?: string } => {
+    const cardToList = new Map<string, string>();
 
-    console.log('Submitting suggestion:', {
-      banned: banned.cards,
-      limited: limited.cards,
-      semilimited: semilimited.cards,
-      unlimited: unlimited.cards,
-    });
-
-    // TODO: Validation
-    // ensure no list has duplicate cards
-    // ensure that no card appears in multiple lists
-
-    const banlistSuggestion: BanlistSuggestion = {
-      playerId: playerId!,
-      banlistId: banlistId!,
-      banned: banned.cards,
-      limited: limited.cards,
-      semilimited: semilimited.cards,
-      unlimited: unlimited.cards,
-      chosen: false,
-      id: 0,
+    const lists = {
+      banned: banlist.banned,
+      limited: banlist.limited,
+      'semi-limited': banlist.semilimited,
+      unlimited: banlist.unlimited,
     };
 
-    console.log(JSON.stringify(banlistSuggestion));
+    for (const [listName, cards] of Object.entries(lists)) {
+      const seenInList = new Set<string>();
 
+      for (const card of cards) {
+        // Check empty card names
+        if (!card || card.trim() === '') {
+          return {
+            isValid: false,
+            error: `Empty card name in ${listName}`,
+          };
+        }
+        // Check duplicate in same list
+        if (seenInList.has(card)) {
+          return {
+            isValid: false,
+            error: `Duplicate "${card}" in ${listName}`,
+          };
+        }
+
+        // Check duplicate across lists
+        const otherList = cardToList.get(card);
+        if (otherList) {
+          return {
+            isValid: false,
+            error: `"${card}" in both ${otherList} and ${listName}`,
+          };
+        }
+
+        seenInList.add(card);
+        cardToList.set(card, listName);
+      }
+    }
+
+    return { isValid: true };
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
     try {
+      console.log('Submitting suggestion:', {
+        banned: banned.cards,
+        limited: limited.cards,
+        semilimited: semilimited.cards,
+        unlimited: unlimited.cards,
+      });
+
+      const banlistSuggestion: CreateSuggestionInput = {
+        banlistId: banlistId!,
+        banned: banned.cards,
+        limited: limited.cards,
+        semilimited: semilimited.cards,
+        unlimited: unlimited.cards,
+      };
+      const validation = validateBanlistSuggestion(banlistSuggestion);
+      if (validation.isValid) {
+        await createBanlistSuggestion(banlistSuggestion);
+        setSnackbarOpen(true);
+        setError('');
+      } else {
+        setError(validation.error || 'Invalid banlist suggestion!');
+      }
     } catch (err) {
-      setError('An error occurred. Please try again.');
-      console.error('Submission error:', err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'An error submitting your banlist suggestion. Please try again.',
+      );
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -291,10 +330,25 @@ export default function BanlistSuggestionCreationPage() {
             sx={{ mt: 3 }}
             disabled={loading}
           >
-            {loading ? 'Submitting...' : 'Submit'}
+            {submitting ? 'Submitting...' : 'Submit'}
           </Button>
         </form>
       </Paper>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity={'success'}
+          sx={{ width: '100%' }}
+        >
+          Banlist suggestion submitted successfully!
+        </Alert>
+      </Snackbar>
 
       <Card
         sx={{

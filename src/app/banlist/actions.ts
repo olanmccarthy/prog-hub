@@ -3,7 +3,6 @@
 import { getDataSource } from "@lib/data-source";
 import { Banlist as BanlistEntity } from "@entities/Banlist";
 import { Session } from '@entities/Session';
-import { getCurrentUser } from '@lib/auth';
 import { Banlist } from '@/src/types';
 
 interface GetMostRecentBanlistResult {
@@ -20,7 +19,7 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
 
     // Get the most recent session
     const sessions = await sessionRepo.find({
-      order: { date: "DESC" },
+      order: { date: 'DESC' },
       take: 1,
     });
 
@@ -28,7 +27,7 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
       return {
         success: false,
         banlist: null,
-        error: "No sessions found",
+        error: 'No sessions found',
       };
     }
 
@@ -43,7 +42,7 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
       return {
         success: false,
         banlist: null,
-        error: "No banlist found for the most recent session",
+        error: 'No banlist found for the most recent session',
       };
     }
 
@@ -62,28 +61,11 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
       banlist,
     };
   } catch (error) {
-    console.error("Error fetching most recent banlist:", error);
+    console.error('Error fetching most recent banlist:', error);
     return {
       success: false,
       banlist: null,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
-}
-
-
-export async function getPlayerId() {
-const user = await getCurrentUser();
-
-if (!user?.playerId) {
-    return {
-    success: false,
-    error: "Not authenticated",
-    };
-}
-
-return {
-    success: true,
-    playerId: user.playerId,
-};
 }
