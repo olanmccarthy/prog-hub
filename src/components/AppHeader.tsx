@@ -24,6 +24,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { useState, MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 const allNavigationRoutes = [
   {
@@ -144,16 +145,31 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
               <MenuIcon />
             </IconButton>
           )}
-          <Typography
-            variant="h4"
-            component="div"
+          <Box
             sx={{
               flexGrow: 1,
-              color: 'var(--text-bright)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
             }}
           >
-            Prog Reincarnation
-          </Typography>
+            <Image
+              src="/icon.png"
+              alt="Prog Reincarnation Logo"
+              width={40}
+              height={40}
+              style={{ objectFit: 'contain' }}
+            />
+            <Typography
+              variant="h4"
+              component="div"
+              sx={{
+                color: 'var(--text-bright)',
+              }}
+            >
+              Prog Reincarnation
+            </Typography>
+          </Box>
           {!isMobile && (
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
               {navigationRoutes.map((route) => {
