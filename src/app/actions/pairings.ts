@@ -3,6 +3,7 @@
 import { AppDataSource } from "@/src/lib/data-source";
 import { Pairing } from "@/src/entities/Pairing";
 import { Session } from "@/src/entities/Session";
+import { getCurrentUser } from "@/src/lib/auth";
 
 export interface PairingData {
   id: number;
@@ -102,6 +103,15 @@ export async function updatePairing(
   player2wins: number
 ): Promise<UpdatePairingResult> {
   try {
+    // Check if user is logged in
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return {
+        success: false,
+        error: "You must be logged in to update scores",
+      };
+    }
+
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
     }
@@ -123,6 +133,18 @@ export async function updatePairing(
       return {
         success: false,
         error: "Pairing not found",
+      };
+    }
+
+    // Check if the logged-in user is one of the players in this pairing or is an admin
+    const isPlayer1 = pairing.player1.id === currentUser.playerId;
+    const isPlayer2 = pairing.player2.id === currentUser.playerId;
+    const isAdmin = currentUser.isAdmin ?? false;
+
+    if (!isPlayer1 && !isPlayer2 && !isAdmin) {
+      return {
+        success: false,
+        error: "You can only update scores for games you are involved in",
       };
     }
 

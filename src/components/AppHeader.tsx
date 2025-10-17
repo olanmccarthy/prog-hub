@@ -20,16 +20,19 @@ import {
   useTheme,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { useState, MouseEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-const navigationRoutes = [
+const allNavigationRoutes = [
   {
     label: 'Home',
     path: '/',
   },
   {
     label: 'Admin',
+    adminOnly: true,
     subItems: [
       { label: 'Player List', path: '/admin/player-list' },
       { label: 'Actions', path: '/admin/actions' },
@@ -59,8 +62,17 @@ const navigationRoutes = [
   },
 ];
 
-export default function AppHeader() {
+interface AppHeaderProps {
+  isAdmin: boolean;
+}
+
+export default function AppHeader({ isAdmin }: AppHeaderProps) {
+  // Filter navigation routes based on admin status
+  const navigationRoutes = allNavigationRoutes.filter(
+    (route) => !('adminOnly' in route) || route.adminOnly === isAdmin
+  );
   const theme = useTheme();
+  const router = useRouter();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -89,6 +101,18 @@ export default function AppHeader() {
       ...prev,
       [label]: null,
     }));
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (
@@ -131,7 +155,7 @@ export default function AppHeader() {
             Prog Reincarnation
           </Typography>
           {!isMobile && (
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
               {navigationRoutes.map((route) => {
                 if (route.subItems) {
                   return (
@@ -210,6 +234,18 @@ export default function AppHeader() {
                   </Button>
                 );
               })}
+              <IconButton
+                onClick={handleLogout}
+                sx={{
+                  color: 'var(--text-bright)',
+                  '&:hover': {
+                    backgroundColor: 'var(--bg-tertiary)',
+                  }
+                }}
+                title="Logout"
+              >
+                <LogoutIcon />
+              </IconButton>
             </Box>
           )}
         </Toolbar>
@@ -320,6 +356,25 @@ export default function AppHeader() {
                   </ListItem>
                 );
               })}
+            </List>
+            <Divider sx={{ borderColor: 'var(--border-color)', my: 1 }} />
+            <List>
+              <ListItem disablePadding>
+                <ListItemButton
+                  onClick={handleLogout}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'var(--bg-tertiary)',
+                    }
+                  }}
+                >
+                  <LogoutIcon sx={{ mr: 2, color: 'var(--text-primary)' }} />
+                  <ListItemText
+                    primary="Logout"
+                    sx={{ color: 'var(--text-primary)' }}
+                  />
+                </ListItemButton>
+              </ListItem>
             </List>
           </Box>
         </Drawer>

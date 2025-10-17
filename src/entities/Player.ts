@@ -13,6 +13,12 @@ export class Player {
   @Column()
   name!: string;
 
+  @Column()
+  password!: string;
+
+  @Column({ name: "is_admin", default: false })
+  isAdmin!: boolean;
+
   // Relationships
   @OneToMany("Decklist", "player")
   decklists!: Decklist[];

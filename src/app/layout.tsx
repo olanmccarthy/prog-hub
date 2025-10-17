@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AppHeader from "@/src/components/AppHeader";
+import { getCurrentUser } from "@/src/lib/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,15 +19,18 @@ export const metadata: Metadata = {
   description: "Yu-Gi-Oh progression series tournament management",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const currentUser = await getCurrentUser();
+  const isAdmin = currentUser?.isAdmin ?? false;
+
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <AppHeader />
+        <AppHeader isAdmin={isAdmin} />
         <main>{children}</main>
       </body>
     </html>

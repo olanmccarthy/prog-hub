@@ -7,13 +7,13 @@
 -- =====================================
 -- PLAYERS (6 test players)
 -- =====================================
-INSERT INTO players (id, name) VALUES
-  (1, 'Alex Chen'),
-  (2, 'Jordan Rivera'),
-  (3, 'Sam Mitchell'),
-  (4, 'Taylor Brooks'),
-  (5, 'Casey Morgan'),
-  (6, 'Riley Parker');
+INSERT INTO players (id, name, password, is_admin) VALUES
+  (1, 'Alex Chen', 'password123', TRUE),
+  (2, 'Jordan Rivera', 'password123', FALSE),
+  (3, 'Sam Mitchell', 'password123', FALSE),
+  (4, 'Taylor Brooks', 'password123', FALSE),
+  (5, 'Casey Morgan', 'password123', FALSE),
+  (6, 'Riley Parker', 'password123', FALSE);
 
 -- =====================================
 -- SESSIONS (2 tournament sessions)

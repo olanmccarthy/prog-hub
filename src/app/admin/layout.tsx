@@ -1,6 +1,15 @@
 import { ReactNode } from 'react';
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/src/lib/auth';
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+export default async function AdminLayout({ children }: { children: ReactNode }) {
+  const currentUser = await getCurrentUser();
+
+  // If not logged in or not an admin, redirect to home page
+  if (!currentUser || !currentUser.isAdmin) {
+    redirect('/');
+  }
+
   return (
     <div>
       <nav>

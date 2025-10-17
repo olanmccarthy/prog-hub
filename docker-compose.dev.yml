@@ -14,7 +14,8 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data_dev:/var/lib/mysql
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./test_data.sql:/docker-entrypoint-initdb.d/02-test_data.sql:ro
 
   nextjs:
     build:
