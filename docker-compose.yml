@@ -3,33 +3,43 @@ version: '3.8'
 services:
   db:
     image: mysql:8.0
-    container_name: mysql_db
-    restart: always
+    container_name: mysql_db_prod
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    ports:
-      - "3306:3306"
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  nextjs:
-    build: .
-    container_name: next_app
-    restart: always
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: next_app_prod
+    restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file: .env
-    environment:
-      - NODE_ENV=production
     depends_on:
-      - db
-    # optional: for hot reload in dev
-    # volumes:
-      # - .:/app
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    networks:
+      - app-network
 
 volumes:
   mysql_data:
+
+networks:
+  app-network:
+    driver: bridge
