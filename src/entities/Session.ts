@@ -1,5 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, JoinColumn } from "typeorm";
-import type { Player } from "./Player";
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from "typeorm";
 import type { Decklist } from "./Decklist";
 import type { Banlist } from "./Banlist";
 import type { Pairing } from "./Pairing";
@@ -16,30 +15,24 @@ export class Session {
   @Column()
   date!: Date;
 
-  // Top placements (FKs to Player)
-  @ManyToOne("Player")
-  @JoinColumn({ name: "first" })
-  first!: Player;
+  // Top placements (FKs to Player) - stored as nullable integers
+  @Column({ type: "int", nullable: true })
+  first!: number | null;
 
-  @ManyToOne("Player")
-  @JoinColumn({ name: "second" })
-  second!: Player;
+  @Column({ type: "int", nullable: true })
+  second!: number | null;
 
-  @ManyToOne("Player")
-  @JoinColumn({ name: "third" })
-  third!: Player;
+  @Column({ type: "int", nullable: true })
+  third!: number | null;
 
-  @ManyToOne("Player")
-  @JoinColumn({ name: "fourth" })
-  fourth!: Player;
+  @Column({ type: "int", nullable: true })
+  fourth!: number | null;
 
-  @ManyToOne("Player")
-  @JoinColumn({ name: "fifth" })
-  fifth!: Player;
+  @Column({ type: "int", nullable: true })
+  fifth!: number | null;
 
-  @ManyToOne("Player")
-  @JoinColumn({ name: "sixth" })
-  sixth!: Player;
+  @Column({ type: "int", nullable: true })
+  sixth!: number | null;
 
   // Relations
   @OneToMany("Decklist", "session")

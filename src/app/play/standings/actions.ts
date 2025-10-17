@@ -3,6 +3,8 @@
 import { AppDataSource } from "@/lib/data-source";
 import { Pairing } from "@/src/entities/Pairing";
 import { Session } from "@/src/entities/Session";
+import { getCurrentUser } from "@/src/lib/auth";
+import { revalidatePath } from "next/cache";
 
 export interface PlayerStanding {
   playerId: number;
@@ -243,6 +245,180 @@ export async function getSessions(): Promise<GetSessionsResult> {
     return {
       success: false,
       error: "Failed to fetch sessions",
+    };
+  }
+}
+
+export interface CanFinalizeResult {
+  canFinalize: boolean;
+  isCurrentSession: boolean;
+  allMatchesComplete: boolean;
+  error?: string;
+}
+
+export interface FinalizeResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface IsAdminResult {
+  isAdmin: boolean;
+}
+
+/**
+ * Check if current user is an admin
+ */
+export async function checkIsAdmin(): Promise<IsAdminResult> {
+  try {
+    const currentUser = await getCurrentUser();
+    return {
+      isAdmin: currentUser?.isAdmin || false,
+    };
+  } catch (error) {
+    console.error("Error checking admin status:", error);
+    return {
+      isAdmin: false,
+    };
+  }
+}
+
+/**
+ * Check if standings can be finalized
+ */
+export async function canFinalizeStandings(sessionId: number): Promise<CanFinalizeResult> {
+  try {
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+    }
+
+    const sessionRepo = AppDataSource.getRepository(Session);
+    const pairingRepo = AppDataSource.getRepository(Pairing);
+
+    // Get the current (most recent) session
+    const sessions = await sessionRepo.find({
+      order: { date: "DESC" },
+      take: 1,
+    });
+
+    const currentSession = sessions.length > 0 ? sessions[0] : null;
+
+    if (!currentSession) {
+      return {
+        canFinalize: false,
+        isCurrentSession: false,
+        allMatchesComplete: false,
+        error: "No current session found",
+      };
+    }
+
+    const isCurrentSession = currentSession.id === sessionId;
+
+    // Get all pairings for this session
+    const pairings = await pairingRepo.find({
+      where: { session: { id: sessionId } },
+    });
+
+    // Check if all matches have at least one player with a win
+    const allMatchesComplete = pairings.every(
+      (pairing) => pairing.player1wins > 0 || pairing.player2wins > 0
+    );
+
+    return {
+      canFinalize: isCurrentSession && allMatchesComplete,
+      isCurrentSession,
+      allMatchesComplete,
+    };
+  } catch (error) {
+    console.error("Error checking finalize status:", error);
+    return {
+      canFinalize: false,
+      isCurrentSession: false,
+      allMatchesComplete: false,
+      error: "Failed to check finalize status",
+    };
+  }
+}
+
+/**
+ * Finalize standings by updating session placements
+ */
+export async function finalizeStandings(sessionId: number): Promise<FinalizeResult> {
+  try {
+    // Check permissions
+    const currentUser = await getCurrentUser();
+    if (!currentUser?.isAdmin) {
+      return {
+        success: false,
+        error: "Unauthorized: Only admins can finalize standings",
+      };
+    }
+
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+    }
+
+    // Validate that standings can be finalized
+    const canFinalize = await canFinalizeStandings(sessionId);
+    if (!canFinalize.canFinalize) {
+      return {
+        success: false,
+        error: canFinalize.error || "Cannot finalize standings",
+      };
+    }
+
+    // Get the standings
+    const standingsResult = await getStandings(sessionId);
+    if (!standingsResult.success || !standingsResult.standings) {
+      return {
+        success: false,
+        error: "Failed to get standings",
+      };
+    }
+
+    const standings = standingsResult.standings;
+
+    // Ensure we have at least 6 players
+    if (standings.length < 6) {
+      return {
+        success: false,
+        error: "Not enough players to finalize (need at least 6)",
+      };
+    }
+
+    const sessionRepo = AppDataSource.getRepository(Session);
+    const session = await sessionRepo.findOne({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      return {
+        success: false,
+        error: "Session not found",
+      };
+    }
+
+    // Update session with top 6 placements
+    session.first = standings[0].playerId;
+    session.second = standings[1].playerId;
+    session.third = standings[2].playerId;
+    session.fourth = standings[3].playerId;
+    session.fifth = standings[4].playerId;
+    session.sixth = standings[5].playerId;
+
+    await sessionRepo.save(session);
+
+    // Revalidate relevant pages
+    revalidatePath("/play/standings");
+    revalidatePath("/admin/prog_actions");
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Error finalizing standings:", error);
+    return {
+      success: false,
+      error: "Failed to finalize standings",
     };
   }
 }

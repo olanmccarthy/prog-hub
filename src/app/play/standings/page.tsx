@@ -18,8 +18,14 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
-import { getStandings, PlayerStanding, getSessions, SessionInfo } from "./actions";
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { getStandings, PlayerStanding, getSessions, SessionInfo, canFinalizeStandings, finalizeStandings, checkIsAdmin } from "./actions";
 
 export default function StandingsPage() {
   const [standings, setStandings] = useState<PlayerStanding[]>([]);
@@ -27,16 +33,40 @@ export default function StandingsPage() {
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [canFinalize, setCanFinalize] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
 
   useEffect(() => {
+    checkAdmin();
     fetchSessions();
   }, []);
 
   useEffect(() => {
     if (selectedSessionId !== null) {
       fetchStandings(selectedSessionId);
+      checkCanFinalize(selectedSessionId);
     }
   }, [selectedSessionId]);
+
+  const checkAdmin = async () => {
+    try {
+      const result = await checkIsAdmin();
+      setIsAdmin(result.isAdmin);
+    } catch (err) {
+      console.error('Error checking admin status:', err);
+    }
+  };
+
+  const checkCanFinalize = async (sessionId: number) => {
+    try {
+      const result = await canFinalizeStandings(sessionId);
+      setCanFinalize(result.canFinalize);
+    } catch (err) {
+      console.error('Error checking finalize status:', err);
+    }
+  };
 
   const fetchSessions = async () => {
     try {
@@ -77,6 +107,37 @@ export default function StandingsPage() {
 
   const handleSessionChange = (event: SelectChangeEvent<number>) => {
     setSelectedSessionId(event.target.value as number);
+  };
+
+  const handleFinalizeClick = () => {
+    setConfirmDialogOpen(true);
+  };
+
+  const handleFinalizeConfirm = async () => {
+    if (!selectedSessionId) return;
+
+    try {
+      setFinalizing(true);
+      setError(null);
+      const result = await finalizeStandings(selectedSessionId);
+
+      if (result.success) {
+        setConfirmDialogOpen(false);
+        setCanFinalize(false);
+        // Refresh standings
+        await fetchStandings(selectedSessionId);
+      } else {
+        setError(result.error || 'Failed to finalize standings');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to finalize');
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
+  const handleCancelFinalize = () => {
+    setConfirmDialogOpen(false);
   };
 
   if (loading) {
@@ -280,6 +341,89 @@ export default function StandingsPage() {
           </Table>
         </TableContainer>
       )}
+
+      {isAdmin && standings.length > 0 && (
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+          <Button
+            variant="contained"
+            startIcon={<CheckCircleIcon />}
+            onClick={handleFinalizeClick}
+            disabled={!canFinalize || finalizing}
+            sx={{
+              backgroundColor: canFinalize ? 'var(--accent-primary)' : 'var(--grey-300)',
+              '&:hover': {
+                backgroundColor: canFinalize ? 'var(--accent-hover)' : 'var(--grey-300)',
+              },
+              '&:disabled': {
+                backgroundColor: 'var(--grey-300)',
+                color: 'var(--text-secondary)',
+              },
+            }}
+          >
+            {finalizing ? 'Finalizing...' : 'Finalize Standings'}
+          </Button>
+        </Box>
+      )}
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmDialogOpen}
+        onClose={handleCancelFinalize}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+          },
+        }}
+      >
+        <DialogTitle sx={{ color: 'var(--text-bright)' }}>
+          Finalize Standings?
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: 'var(--text-primary)' }}>
+            Are you sure you want to finalize these standings? This will record the top 6 placements for this session and cannot be undone.
+          </Typography>
+          <Box sx={{ mt: 2, p: 2, backgroundColor: 'var(--bg-tertiary)', borderRadius: 1 }}>
+            <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 1 }}>
+              <strong>Top 6 Placements:</strong>
+            </Typography>
+            {standings.slice(0, 6).map((standing, index) => (
+              <Typography key={standing.playerId} sx={{ color: 'var(--text-primary)' }}>
+                {index + 1}. {standing.playerName}
+              </Typography>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={handleCancelFinalize}
+            disabled={finalizing}
+            sx={{
+              color: 'var(--text-primary)',
+              '&:hover': {
+                backgroundColor: 'var(--bg-tertiary)',
+              },
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleFinalizeConfirm}
+            variant="contained"
+            disabled={finalizing}
+            sx={{
+              backgroundColor: 'var(--accent-primary)',
+              '&:hover': {
+                backgroundColor: 'var(--accent-hover)',
+              },
+            }}
+          >
+            {finalizing ? <CircularProgress size={24} /> : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
