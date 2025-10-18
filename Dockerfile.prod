@@ -25,6 +25,20 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 
+# Copy Prisma schema and migrations for runtime database operations
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Create startup script
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'echo "Waiting for database..."' >> /app/start.sh && \
+    echo 'sleep 5' >> /app/start.sh && \
+    echo 'echo "Running Prisma DB push..."' >> /app/start.sh && \
+    echo 'npx prisma db push --skip-generate' >> /app/start.sh && \
+    echo 'echo "Starting Next.js..."' >> /app/start.sh && \
+    echo 'npm start' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
 # Expose and start
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["/app/start.sh"]
