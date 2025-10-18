@@ -122,8 +122,8 @@ The application uses Prisma models defined in `prisma/schema.prisma`. The data m
 - **Player**: Tournament participants with authentication (name, password, isAdmin)
 - **Session**: A progression tournament event with top 6 placements stored as nullable integers (first through sixth)
 - **Decklist**: Player's deck for a session (maindeck, sidedeck, extradeck as JSON string arrays, submittedAt timestamp)
-- **Banlist**: Card restrictions for a session (banned, limited, semilimited, unlimited as JSON arrays)
-- **BanlistSuggestion**: Player-submitted banlist changes for voting (includes moderatorId and chosen flag)
+- **Banlist**: Card restrictions for a session (banned, limited, semilimited, unlimited as JSON arrays of card IDs)
+- **BanlistSuggestion**: Player-submitted banlist changes for voting (banned, limited, semilimited, unlimited as JSON arrays of card IDs; includes moderatorId and chosen flag)
 - **BanlistSuggestionVote**: Votes on banlist suggestions
 - **Pairing**: Match pairings for each round of a session with win counts
 - **VictoryPoint**: Victory points awarded to players per session

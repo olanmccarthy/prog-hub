@@ -40,10 +40,10 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
 
     // Prisma automatically parses JSON columns to proper types
     const banlistData: BanlistData = {
-      banned: banlist.banned as string[],
-      limited: banlist.limited as string[],
-      semilimited: banlist.semilimited as string[],
-      unlimited: banlist.unlimited as string[],
+      banned: banlist.banned as number[],
+      limited: banlist.limited as number[],
+      semilimited: banlist.semilimited as number[],
+      unlimited: banlist.unlimited as number[],
     };
 
     return {

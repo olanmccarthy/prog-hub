@@ -278,10 +278,10 @@ export async function startProg(): Promise<StartProgResult> {
         await prisma.banlist.create({
           data: {
             sessionId: nextSession.id,
-            banned: JSON.stringify([]),
-            limited: JSON.stringify([]),
-            semilimited: JSON.stringify([]),
-            unlimited: JSON.stringify([]),
+            banned: [], // Empty array of card IDs
+            limited: [], // Empty array of card IDs
+            semilimited: [], // Empty array of card IDs
+            unlimited: [], // Empty array of card IDs
           },
         });
       }

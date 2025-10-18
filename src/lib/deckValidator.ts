@@ -3,10 +3,10 @@
  */
 
 export interface BanlistData {
-  banned: string[];
-  limited: string[];
-  semilimited: string[];
-  unlimited: string[];
+  banned: number[]; // Card IDs
+  limited: number[]; // Card IDs
+  semilimited: number[]; // Card IDs
+  unlimited: number[]; // Card IDs
 }
 
 export interface DeckValidationResult {
@@ -31,10 +31,9 @@ export function validateDeckAgainstBanlist(
   const combinedDeck = [...maindeck, ...sidedeck];
 
   // Count occurrences of each card in combined deck
-  const cardCounts = new Map<string, number>();
+  const cardCounts = new Map<number, number>();
   combinedDeck.forEach((cardId) => {
-    const idStr = String(cardId);
-    cardCounts.set(idStr, (cardCounts.get(idStr) || 0) + 1);
+    cardCounts.set(cardId, (cardCounts.get(cardId) || 0) + 1);
   });
 
   // Check banned cards

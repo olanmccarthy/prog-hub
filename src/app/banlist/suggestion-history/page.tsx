@@ -21,10 +21,10 @@ import {
 } from './actions';
 
 /*
- * Once we have a table bridging card IDs to names, we can update this to show the
- * cards previous state on the banlist.
+ * TODO: Update this to fetch and display card names from the cards table
+ * Currently displays card IDs directly.
  */
-function CategoryCard({ title, cards }: { title: string; cards: string[] }) {
+function CategoryCard({ title, cards }: { title: string; cards: number[] }) {
   return (
     <Box sx={{ mb: 2 }}>
       <Typography

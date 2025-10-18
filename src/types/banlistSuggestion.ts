@@ -2,10 +2,10 @@ export interface BanlistSuggestion {
   id: number;
   banlistId: number;
   playerId: number;
-  banned: string[];
-  limited: string[];
-  semilimited: string[];
-  unlimited: string[];
+  banned: number[];
+  limited: number[];
+  semilimited: number[];
+  unlimited: number[];
   chosen: boolean;
   moderatorId?: number;
 }

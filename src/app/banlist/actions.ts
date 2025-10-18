@@ -41,10 +41,10 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
     const banlist: Banlist = {
       id: banlistEntity.id,
       sessionId: mostRecentSession.id,
-      banned: banlistEntity.banned as string[],
-      limited: banlistEntity.limited as string[],
-      semilimited: banlistEntity.semilimited as string[],
-      unlimited: banlistEntity.unlimited as string[],
+      banned: banlistEntity.banned as number[],
+      limited: banlistEntity.limited as number[],
+      semilimited: banlistEntity.semilimited as number[],
+      unlimited: banlistEntity.unlimited as number[],
     };
 
     return {

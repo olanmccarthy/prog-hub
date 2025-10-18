@@ -6,10 +6,10 @@ export interface BanlistSuggestionHistory {
   id: number;
   playerName: string;
   sessionNumber: number;
-  banned: string[];
-  limited: string[];
-  semilimited: string[];
-  unlimited: string[];
+  banned: number[];
+  limited: number[];
+  semilimited: number[];
+  unlimited: number[];
   chosen: boolean;
 }
 
@@ -39,10 +39,10 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
         id: s.id,
         playerName: s.player.name,
         sessionNumber: s.banlist.session.number,
-        banned: s.banned as string[],
-        limited: s.limited as string[],
-        semilimited: s.semilimited as string[],
-        unlimited: s.unlimited as string[],
+        banned: s.banned as number[],
+        limited: s.limited as number[],
+        semilimited: s.semilimited as number[],
+        unlimited: s.unlimited as number[],
         chosen: s.chosen,
       })),
     };
