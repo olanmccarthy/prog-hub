@@ -20,7 +20,7 @@ INSERT INTO players (id, name, password, is_admin) VALUES
 -- =====================================
 INSERT INTO sessions (id, number, date, first, second, third, fourth, fifth, sixth) VALUES
   (1, 1, '2025-01-15 10:00:00', 1, 3, 2, 5, 4, 6),
-  (2, 2, '2025-02-15 10:00:00', 3, 1, 6, 2, 5, 4);
+  (2, 2, '2025-02-15 10:00:00', null, null, null, null, null, null);
 
 -- =====================================
 -- BANLISTS (one per session, using prog.lflist.conf format)
