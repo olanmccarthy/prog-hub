@@ -19,6 +19,12 @@ jobs:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           HOST: ${{ secrets.EC2_HOST }}
           USER: ${{ secrets.EC2_USER }}
+          # Sensitive credentials from secrets
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           # Create .ssh directory if it doesn't exist
           mkdir -p ~/.ssh
@@ -31,8 +37,14 @@ jobs:
           # Add EC2 to known hosts
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
 
-          # Deploy via SSH
-          ssh -i private_key.pem $USER@$HOST << 'EOF'
+          # Deploy via SSH with sensitive credentials
+          ssh -i private_key.pem $USER@$HOST \
+            DB_PASSWORD="$DB_PASSWORD" \
+            MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
+            DISCORD_BOT_TOKEN="$DISCORD_BOT_TOKEN" \
+            AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+            AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+          bash << 'EOF'
             set -e
 
             echo "=== Starting deployment ==="
@@ -44,6 +56,29 @@ jobs:
             echo "Pulling latest code from main branch..."
             git fetch origin
             git reset --hard origin/main
+
+            # Check if .env.production exists
+            if [ ! -f .env.production ]; then
+              echo "Error: .env.production file not found in repository"
+              exit 1
+            fi
+
+            # Replace sensitive values in .env.production
+            echo "Updating sensitive credentials in .env.production..."
+            sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=${DB_PASSWORD}|" .env.production
+            sed -i "s|^MYSQL_ROOT_PASSWORD=.*|MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}|" .env.production
+            sed -i "s|^DISCORD_BOT_TOKEN=.*|DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}|" .env.production
+            sed -i "s|^AWS_ACCESS_KEY_ID=.*|AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}|" .env.production
+            sed -i "s|^AWS_SECRET_ACCESS_KEY=.*|AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}|" .env.production
+
+            # Also update DATABASE_URL with the new DB_PASSWORD
+            # Extract current DATABASE_URL and replace the password part
+            CURRENT_DB_URL=$(grep "^DATABASE_URL=" .env.production | cut -d'=' -f2-)
+            # Replace password in DATABASE_URL (format: mysql://user:password@host:port/db)
+            NEW_DB_URL=$(echo "$CURRENT_DB_URL" | sed "s|://[^:]*:[^@]*@|://appuser:${DB_PASSWORD}@|")
+            sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${NEW_DB_URL}|" .env.production
+
+            echo "Credentials updated successfully"
 
             # Stop running containers
             echo "Stopping containers..."
