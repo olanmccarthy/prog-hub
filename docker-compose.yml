@@ -38,6 +38,20 @@ services:
     networks:
       - app-network
 
+  discord_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.discord
+    container_name: discord_bot_prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    networks:
+      - app-network
+
 volumes:
   mysql_data:
 

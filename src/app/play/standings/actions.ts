@@ -3,6 +3,7 @@
 import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 import { revalidatePath } from "next/cache";
+import { notifyStandings } from "@lib/discordClient";
 
 export interface PlayerStanding {
   playerId: number;
@@ -402,6 +403,9 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
         sixth: standings[5].playerId,
       },
     });
+
+    // Send Discord notification with final standings
+    await notifyStandings(sessionId);
 
     // Revalidate relevant pages
     revalidatePath("/play/standings");

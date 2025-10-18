@@ -14,6 +14,7 @@ prog-hub is a web application for managing Yu-Gi-Oh progression series tournamen
 - **ORM**: Prisma 6.17.1
 - **Runtime**: Node.js 20+
 - **Containerization**: Docker with separate dev/prod configurations
+- **Discord Bot**: discord.js for tournament notifications
 
 ## Development Commands
 
@@ -95,9 +96,11 @@ docker ps
 # View logs
 docker logs next_app_prod
 docker logs mysql_db_prod
+docker logs discord_bot_prod
 
 # Follow logs in real-time
 docker logs -f next_app_prod
+docker logs -f discord_bot_prod
 ```
 
 **For complete setup instructions**, see `DEPLOYMENT.md`.
@@ -156,6 +159,11 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
   - `ydkParser.ts`: Yu-Gi-Oh .ydk deck file parser and validator
   - `deckValidator.ts`: Deck validation against banlist restrictions
 - **`src/components/`**: Shared React components (AppHeader, YdkUploadBox)
+- **`src/discord/`**: Discord bot service
+  - `index.ts`: Bot entry point and service runner
+  - `bot.ts`: Discord client initialization and management
+  - `config.ts`: Bot configuration and validation
+  - `notifications.ts`: Notification functions for pairings, standings, etc.
 
 ### Database Schema
 
@@ -170,19 +178,27 @@ The legacy `schema.sql` file exists for reference but is not used by Prisma.
 
 ### Docker Configuration
 
-**Two-container setup**:
-1. **MySQL container** (`mysql_db_dev` for dev, `mysql_db_prod` for prod): Port 3306, initializes with `schema.sql` and `test_data.sql` (dev only)
-2. **Next.js container** (`next_app_dev` for dev, `next_app_prod` for prod): Port 3000, volume-mounted for hot reload in dev
+**Development (two-container setup)**:
+1. **MySQL container** (`mysql_db_dev`): Port 3306, initializes with `schema.sql` and `test_data.sql`
+2. **Next.js container** (`next_app_dev`): Port 3000, volume-mounted for hot reload
 
-The dev configuration (`docker-compose.dev.yml`) mounts the entire project directory excluding `node_modules`, enabling instant code changes without rebuilds.
+**Production (three-container setup)**:
+1. **MySQL container** (`mysql_db_prod`): Port 3306
+2. **Next.js container** (`next_app_prod`): Port 3000
+3. **Discord Bot container** (`discord_bot_prod`): Notification service that polls SQS queue
+
+The dev configuration (`docker-compose.dev.yml`) mounts the entire project directory excluding `node_modules`, enabling instant code changes without rebuilds. The Discord bot and SQS notifications are disabled in development mode.
 
 **Connecting to containers**:
 ```bash
-# Connect to Next.js app container
+# Development
 docker exec -it next_app_dev /bin/sh
-
-# Connect to MySQL container
 docker exec -it mysql_db_dev /bin/bash
+
+# Production
+docker exec -it next_app_prod /bin/sh
+docker exec -it discord_bot_prod /bin/sh
+docker exec -it mysql_db_prod /bin/bash
 
 # Connect to MySQL database directly
 docker exec -it mysql_db_dev mysql -u appuser -p
@@ -215,6 +231,17 @@ docker exec -it mysql_db_dev mysql -u appuser -p
   - `MYSQL_ROOT_PASSWORD`: MySQL root password (Docker only, default: `root` for dev)
 - `NODE_ENV`: Set to `development` or `production`
 - `NEXT_PUBLIC_API_URL`: Public API URL for client-side requests
+- **Discord Bot Configuration** (optional, bot disabled if not configured):
+  - `DISCORD_ENABLED`: Set to `true` to enable bot (default: `false` for dev, `true` for prod)
+  - `DISCORD_BOT_TOKEN`: Discord bot token from Discord Developer Portal
+  - `DISCORD_GUILD_ID`: Discord server ID where bot will post
+  - `DISCORD_CHANNEL_ID`: Channel ID where notifications will be posted
+- **AWS SQS Configuration** (required for Discord bot):
+  - `AWS_REGION`: AWS region where SQS queue is located (e.g., `us-east-1`)
+  - `AWS_ACCESS_KEY_ID`: AWS access key with SQS permissions
+  - `AWS_SECRET_ACCESS_KEY`: AWS secret key
+  - `DISCORD_SQS_QUEUE_URL`: Full URL of the SQS FIFO queue (e.g., `https://sqs.us-east-1.amazonaws.com/123456789/discord-notifications.fifo`)
+  - `SQS_POLL_INTERVAL`: Polling interval in milliseconds (default: `60000` - 1 minute)
 
 ### Prisma Client Singleton
 The file `src/lib/prisma.ts` exports:
@@ -247,8 +274,12 @@ The file `src/lib/prisma.ts` exports:
 - Complete banlist voting system
 - Current banlist and history views
 
+### Integrated Services:
+- **Discord Bot**: Automated notifications for pairings, standings, and new sessions (✅ Implemented)
+  - Automatically posts all round pairings when a new session starts via `startProg()` (src/app/admin/prog_actions/actions.ts:310)
+  - Automatically posts final standings when an admin finalizes them via `finalizeStandings()` (src/app/play/standings/actions.ts:408)
+
 ### Future Services:
-- Discord bot for posting pairings/standings
 - Banlist image generator for voted results
 
 ## Development Notes
@@ -352,3 +383,82 @@ const validation = validateDeckAgainstBanlist(maindeck, sidedeck, extradeck, ban
 - **YdkUploadBox** (`@components/YdkUploadBox`): Reusable .ydk file upload with validation
   - Props: `banlist`, `sessionNumber`, `onValidationComplete`, `showSubmitButton`, `onSubmit`
   - Handles file parsing, deck validation, and optional submission
+
+### Discord Bot Integration
+
+The Discord bot runs as a separate service and can be called from server actions to send notifications.
+
+**Configuration**:
+- **Production only**: Discord bot and SQS notifications are disabled in development mode (`NODE_ENV=development`)
+- Requires Discord bot token, guild ID, and channel ID from Discord Developer Portal
+- Requires AWS SQS FIFO queue and IAM credentials
+- Bot runs as a separate Docker container in production only
+
+**Sending Notifications from Server Actions**:
+```typescript
+import { notifyPairings, notifyStandings, notifyNewSession, notifyGeneric } from '@lib/discordClient';
+
+// After generating pairings for a round
+await notifyPairings(sessionId, roundNumber);
+
+// After finalizing standings
+await notifyStandings(sessionId);
+
+// When starting a new session
+await notifyNewSession(sessionNumber);
+
+// For custom notifications
+await notifyGeneric('Tournament Update', 'Custom message here', 0x00ff00);
+```
+
+**Architecture**: The Discord bot runs as a separate service with an SQS queue consumer. The Next.js app sends messages to AWS SQS (via `src/lib/discordClient.ts`), and the Discord bot polls the queue to process notifications asynchronously. This decouples the Discord.js library from the Next.js runtime and provides reliable, asynchronous message delivery with automatic retries.
+
+**Available Notification Functions** (in `src/discord/notifications.ts`):
+- `notifyNewSessionWithPairings(sessionId: number)`: Posts all pairings for a new session, grouped by round (automatically called in `startProg()`)
+- `notifyPairings(sessionId: number, round: number)`: Posts round pairings with player matchups
+- `notifyStandings(sessionId: number)`: Posts final standings with rankings and scores
+- `notifyNewSession(sessionNumber: number)`: Announces a new session has started (basic version without pairings)
+- `notifyGeneric(title: string, description: string, color?: number)`: Posts a custom message
+
+**Setup for Production**:
+1. **Create Discord Bot**:
+   - Go to https://discord.com/developers/applications
+   - Create a new application and bot
+   - Copy the bot token
+   - Invite bot to your server with "Send Messages" and "Embed Links" permissions
+   - Get server ID and channel ID (enable Developer Mode in Discord)
+
+2. **Create AWS SQS FIFO Queue**:
+   - Go to AWS SQS Console
+   - Create a new FIFO queue named `discord-notifications.fifo`
+   - Enable Content-Based Deduplication (recommended)
+   - Note the queue URL
+
+3. **Create IAM User with SQS Permissions**:
+   - Create IAM user with `AmazonSQSFullAccess` policy (or custom policy with `sqs:SendMessage`, `sqs:ReceiveMessage`, `sqs:DeleteMessage`)
+   - Generate access key and secret key
+
+4. **Set Environment Variables** in `.env.production`:
+   ```
+   DISCORD_ENABLED=true
+   DISCORD_BOT_TOKEN=your_bot_token
+   DISCORD_GUILD_ID=your_server_id
+   DISCORD_CHANNEL_ID=your_channel_id
+
+   AWS_REGION=us-east-1
+   AWS_ACCESS_KEY_ID=your_access_key
+   AWS_SECRET_ACCESS_KEY=your_secret_key
+   DISCORD_SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/123456789/discord-notifications.fifo
+   ```
+
+5. **Deploy**:
+   - Restart containers with `npm run docker:build && npm run docker:up`
+
+**Important Notes**:
+- **Production only**: Notifications are automatically skipped in development mode
+- Notifications are sent asynchronously via SQS; sending failures are logged but don't block server actions
+- Bot must be running and polling the queue for notifications to be processed
+- SQS provides automatic retries for failed messages
+- All notifications use Discord embeds for rich formatting
+- The bot only sends messages; it does not respond to commands
+- Uses AWS SQS FIFO queue to ensure messages are processed in order

@@ -1,0 +1,25 @@
+# Dockerfile for Discord Bot Service
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies (skip prepare scripts like husky)
+RUN npm ci --omit=dev --ignore-scripts
+
+# Copy source code
+COPY prisma ./prisma
+COPY src ./src
+COPY tsconfig.json ./
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Build TypeScript files
+RUN npm install -g tsx
+
+# Start the Discord bot
+CMD ["tsx", "src/discord/index.ts"]

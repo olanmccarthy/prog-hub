@@ -2,6 +2,7 @@
 
 import { prisma } from '@lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { notifyNewSessionWithPairings } from '@lib/discordClient';
 
 export interface RequirementStatus {
   met: boolean;
@@ -304,6 +305,9 @@ export async function startProg(): Promise<StartProgResult> {
         player2wins: 0,
       })),
     });
+
+    // Send Discord notification with all pairings
+    await notifyNewSessionWithPairings(nextSession!.id);
 
     // Revalidate relevant pages
     revalidatePath('/admin/prog_actions');
