@@ -8,6 +8,8 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
+# Generate Prisma client before building
+RUN npx prisma generate
 # Build without turbopack for production compatibility
 RUN npx next build
 

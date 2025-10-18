@@ -1,8 +1,6 @@
 "use server";
 
-import { getDataSource } from "@lib/data-source";
-import { Pairing } from "@entities/Pairing";
-import { Session } from "@entities/Session";
+import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 import { revalidatePath } from "next/cache";
 
@@ -55,31 +53,29 @@ export async function getStandings(
   sessionId?: number
 ): Promise<GetStandingsResult> {
   try {
-    const dataSource = await getDataSource();
-
     // If no sessionId provided, get the current session (latest session)
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const sessionRepo = dataSource.getRepository(Session);
-      const sessions = await sessionRepo.find({
-        select: ["id", "number", "date"],
-        order: { date: "DESC" },
-        take: 1,
+      const currentSession = await prisma.session.findFirst({
+        select: { id: true },
+        orderBy: { date: "desc" },
       });
 
-      if (sessions.length === 0) {
+      if (!currentSession) {
         return {
           success: false,
           error: "No sessions found",
         };
       }
-      currentSessionId = sessions[0].id;
+      currentSessionId = currentSession.id;
     }
 
-    const pairingRepo = dataSource.getRepository(Pairing);
-    const pairings = await pairingRepo.find({
-      where: { session: { id: currentSessionId } },
-      relations: ["player1", "player2"],
+    const pairings = await prisma.pairing.findMany({
+      where: { sessionId: currentSessionId },
+      include: {
+        player1: { select: { id: true, name: true } },
+        player2: { select: { id: true, name: true } },
+      },
     });
 
     // Calculate player stats
@@ -159,7 +155,7 @@ export async function getStandings(
 
     // Convert to array and sort with tiebreakers
     const playerStats = Array.from(playerStatsMap.values());
-    const sortedStandings = sortWithTiebreakers(playerStats, pairings);
+    const sortedStandings = sortWithTiebreakers(playerStats);
 
     // Assign ranks
     const standings: PlayerStanding[] = sortedStandings.map((stats, index) => ({
@@ -190,9 +186,7 @@ export async function getStandings(
 }
 
 function sortWithTiebreakers(
-  players: PlayerStats[],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _pairings: Pairing[]
+  players: PlayerStats[]
 ): PlayerStats[] {
   return players.sort((a, b) => {
     // Primary: Most match wins
@@ -218,22 +212,18 @@ function sortWithTiebreakers(
 
 export async function getSessions(): Promise<GetSessionsResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const sessions = await sessionRepo.find({
-      select: ["id", "number", "date"],
-      order: { date: "DESC" },
+    const sessions = await prisma.session.findMany({
+      select: {
+        id: true,
+        number: true,
+        date: true,
+      },
+      orderBy: { date: "desc" },
     });
-
-    const sessionData: SessionInfo[] = sessions.map((s) => ({
-      id: s.id,
-      number: s.number,
-      date: s.date,
-    }));
 
     return {
       success: true,
-      sessions: sessionData,
+      sessions,
     };
   } catch (error) {
     console.error("Error fetching sessions:", error);
@@ -269,9 +259,7 @@ export interface IsFinalizedResult {
  */
 export async function checkIsFinalized(sessionId: number): Promise<IsFinalizedResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const session = await sessionRepo.findOne({
+    const session = await prisma.session.findUnique({
       where: { id: sessionId },
     });
 
@@ -318,17 +306,10 @@ export async function checkIsAdmin(): Promise<IsAdminResult> {
  */
 export async function canFinalizeStandings(sessionId: number): Promise<CanFinalizeResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const pairingRepo = dataSource.getRepository(Pairing);
-
     // Get the current (most recent) session
-    const sessions = await sessionRepo.find({
-      order: { date: "DESC" },
-      take: 1,
+    const currentSession = await prisma.session.findFirst({
+      orderBy: { date: "desc" },
     });
-
-    const currentSession = sessions.length > 0 ? sessions[0] : null;
 
     if (!currentSession) {
       return {
@@ -342,8 +323,8 @@ export async function canFinalizeStandings(sessionId: number): Promise<CanFinali
     const isCurrentSession = currentSession.id === sessionId;
 
     // Get all pairings for this session
-    const pairings = await pairingRepo.find({
-      where: { session: { id: sessionId } },
+    const pairings = await prisma.pairing.findMany({
+      where: { sessionId },
     });
 
     // Check if all matches have at least one player with a win
@@ -381,8 +362,6 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
       };
     }
 
-    const dataSource = await getDataSource();
-
     // Validate that standings can be finalized
     const canFinalize = await canFinalizeStandings(sessionId);
     if (!canFinalize.canFinalize) {
@@ -411,27 +390,18 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
       };
     }
 
-    const sessionRepo = dataSource.getRepository(Session);
-    const session = await sessionRepo.findOne({
-      where: { id: sessionId },
-    });
-
-    if (!session) {
-      return {
-        success: false,
-        error: "Session not found",
-      };
-    }
-
     // Update session with top 6 placements
-    session.first = standings[0].playerId;
-    session.second = standings[1].playerId;
-    session.third = standings[2].playerId;
-    session.fourth = standings[3].playerId;
-    session.fifth = standings[4].playerId;
-    session.sixth = standings[5].playerId;
-
-    await sessionRepo.save(session);
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        first: standings[0].playerId,
+        second: standings[1].playerId,
+        third: standings[2].playerId,
+        fourth: standings[3].playerId,
+        fifth: standings[4].playerId,
+        sixth: standings[5].playerId,
+      },
+    });
 
     // Revalidate relevant pages
     revalidatePath("/play/standings");

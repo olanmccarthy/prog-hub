@@ -1,12 +1,6 @@
 'use server';
 
-import { getDataSource } from '@lib/data-source';
-import { Session } from '@entities/Session';
-import { Player } from '@entities/Player';
-import { Banlist } from '@entities/Banlist';
-import { Decklist } from '@entities/Decklist';
-import { BanlistSuggestion } from '@entities/BanlistSuggestion';
-import { Pairing } from '@entities/Pairing';
+import { prisma } from '@lib/prisma';
 import { revalidatePath } from 'next/cache';
 
 export interface RequirementStatus {
@@ -36,13 +30,6 @@ export interface StartProgResult {
  */
 export async function validateProgStart(): Promise<ValidationResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const playerRepo = dataSource.getRepository(Player);
-    const banlistRepo = dataSource.getRepository(Banlist);
-    const decklistRepo = dataSource.getRepository(Decklist);
-    const suggestionRepo = dataSource.getRepository(BanlistSuggestion);
-
     const reasons: string[] = [];
     const requirements = {
       placementsFilled: { met: false, message: '' },
@@ -52,14 +39,11 @@ export async function validateProgStart(): Promise<ValidationResult> {
     };
 
     // Get the current (most recent) session
-    const sessions = await sessionRepo.find({
-      order: { date: 'DESC' },
-      take: 1,
+    const currentSession = await prisma.session.findFirst({
+      orderBy: { date: 'desc' },
     });
-    const currentSession = sessions.length > 0 ? sessions[0] : null;
 
-    const players = await playerRepo.find();
-    const playerCount = players.length;
+    const playerCount = await prisma.player.count();
 
     if (currentSession) {
       // Check if all placement fields are filled
@@ -77,37 +61,37 @@ export async function validateProgStart(): Promise<ValidationResult> {
       }
 
       // Check if all players have submitted decklists for current session
-      const decklists = await decklistRepo.find({
-        where: { session: { id: currentSession.id } },
+      const decklistCount = await prisma.decklist.count({
+        where: { sessionId: currentSession.id },
       });
 
-      const decklistsComplete = decklists.length >= playerCount;
+      const decklistsComplete = decklistCount >= playerCount;
       requirements.decklistsSubmitted = {
         met: decklistsComplete,
         message: decklistsComplete
           ? `All ${playerCount} decklists submitted`
-          : `Not all players have submitted decklists (${decklists.length}/${playerCount})`,
+          : `Not all players have submitted decklists (${decklistCount}/${playerCount})`,
       };
       if (!decklistsComplete) {
         reasons.push(requirements.decklistsSubmitted.message);
       }
 
       // Check if all players have submitted banlist suggestions for current session
-      const currentBanlist = await banlistRepo.findOne({
-        where: { session: { id: currentSession.id } },
+      const currentBanlist = await prisma.banlist.findFirst({
+        where: { sessionId: currentSession.id },
       });
 
       if (currentBanlist) {
-        const suggestions = await suggestionRepo.find({
-          where: { banlist: { id: currentBanlist.id } },
+        const suggestionCount = await prisma.banlistSuggestion.count({
+          where: { banlistId: currentBanlist.id },
         });
 
-        const suggestionsComplete = suggestions.length >= playerCount;
+        const suggestionsComplete = suggestionCount >= playerCount;
         requirements.suggestionsSubmitted = {
           met: suggestionsComplete,
           message: suggestionsComplete
             ? `All ${playerCount} suggestions submitted`
-            : `Not all players have submitted suggestions (${suggestions.length}/${playerCount})`,
+            : `Not all players have submitted suggestions (${suggestionCount}/${playerCount})`,
         };
         if (!suggestionsComplete) {
           reasons.push(requirements.suggestionsSubmitted.message);
@@ -128,13 +112,13 @@ export async function validateProgStart(): Promise<ValidationResult> {
 
     // Check if there's a banlist for the new session (next session number)
     const nextSessionNumber = currentSession ? currentSession.number + 1 : 1;
-    const nextSession = await sessionRepo.findOne({
+    const nextSession = await prisma.session.findUnique({
       where: { number: nextSessionNumber },
     });
 
     if (nextSession) {
-      const nextBanlist = await banlistRepo.findOne({
-        where: { session: { id: nextSession.id } },
+      const nextBanlist = await prisma.banlist.findFirst({
+        where: { sessionId: nextSession.id },
       });
 
       const banlistExists = !!nextBanlist;
@@ -233,11 +217,6 @@ function generateRoundRobinPairings(playerIds: number[]): { round: number; playe
  */
 export async function startProg(): Promise<StartProgResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const playerRepo = dataSource.getRepository(Player);
-    const pairingRepo = dataSource.getRepository(Pairing);
-
     // Validate first
     const validation = await validateProgStart();
     if (!validation.canStartProg) {
@@ -248,52 +227,51 @@ export async function startProg(): Promise<StartProgResult> {
     }
 
     // Get current session to determine next session number
-    const currentSessions = await sessionRepo.find({
-      order: { date: 'DESC' },
-      take: 1,
+    const currentSession = await prisma.session.findFirst({
+      orderBy: { date: 'desc' },
     });
-    const currentSession = currentSessions.length > 0 ? currentSessions[0] : null;
 
     const nextSessionNumber = currentSession ? currentSession.number + 1 : 1;
 
     // Check if session already exists (it should from validation)
-    let nextSession = await sessionRepo.findOne({
+    let nextSession = await prisma.session.findUnique({
       where: { number: nextSessionNumber },
     });
 
     // If it doesn't exist, create it
     if (!nextSession) {
-      nextSession = sessionRepo.create({
-        number: nextSessionNumber,
-        date: new Date(),
-        first: null,
-        second: null,
-        third: null,
-        fourth: null,
-        fifth: null,
-        sixth: null,
+      nextSession = await prisma.session.create({
+        data: {
+          number: nextSessionNumber,
+          date: new Date(),
+          first: null,
+          second: null,
+          third: null,
+          fourth: null,
+          fifth: null,
+          sixth: null,
+        },
       });
-      await sessionRepo.save(nextSession);
     }
 
     // Get all players
-    const players = await playerRepo.find();
+    const players = await prisma.player.findMany();
     const playerIds = players.map(p => p.id);
 
     // Generate round-robin pairings with randomization
     const pairingData = generateRoundRobinPairings(playerIds);
 
     // Save pairings to database
-    const pairings = pairingData.map(p => pairingRepo.create({
-      session: { id: nextSession!.id },
-      round: p.round,
-      player1: { id: p.player1 },
-      player2: { id: p.player2 },
-      player1wins: 0,
-      player2wins: 0,
-    }));
-
-    await pairingRepo.save(pairings);
+    await prisma.pairing.createMany({
+      data: pairingData.map(p => ({
+        sessionId: nextSession!.id,
+        round: p.round,
+        player1Id: p.player1,
+        player2Id: p.player2,
+        player1wins: 0,
+        player2wins: 0,
+      })),
+    });
 
     // Revalidate relevant pages
     revalidatePath('/admin/prog_actions');

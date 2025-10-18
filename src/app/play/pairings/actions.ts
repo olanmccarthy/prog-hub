@@ -1,8 +1,6 @@
 "use server";
 
-import { getDataSource } from "@lib/data-source";
-import { Pairing } from "@entities/Pairing";
-import { Session } from "@entities/Session";
+import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 
 export interface PairingData {
@@ -37,32 +35,30 @@ export async function getPairings(
   sessionId?: number
 ): Promise<GetPairingsResult> {
   try {
-    const dataSource = await getDataSource();
-
     // If no sessionId provided, get the current session (latest session)
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const sessionRepo = dataSource.getRepository(Session);
-      const sessions = await sessionRepo.find({
-        select: ["id", "number", "date"],
-        order: { date: "DESC" },
-        take: 1,
+      const currentSession = await prisma.session.findFirst({
+        select: { id: true },
+        orderBy: { date: "desc" },
       });
 
-      if (sessions.length === 0) {
+      if (!currentSession) {
         return {
           success: false,
           error: "No sessions found",
         };
       }
-      currentSessionId = sessions[0].id;
+      currentSessionId = currentSession.id;
     }
 
-    const pairingRepo = dataSource.getRepository(Pairing);
-    const pairings = await pairingRepo.find({
-      where: { session: { id: currentSessionId } },
-      relations: ["player1", "player2", "session"],
-      order: { round: "ASC", id: "ASC" },
+    const pairings = await prisma.pairing.findMany({
+      where: { sessionId: currentSessionId },
+      include: {
+        player1: { select: { id: true, name: true } },
+        player2: { select: { id: true, name: true } },
+      },
+      orderBy: [{ round: "asc" }, { id: "asc" }],
     });
 
     // Map to plain objects for serialization
@@ -110,8 +106,6 @@ export async function updatePairing(
       };
     }
 
-    const dataSource = await getDataSource();
-
     if (!pairingId || player1wins === undefined || player2wins === undefined) {
       return {
         success: false,
@@ -119,10 +113,12 @@ export async function updatePairing(
       };
     }
 
-    const pairingRepo = dataSource.getRepository(Pairing);
-    const pairing = await pairingRepo.findOne({
+    const pairing = await prisma.pairing.findUnique({
       where: { id: pairingId },
-      relations: ["player1", "player2"],
+      include: {
+        player1: { select: { id: true, name: true } },
+        player2: { select: { id: true, name: true } },
+      },
     });
 
     if (!pairing) {
@@ -144,24 +140,32 @@ export async function updatePairing(
       };
     }
 
-    pairing.player1wins = player1wins;
-    pairing.player2wins = player2wins;
-    await pairingRepo.save(pairing);
+    const updatedPairing = await prisma.pairing.update({
+      where: { id: pairingId },
+      data: {
+        player1wins,
+        player2wins,
+      },
+      include: {
+        player1: { select: { id: true, name: true } },
+        player2: { select: { id: true, name: true } },
+      },
+    });
 
     // Map to plain object for serialization
     const pairingData: PairingData = {
-      id: pairing.id,
-      round: pairing.round,
+      id: updatedPairing.id,
+      round: updatedPairing.round,
       player1: {
-        id: pairing.player1.id,
-        name: pairing.player1.name,
+        id: updatedPairing.player1.id,
+        name: updatedPairing.player1.name,
       },
       player2: {
-        id: pairing.player2.id,
-        name: pairing.player2.name,
+        id: updatedPairing.player2.id,
+        name: updatedPairing.player2.name,
       },
-      player1wins: pairing.player1wins,
-      player2wins: pairing.player2wins,
+      player1wins: updatedPairing.player1wins,
+      player2wins: updatedPairing.player2wins,
     };
 
     return {

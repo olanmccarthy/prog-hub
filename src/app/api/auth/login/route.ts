@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDataSource } from '@lib/data-source';
-import { Player } from '@entities/Player';
+import { prisma } from '@lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,12 +12,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get database connection and player repository
-    const dataSource = await getDataSource();
-    const playerRepository = dataSource.getRepository(Player);
-
-    // Find player by name
-    const player = await playerRepository.findOne({
+    // Find player by name using Prisma
+    const player = await prisma.player.findFirst({
       where: { name },
     });
 

@@ -1,8 +1,6 @@
 "use server";
 
-import { getDataSource } from "@lib/data-source";
-import { Session } from "@entities/Session";
-import { Banlist } from "@entities/Banlist";
+import { prisma } from "@lib/prisma";
 import type { BanlistData } from "@lib/deckValidator";
 
 interface GetMostRecentBanlistResult {
@@ -14,17 +12,12 @@ interface GetMostRecentBanlistResult {
 
 export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const banlistRepo = dataSource.getRepository(Banlist);
-
     // Get the most recent session
-    const sessions = await sessionRepo.find({
-      order: { date: "DESC" },
-      take: 1,
+    const mostRecentSession = await prisma.session.findFirst({
+      orderBy: { date: "desc" },
     });
 
-    if (sessions.length === 0) {
+    if (!mostRecentSession) {
       return {
         success: false,
         banlist: null,
@@ -32,11 +25,9 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
       };
     }
 
-    const mostRecentSession = sessions[0];
-
     // Get the banlist for this session
-    const banlist = await banlistRepo.findOne({
-      where: { session: { id: mostRecentSession.id } },
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: mostRecentSession.id },
     });
 
     if (!banlist) {
@@ -47,12 +38,12 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
       };
     }
 
-    // TypeORM automatically parses JSON columns, so no need to JSON.parse
+    // Prisma automatically parses JSON columns to proper types
     const banlistData: BanlistData = {
-      banned: banlist.banned,
-      limited: banlist.limited,
-      semilimited: banlist.semilimited,
-      unlimited: banlist.unlimited,
+      banned: banlist.banned as string[],
+      limited: banlist.limited as string[],
+      semilimited: banlist.semilimited as string[],
+      unlimited: banlist.unlimited as string[],
     };
 
     return {

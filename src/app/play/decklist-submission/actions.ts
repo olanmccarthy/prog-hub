@@ -1,8 +1,6 @@
 "use server";
 
-import { getDataSource } from "@lib/data-source";
-import { Decklist } from "@entities/Decklist";
-import { Session } from "@entities/Session";
+import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 import { revalidatePath } from "next/cache";
 
@@ -36,21 +34,16 @@ export interface CurrentSessionResult {
  */
 export async function getCurrentSession(): Promise<CurrentSessionResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const sessions = await sessionRepo.find({
-      order: { date: "DESC" },
-      take: 1,
+    const currentSession = await prisma.session.findFirst({
+      orderBy: { date: "desc" },
     });
 
-    if (sessions.length === 0) {
+    if (!currentSession) {
       return {
         success: false,
         error: "No active session found",
       };
     }
-
-    const currentSession = sessions[0];
 
     return {
       success: true,
@@ -79,8 +72,6 @@ export async function getMyDecklist(): Promise<GetDecklistResult> {
       };
     }
 
-    const dataSource = await getDataSource();
-
     const sessionResult = await getCurrentSession();
     if (!sessionResult.success || !sessionResult.sessionId) {
       return {
@@ -89,13 +80,15 @@ export async function getMyDecklist(): Promise<GetDecklistResult> {
       };
     }
 
-    const decklistRepo = dataSource.getRepository(Decklist);
-    const decklist = await decklistRepo.findOne({
+    const decklist = await prisma.decklist.findFirst({
       where: {
-        player: { id: currentUser.playerId },
-        session: { id: sessionResult.sessionId },
+        playerId: currentUser.playerId,
+        sessionId: sessionResult.sessionId,
       },
-      relations: ["player", "session"],
+      include: {
+        player: { select: { name: true } },
+        session: { select: { number: true } },
+      },
     });
 
     if (!decklist) {
@@ -162,8 +155,6 @@ export async function submitDecklist(
       };
     }
 
-    const dataSource = await getDataSource();
-
     const sessionResult = await getCurrentSession();
     if (!sessionResult.success || !sessionResult.sessionId) {
       return {
@@ -172,39 +163,37 @@ export async function submitDecklist(
       };
     }
 
-    const decklistRepo = dataSource.getRepository(Decklist);
-
     // Check if user already has a decklist for this session
-    const existingDecklist = await decklistRepo.findOne({
+    const existingDecklist = await prisma.decklist.findFirst({
       where: {
-        player: { id: currentUser.playerId },
-        session: { id: sessionResult.sessionId },
+        playerId: currentUser.playerId,
+        sessionId: sessionResult.sessionId,
       },
     });
 
-    // Convert number arrays to string arrays for database storage
-    const maindeckStrings = maindeck.map(String);
-    const sidedeckStrings = sidedeck.map(String);
-    const extradeckStrings = extradeck.map(String);
-
     if (existingDecklist) {
       // Update existing decklist
-      existingDecklist.maindeck = maindeckStrings;
-      existingDecklist.sidedeck = sidedeckStrings;
-      existingDecklist.extradeck = extradeckStrings;
-      existingDecklist.submittedAt = new Date();
-      await decklistRepo.save(existingDecklist);
+      await prisma.decklist.update({
+        where: { id: existingDecklist.id },
+        data: {
+          maindeck,
+          sidedeck,
+          extradeck,
+          submittedAt: new Date(),
+        },
+      });
     } else {
       // Create new decklist
-      const newDecklist = decklistRepo.create({
-        player: { id: currentUser.playerId },
-        session: { id: sessionResult.sessionId },
-        maindeck: maindeckStrings,
-        sidedeck: sidedeckStrings,
-        extradeck: extradeckStrings,
-        submittedAt: new Date(),
+      await prisma.decklist.create({
+        data: {
+          playerId: currentUser.playerId,
+          sessionId: sessionResult.sessionId,
+          maindeck,
+          sidedeck,
+          extradeck,
+          submittedAt: new Date(),
+        },
       });
-      await decklistRepo.save(newDecklist);
     }
 
     revalidatePath("/play/decklist-submission");

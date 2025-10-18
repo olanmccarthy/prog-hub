@@ -1,0 +1,145 @@
+// Prisma schema for prog-hub
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id       Int      @id @default(autoincrement())
+  name     String   @db.VarChar(255)
+  password String   @db.VarChar(255)
+  isAdmin  Boolean  @default(false) @map("is_admin")
+
+  // Relations
+  decklists              Decklist[]
+  suggestions            BanlistSuggestion[]
+  votes                  BanlistSuggestionVote[]
+  pairingsAsPlayer1      Pairing[]               @relation("Player1Pairings")
+  pairingsAsPlayer2      Pairing[]               @relation("Player2Pairings")
+  victoryPoints          VictoryPoint[]
+  moderatedSuggestions   BanlistSuggestion[]     @relation("ModeratedSuggestions")
+
+  @@map("players")
+}
+
+model Session {
+  id     Int      @id @default(autoincrement())
+  number Int      @unique
+  date   DateTime
+
+  // Top placements (stored as nullable integers, not relations)
+  first  Int?
+  second Int?
+  third  Int?
+  fourth Int?
+  fifth  Int?
+  sixth  Int?
+
+  // Relations
+  decklists     Decklist[]
+  banlists      Banlist[]
+  pairings      Pairing[]
+  victoryPoints VictoryPoint[]
+
+  @@map("sessions")
+}
+
+model Decklist {
+  id       Int      @id @default(autoincrement())
+  playerId Int      @map("player_id")
+  sessionId Int     @map("session_id")
+
+  maindeck   Json
+  sidedeck   Json
+  extradeck  Json
+  submittedAt DateTime @default(now()) @map("submitted_at")
+
+  // Relations
+  player  Player  @relation(fields: [playerId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+
+  @@map("decklists")
+}
+
+model Banlist {
+  id        Int    @id @default(autoincrement())
+  sessionId Int    @map("session_id")
+
+  banned      Json
+  limited     Json
+  semilimited Json
+  unlimited   Json
+
+  // Relations
+  session     Session               @relation(fields: [sessionId], references: [id])
+  suggestions BanlistSuggestion[]
+
+  @@map("banlists")
+}
+
+model BanlistSuggestion {
+  id         Int     @id @default(autoincrement())
+  banlistId  Int     @map("banlist_id")
+  playerId   Int     @map("player_id")
+  moderatorId Int?   @map("moderator_id")
+
+  banned      Json
+  limited     Json
+  semilimited Json
+  unlimited   Json
+  chosen      Boolean @default(false)
+
+  // Relations
+  banlist   Banlist                 @relation(fields: [banlistId], references: [id])
+  player    Player                  @relation(fields: [playerId], references: [id])
+  moderator Player?                 @relation("ModeratedSuggestions", fields: [moderatorId], references: [id])
+  votes     BanlistSuggestionVote[]
+
+  @@map("banlist_suggestions")
+}
+
+model BanlistSuggestionVote {
+  id           Int @id @default(autoincrement())
+  playerId     Int @map("player_id")
+  suggestionId Int @map("suggestion_id")
+
+  // Relations
+  player     Player            @relation(fields: [playerId], references: [id])
+  suggestion BanlistSuggestion @relation(fields: [suggestionId], references: [id])
+
+  @@map("banlist_suggestion_votes")
+}
+
+model Pairing {
+  id        Int @id @default(autoincrement())
+  sessionId Int @map("session_id")
+  round     Int
+  player1Id Int @map("player1_id")
+  player2Id Int @map("player2_id")
+
+  player1wins Int @default(0)
+  player2wins Int @default(0)
+
+  // Relations
+  session Session @relation(fields: [sessionId], references: [id])
+  player1 Player  @relation("Player1Pairings", fields: [player1Id], references: [id])
+  player2 Player  @relation("Player2Pairings", fields: [player2Id], references: [id])
+
+  @@map("pairings")
+}
+
+model VictoryPoint {
+  id        Int @id @default(autoincrement())
+  playerId  Int @map("player_id")
+  sessionId Int @map("session_id")
+
+  // Relations
+  player  Player  @relation(fields: [playerId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+
+  @@map("victory_points")
+}

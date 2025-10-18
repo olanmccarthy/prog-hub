@@ -7,20 +7,12 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    // 👇 Add these two lines
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
     "jsx": "preserve",
     "incremental": true,
-    // Optional: helpful for decorators
-    "useDefineForClassFields": false,
     "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "@entities/*": [
-        "./src/entities/*"
       ],
       "@lib/*": [
         "./src/lib/*"

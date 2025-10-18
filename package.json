@@ -13,26 +13,24 @@
     "docker:up": "DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose up",
     "docker:down": "docker-compose down",
     "docker:clean": "docker-compose down -v --rmi all --remove-orphans",
+    "docker:nuke": "docker-compose down -v --rmi all --remove-orphans && docker builder prune -af",
     "docker:dev:build": "docker compose -f docker-compose.dev.yml build",
     "docker:dev:up": "docker compose -f docker-compose.dev.yml up",
     "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
     "docker:dev:clean": "docker compose -f docker-compose.dev.yml down -v --rmi all --remove-orphans",
-    "typeorm": "npx typeorm-ts-node-commonjs",
-    "migration:generate": "npm run typeorm -- migration:generate ./src/migrations/AutoMigration -d ./src/lib/data-source.ts",
-    "migration:run": "npm run typeorm -- migration:run -d ./src/lib/data-source.ts",
-    "migration:revert": "npm run typeorm -- migration:revert -d ./src/lib/data-source.ts"
+    "docker:dev:nuke": "docker compose -f docker-compose.dev.yml down -v --rmi all --remove-orphans && docker builder prune -af"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
+    "@prisma/client": "^6.17.1",
     "mysql2": "^3.15.2",
     "next": "15.5.5",
+    "prisma": "^6.17.1",
     "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "reflect-metadata": "^0.2.2",
-    "typeorm": "^0.3.27"
+    "react-dom": "19.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
