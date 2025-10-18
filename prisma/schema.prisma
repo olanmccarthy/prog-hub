@@ -143,3 +143,19 @@ model VictoryPoint {
 
   @@map("victory_points")
 }
+
+model Card {
+  id            Int     @id @default(autoincrement())
+  cardName      String  @map("card_name") @db.VarChar(255)
+  cardType      String? @map("card_type") @db.VarChar(50)
+  attribute     String? @db.VarChar(50)
+  property      String? @db.VarChar(50)
+  types         String? @db.VarChar(100)
+  level         Int?
+  atk           Int?
+  def           Int?
+  link          Int?
+  pendulumScale Int?    @map("pendulum_scale")
+
+  @@map("cards")
+}

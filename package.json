@@ -13,12 +13,11 @@
     "docker:up": "DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:clean": "docker-compose down -v --rmi all --remove-orphans",
-    "docker:nuke": "docker-compose down -v --rmi all --remove-orphans && docker builder prune -af",
+    "docker:nuke": "docker system prune -a --volumes",
     "docker:dev:build": "docker compose -f docker-compose.dev.yml build",
     "docker:dev:up": "docker compose -f docker-compose.dev.yml up",
     "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
-    "docker:dev:clean": "docker compose -f docker-compose.dev.yml down -v --rmi all --remove-orphans",
-    "docker:dev:nuke": "docker compose -f docker-compose.dev.yml down -v --rmi all --remove-orphans && docker builder prune -af"
+    "docker:dev:clean": "docker compose -f docker-compose.dev.yml down -v --rmi all --remove-orphans"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.913.0",

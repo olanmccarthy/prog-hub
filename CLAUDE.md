@@ -74,6 +74,13 @@ When you push to the `main` branch:
 - `EC2_SSH_PRIVATE_KEY`: Private SSH key for EC2 access
 - `EC2_HOST`: EC2 instance public IP or hostname
 - `EC2_USER`: SSH username (typically `ec2-user`)
+- `DB_PASSWORD`: MySQL database password (injected into .env.production)
+- `MYSQL_ROOT_PASSWORD`: MySQL root password (injected into .env.production)
+- `DISCORD_BOT_TOKEN`: Discord bot token (injected into .env.production)
+- `AWS_ACCESS_KEY_ID`: AWS access key for SQS (injected into .env.production)
+- `AWS_SECRET_ACCESS_KEY`: AWS secret key for SQS (injected into .env.production)
+
+**Note**: The deployment workflow uses `sed` to replace specific sensitive fields in `.env.production` with values from GitHub Secrets, keeping non-sensitive values tracked in git.
 
 ### Manual Deployment
 ```bash
@@ -120,6 +127,7 @@ The application uses Prisma models defined in `prisma/schema.prisma`. The data m
 - **BanlistSuggestionVote**: Votes on banlist suggestions
 - **Pairing**: Match pairings for each round of a session with win counts
 - **VictoryPoint**: Victory points awarded to players per session
+- **Card**: Yu-Gi-Oh card data (11,316 cards with name, type, attribute, property, types, level, atk, def, link, pendulumScale)
 
 **Key Relationships**:
 - Sessions store top 6 placements as nullable integer foreign keys (not Prisma relations)
@@ -164,6 +172,7 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
   - `bot.ts`: Discord client initialization and management
   - `config.ts`: Bot configuration and validation
   - `notifications.ts`: Notification functions for pairings, standings, etc.
+- **`yugioh_cards.sql`**: SQL dump with CREATE TABLE and 11,316 INSERT statements for Yu-Gi-Oh card data (automatically loaded by MySQL on initialization)
 
 ### Database Schema
 
@@ -179,15 +188,17 @@ The legacy `schema.sql` file exists for reference but is not used by Prisma.
 ### Docker Configuration
 
 **Development (two-container setup)**:
-1. **MySQL container** (`mysql_db_dev`): Port 3306, initializes with `schema.sql` and `test_data.sql`
+1. **MySQL container** (`mysql_db_dev`): Port 3306, automatically loads `yugioh_cards.sql` on initialization (11,316 Yu-Gi-Oh cards)
 2. **Next.js container** (`next_app_dev`): Port 3000, volume-mounted for hot reload
 
 **Production (three-container setup)**:
-1. **MySQL container** (`mysql_db_prod`): Port 3306
+1. **MySQL container** (`mysql_db_prod`): Port 3306, automatically loads `yugioh_cards.sql` on initialization
 2. **Next.js container** (`next_app_prod`): Port 3000
 3. **Discord Bot container** (`discord_bot_prod`): Notification service that polls SQS queue
 
 The dev configuration (`docker-compose.dev.yml`) mounts the entire project directory excluding `node_modules`, enabling instant code changes without rebuilds. The Discord bot and SQS notifications are disabled in development mode.
+
+**Card Database Initialization**: Both Docker Compose files mount `yugioh_cards.sql` to `/docker-entrypoint-initdb.d/` which MySQL automatically executes on first database initialization. This ensures the `cards` table is always populated with 11,316 Yu-Gi-Oh cards when starting with fresh volumes.
 
 **Connecting to containers**:
 ```bash
@@ -287,7 +298,7 @@ The file `src/lib/prisma.ts` exports:
 - **Git hooks**: Husky is configured (`npm run prepare`) for pre-commit hooks
 - **lint-staged**: Likely configured for pre-commit linting (check `.husky/` directory)
 - **Turbopack**: Next.js uses Turbopack for faster builds (`--turbopack` flag in build/dev scripts)
-- **Card data caching**: README mentions need to cache Yu-Gi-Oh API results for card images
+- **Card data**: 11,316 Yu-Gi-Oh cards are stored in the `cards` table, automatically loaded from `yugioh_cards.sql` on database initialization
 
 ## Code Patterns
 

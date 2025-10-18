@@ -4,5 +4,6 @@ export * from './decklist';
 export * from './banlist';
 export * from './banlistSuggestion';
 export * from './banlistSuggestionVote';
+export * from './card';
 export * from './pairing';
 export * from './victoryPoint';
