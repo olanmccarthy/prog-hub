@@ -51,6 +51,57 @@ npx prisma studio            # Open Prisma Studio database GUI
 
 **Note**: Prisma Client is configured in `src/lib/prisma.ts` with a singleton pattern. The schema is defined in `prisma/schema.prisma`.
 
+## Deployment
+
+The application uses GitHub Actions for automatic deployment to EC2 when changes are pushed to the `main` branch.
+
+### Deployment Files
+- **`.github/workflows/deploy.yml`**: GitHub Actions workflow for automatic deployment
+- **`deploy.sh`**: Deployment script that runs on EC2 (pull, rebuild, restart)
+- **`DEPLOYMENT.md`**: Complete deployment setup guide
+- **`.env.production.example`**: Template for production environment variables
+
+### Automatic Deployment (GitHub Actions)
+When you push to the `main` branch:
+1. GitHub Actions triggers the deployment workflow
+2. Connects to EC2 via SSH
+3. Pulls latest code
+4. Rebuilds Docker containers
+5. Restarts the application
+
+**Required GitHub Secrets** (set in repository Settings → Secrets):
+- `EC2_SSH_PRIVATE_KEY`: Private SSH key for EC2 access
+- `EC2_HOST`: EC2 instance public IP or hostname
+- `EC2_USER`: SSH username (typically `ec2-user`)
+
+### Manual Deployment
+```bash
+# On EC2 instance
+cd ~/prog-hub
+./deploy.sh
+
+# Or manually:
+git pull origin main
+npm run docker:down
+npm run docker:build
+npm run docker:up -d
+```
+
+### Monitoring Production
+```bash
+# Check running containers
+docker ps
+
+# View logs
+docker logs next_app_prod
+docker logs mysql_db_prod
+
+# Follow logs in real-time
+docker logs -f next_app_prod
+```
+
+**For complete setup instructions**, see `DEPLOYMENT.md`.
+
 ## Architecture
 
 ### Data Model

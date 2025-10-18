@@ -1,0 +1,66 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          HOST: ${{ secrets.EC2_HOST }}
+          USER: ${{ secrets.EC2_USER }}
+        run: |
+          # Save SSH key
+          echo "$PRIVATE_KEY" > private_key.pem
+          chmod 600 private_key.pem
+
+          # Add EC2 to known hosts
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
+
+          # Deploy via SSH
+          ssh -i private_key.pem $USER@$HOST << 'EOF'
+            set -e
+
+            echo "=== Starting deployment ==="
+
+            # Navigate to project directory
+            cd ~/prog-hub || { echo "Project directory not found"; exit 1; }
+
+            # Pull latest changes
+            echo "Pulling latest code from main branch..."
+            git fetch origin
+            git reset --hard origin/main
+
+            # Stop running containers
+            echo "Stopping containers..."
+            npm run docker:down || true
+
+            # Rebuild and start containers
+            echo "Building and starting containers..."
+            npm run docker:build
+            npm run docker:up -d
+
+            echo "=== Deployment complete ==="
+          EOF
+
+          # Cleanup
+          rm -f private_key.pem
+
+      - name: Deployment Status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Deployment succeeded!"
+          else
+            echo "❌ Deployment failed!"
+          fi
