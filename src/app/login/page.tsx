@@ -37,8 +37,7 @@ export default function LoginPage() {
 
       if (response.ok) {
         // Redirect to home page after successful login
-        router.push('/');
-        router.refresh();
+        window.location.href = '/';
       } else {
         setError(data.error || 'Login failed');
       }
