@@ -104,39 +104,57 @@ export async function validateProgStart(): Promise<ValidationResult> {
         reasons.push(requirements.suggestionsSubmitted.message);
       }
     } else {
-      // No current session
-      requirements.placementsFilled = { met: true, message: 'No current session (first prog)' };
-      requirements.decklistsSubmitted = { met: true, message: 'No current session (first prog)' };
-      requirements.suggestionsSubmitted = { met: true, message: 'No current session (first prog)' };
+      // No current session - first prog
+      // Check that we have at least 6 players
+      if (playerCount < 6) {
+        const playerRequirementMessage = `Need at least 6 players to start first prog (currently have ${playerCount})`;
+        requirements.placementsFilled = { met: false, message: playerRequirementMessage };
+        requirements.decklistsSubmitted = { met: false, message: playerRequirementMessage };
+        requirements.suggestionsSubmitted = { met: false, message: playerRequirementMessage };
+        reasons.push(playerRequirementMessage);
+      } else {
+        requirements.placementsFilled = { met: true, message: `${playerCount} players ready for first prog` };
+        requirements.decklistsSubmitted = { met: true, message: 'No current session (first prog)' };
+        requirements.suggestionsSubmitted = { met: true, message: 'No current session (first prog)' };
+      }
     }
 
     // Check if there's a banlist for the new session (next session number)
     const nextSessionNumber = currentSession ? currentSession.number + 1 : 1;
-    const nextSession = await prisma.session.findUnique({
-      where: { number: nextSessionNumber },
-    });
 
-    if (nextSession) {
-      const nextBanlist = await prisma.banlist.findFirst({
-        where: { sessionId: nextSession.id },
+    // For first session, we'll auto-create a default banlist, so skip this check
+    if (!currentSession) {
+      requirements.nextBanlistExists = {
+        met: true,
+        message: 'Default banlist will be created for first session',
+      };
+    } else {
+      const nextSession = await prisma.session.findUnique({
+        where: { number: nextSessionNumber },
       });
 
-      const banlistExists = !!nextBanlist;
-      requirements.nextBanlistExists = {
-        met: banlistExists,
-        message: banlistExists
-          ? `Banlist chosen for Session ${nextSessionNumber}`
-          : `No banlist chosen for Session ${nextSessionNumber}`,
-      };
-      if (!banlistExists) {
+      if (nextSession) {
+        const nextBanlist = await prisma.banlist.findFirst({
+          where: { sessionId: nextSession.id },
+        });
+
+        const banlistExists = !!nextBanlist;
+        requirements.nextBanlistExists = {
+          met: banlistExists,
+          message: banlistExists
+            ? `Banlist chosen for Session ${nextSessionNumber}`
+            : `No banlist chosen for Session ${nextSessionNumber}`,
+        };
+        if (!banlistExists) {
+          reasons.push(requirements.nextBanlistExists.message);
+        }
+      } else {
+        requirements.nextBanlistExists = {
+          met: false,
+          message: `Session ${nextSessionNumber} needs to be created with a banlist`,
+        };
         reasons.push(requirements.nextBanlistExists.message);
       }
-    } else {
-      requirements.nextBanlistExists = {
-        met: false,
-        message: `Session ${nextSessionNumber} needs to be created with a banlist`,
-      };
-      reasons.push(requirements.nextBanlistExists.message);
     }
 
     return {
@@ -232,6 +250,7 @@ export async function startProg(): Promise<StartProgResult> {
     });
 
     const nextSessionNumber = currentSession ? currentSession.number + 1 : 1;
+    const isFirstSession = !currentSession;
 
     // Check if session already exists (it should from validation)
     let nextSession = await prisma.session.findUnique({
@@ -252,6 +271,19 @@ export async function startProg(): Promise<StartProgResult> {
           sixth: null,
         },
       });
+
+      // If this is the first session, create a default banlist
+      if (isFirstSession) {
+        await prisma.banlist.create({
+          data: {
+            sessionId: nextSession.id,
+            banned: JSON.stringify([]),
+            limited: JSON.stringify([]),
+            semilimited: JSON.stringify([]),
+            unlimited: JSON.stringify([]),
+          },
+        });
+      }
     }
 
     // Get all players
