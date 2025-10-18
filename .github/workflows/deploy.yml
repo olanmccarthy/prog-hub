@@ -20,6 +20,10 @@ jobs:
           HOST: ${{ secrets.EC2_HOST }}
           USER: ${{ secrets.EC2_USER }}
         run: |
+          # Create .ssh directory if it doesn't exist
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
           # Save SSH key
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
