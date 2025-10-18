@@ -1,7 +1,6 @@
 "use server";
 
-import { getDataSource } from "@lib/data-source";
-import { BanlistSuggestion } from "@entities/BanlistSuggestion";
+import { prisma } from "@lib/prisma";
 
 export interface BanlistSuggestionHistory {
   id: number;
@@ -22,12 +21,16 @@ interface GetAllBanlistSuggestionsResult {
 
 export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestionsResult> {
   try {
-    const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(BanlistSuggestion);
-
-    const suggestions = await repo.find({
-      relations: ['player', 'banlist', 'banlist.session'],
-      order: { id: 'DESC' },
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      include: {
+        player: { select: { name: true } },
+        banlist: {
+          include: {
+            session: { select: { number: true } },
+          },
+        },
+      },
+      orderBy: { id: 'desc' },
     });
 
     return {
@@ -36,10 +39,10 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
         id: s.id,
         playerName: s.player.name,
         sessionNumber: s.banlist.session.number,
-        banned: s.banned,
-        limited: s.limited,
-        semilimited: s.semilimited,
-        unlimited: s.unlimited,
+        banned: s.banned as string[],
+        limited: s.limited as string[],
+        semilimited: s.semilimited as string[],
+        unlimited: s.unlimited as string[],
         chosen: s.chosen,
       })),
     };

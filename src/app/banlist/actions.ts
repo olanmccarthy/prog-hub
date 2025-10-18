@@ -1,8 +1,6 @@
 "use server";
 
-import { getDataSource } from "@lib/data-source";
-import { Banlist as BanlistEntity } from "@entities/Banlist";
-import { Session } from '@entities/Session';
+import { prisma } from "@lib/prisma";
 import { Banlist } from '@/src/types';
 
 interface GetMostRecentBanlistResult {
@@ -13,17 +11,12 @@ interface GetMostRecentBanlistResult {
 
 export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult> {
   try {
-    const dataSource = await getDataSource();
-    const sessionRepo = dataSource.getRepository(Session);
-    const banlistRepo = dataSource.getRepository(BanlistEntity);
-
     // Get the most recent session
-    const sessions = await sessionRepo.find({
-      order: { date: 'DESC' },
-      take: 1,
+    const mostRecentSession = await prisma.session.findFirst({
+      orderBy: { date: 'desc' },
     });
 
-    if (sessions.length === 0) {
+    if (!mostRecentSession) {
       return {
         success: false,
         banlist: null,
@@ -31,11 +24,9 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
       };
     }
 
-    const mostRecentSession = sessions[0];
-
     // Get the banlist for this session
-    const banlistEntity = await banlistRepo.findOne({
-      where: { session: { id: mostRecentSession.id } },
+    const banlistEntity = await prisma.banlist.findFirst({
+      where: { sessionId: mostRecentSession.id },
     });
 
     if (!banlistEntity) {
@@ -50,10 +41,10 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
     const banlist: Banlist = {
       id: banlistEntity.id,
       sessionId: mostRecentSession.id,
-      banned: banlistEntity.banned,
-      limited: banlistEntity.limited,
-      semilimited: banlistEntity.semilimited,
-      unlimited: banlistEntity.unlimited,
+      banned: banlistEntity.banned as string[],
+      limited: banlistEntity.limited as string[],
+      semilimited: banlistEntity.semilimited as string[],
+      unlimited: banlistEntity.unlimited as string[],
     };
 
     return {
