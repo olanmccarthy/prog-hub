@@ -2,6 +2,7 @@
 
 import { prisma } from '@lib/prisma';
 import { getCurrentUser } from '@lib/auth';
+import { getCardEntriesFromIds } from '@lib/cardLookup';
 
 export interface CreateSuggestionInput {
   banlistId: number;
@@ -85,33 +86,7 @@ export interface GetExistingSuggestionResult {
   error?: string;
 }
 
-/**
- * Convert card IDs to CardEntry objects with names
- */
-export async function getCardEntriesFromIds(cardIds: number[]): Promise<Array<{ id: number; name: string }>> {
-  if (cardIds.length === 0) return [];
-
-  const cards = await prisma.card.findMany({
-    where: {
-      id: {
-        in: cardIds,
-      },
-    },
-    select: {
-      id: true,
-      cardName: true,
-    },
-  });
-
-  // Create a map for quick lookup
-  const cardMap = new Map(cards.map(c => [c.id, c.cardName]));
-
-  // Return in the same order as input
-  return cardIds.map(id => {
-    const name = cardMap.get(id);
-    return name ? { id, name } : { id: 0, name: '[Unknown Card]' }; // Fallback for missing cards
-  });
-}
+export { getCardEntriesFromIds };
 
 /**
  * Get the user's existing suggestion for a banlist
