@@ -36,6 +36,7 @@ const allNavigationRoutes = [
     adminOnly: true,
     subItems: [
       { label: 'Player List', path: '/admin/player-list' },
+      { label: 'Set Manager', path: '/admin/set-manager' },
       { label: 'Actions', path: '/admin/prog_actions' },
     ],
   },
