@@ -128,6 +128,7 @@ The application uses Prisma models defined in `prisma/schema.prisma`. The data m
 - **Pairing**: Match pairings for each round of a session with win counts
 - **VictoryPoint**: Victory points awarded to players per session
 - **Card**: Yu-Gi-Oh card data (11,316 cards with name, type, attribute, property, types, level, atk, def, link, pendulumScale)
+- **Set**: Yu-Gi-Oh set/product data (1,004 sets with setName, setCode, numOfCards, tcgDate, setImage; indexed on setCode and tcgDate)
 
 **Key Relationships**:
 - Sessions store top 6 placements as nullable integer foreign keys (not Prisma relations)
@@ -172,7 +173,12 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
   - `bot.ts`: Discord client initialization and management
   - `config.ts`: Bot configuration and validation
   - `notifications.ts`: Notification functions for pairings, standings, etc.
-- **`yugioh_cards.sql`**: SQL dump with CREATE TABLE and 11,316 INSERT statements for Yu-Gi-Oh card data (automatically loaded by MySQL on initialization)
+- **`data/`**: Data files directory
+  - `yugioh_cards.sql`: SQL dump with 11,316 Yu-Gi-Oh cards (auto-loaded on MySQL init)
+  - `yugioh_sets.sql`: SQL dump with 1,004 Yu-Gi-Oh sets (auto-loaded on MySQL init)
+  - `card_sets.json`: Source JSON for set data
+  - `test_data.sql`: Test data for development
+  - `testdeck.ydk`, `testdeck2.ydk`: Example deck files for testing
 
 ### Database Schema
 
@@ -183,22 +189,20 @@ The `prisma/schema.prisma` file is the single source of truth for the database s
 - Indexes using `@@index` for optimized queries
 - Database field name mappings via `@map` (camelCase → snake_case)
 
-The legacy `schema.sql` file exists for reference but is not used by Prisma.
-
 ### Docker Configuration
 
 **Development (two-container setup)**:
-1. **MySQL container** (`mysql_db_dev`): Port 3306, automatically loads `yugioh_cards.sql` on initialization (11,316 Yu-Gi-Oh cards)
+1. **MySQL container** (`mysql_db_dev`): Port 3306, automatically loads SQL files from `data/` folder on initialization
 2. **Next.js container** (`next_app_dev`): Port 3000, volume-mounted for hot reload
 
 **Production (three-container setup)**:
-1. **MySQL container** (`mysql_db_prod`): Port 3306, automatically loads `yugioh_cards.sql` on initialization
+1. **MySQL container** (`mysql_db_prod`): Port 3306, automatically loads SQL files from `data/` folder on initialization
 2. **Next.js container** (`next_app_prod`): Port 3000
 3. **Discord Bot container** (`discord_bot_prod`): Notification service that polls SQS queue
 
 The dev configuration (`docker-compose.dev.yml`) mounts the entire project directory excluding `node_modules`, enabling instant code changes without rebuilds. The Discord bot and SQS notifications are disabled in development mode.
 
-**Card Database Initialization**: Both Docker Compose files mount `yugioh_cards.sql` to `/docker-entrypoint-initdb.d/` which MySQL automatically executes on first database initialization. This ensures the `cards` table is always populated with 11,316 Yu-Gi-Oh cards when starting with fresh volumes.
+**Database Initialization**: Both Docker Compose files mount `data/yugioh_cards.sql` and `data/yugioh_sets.sql` to `/docker-entrypoint-initdb.d/` which MySQL automatically executes on first database initialization. This ensures the `cards` table (11,316 cards) and `sets` table (1,004 sets) are always populated when starting with fresh volumes.
 
 **Connecting to containers**:
 ```bash
@@ -298,7 +302,8 @@ The file `src/lib/prisma.ts` exports:
 - **Git hooks**: Husky is configured (`npm run prepare`) for pre-commit hooks
 - **lint-staged**: Likely configured for pre-commit linting (check `.husky/` directory)
 - **Turbopack**: Next.js uses Turbopack for faster builds (`--turbopack` flag in build/dev scripts)
-- **Card data**: 11,316 Yu-Gi-Oh cards are stored in the `cards` table, automatically loaded from `yugioh_cards.sql` on database initialization
+- **Card data**: 11,316 Yu-Gi-Oh cards stored in the `cards` table, automatically loaded from `data/yugioh_cards.sql` on database initialization
+- **Set data**: 1,004 Yu-Gi-Oh sets stored in the `sets` table, automatically loaded from `data/yugioh_sets.sql` on database initialization
 
 ## Code Patterns
 

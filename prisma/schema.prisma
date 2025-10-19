@@ -159,3 +159,16 @@ model Card {
 
   @@map("cards")
 }
+
+model Set {
+  id          Int      @id @default(autoincrement())
+  setName     String   @map("set_name") @db.VarChar(255)
+  setCode     String   @map("set_code") @db.VarChar(50)
+  numOfCards  Int      @map("num_of_cards")
+  tcgDate     DateTime @map("tcg_date") @db.Date
+  setImage    String?  @map("set_image") @db.VarChar(500)
+
+  @@index([setCode], map: "idx_set_code")
+  @@index([tcgDate], map: "idx_tcg_date")
+  @@map("sets")
+}
