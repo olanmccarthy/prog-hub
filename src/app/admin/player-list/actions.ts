@@ -59,6 +59,11 @@ export async function createPlayer(input: CreatePlayerInput): Promise<PlayerData
         name,
         password, // In production, this should be hashed
         isAdmin: isAdmin || false,
+        wallet: {
+          create: {
+            amount: 0,
+          },
+        },
       },
       select: {
         id: true,

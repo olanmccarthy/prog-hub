@@ -19,9 +19,14 @@
   --text-bright: #ffffff;       /* Emphasized text */
 
   /* Accent colors */
-  --accent-blue: #007acc;       /* Primary accent - links, buttons */
-  --accent-blue-hover: #1a8fd9; /* Hover state for blue */
-  --accent-blue-dark: #005a9e;  /* Active/pressed state */
+  --accent-primary: #007acc;       /* Primary accent - links, buttons */
+  --accent-secondary: #1a8fd9;     /* Secondary accent */
+  --accent-blue: #007acc;          /* Primary accent - links, buttons */
+  --accent-blue-hover: #1a8fd9;    /* Hover state for blue */
+  --accent-blue-dark: #005a9e;     /* Active/pressed state */
+
+  /* Hover states */
+  --hover-light-grey: rgba(255, 255, 255, 0.15);  /* Light grey overlay for button hovers */
 
   /* UI element colors */
   --border-color: #3e3e42;      /* Borders, dividers */

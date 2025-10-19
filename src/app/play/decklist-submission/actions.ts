@@ -34,11 +34,11 @@ export interface CurrentSessionResult {
  */
 export async function getCurrentSession(): Promise<CurrentSessionResult> {
   try {
-    const currentSession = await prisma.session.findFirst({
-      orderBy: { date: "desc" },
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
     });
 
-    if (!currentSession) {
+    if (!activeSession) {
       return {
         success: false,
         error: "No active session found",
@@ -47,8 +47,8 @@ export async function getCurrentSession(): Promise<CurrentSessionResult> {
 
     return {
       success: true,
-      sessionId: currentSession.id,
-      sessionNumber: currentSession.number,
+      sessionId: activeSession.id,
+      sessionNumber: activeSession.number,
     };
   } catch (error) {
     console.error("Error fetching current session:", error);
@@ -130,6 +130,18 @@ export async function submitDecklist(
       return {
         success: false,
         error: "You must be logged in to submit a decklist",
+      };
+    }
+
+    // Verify the player exists in the database
+    const player = await prisma.player.findUnique({
+      where: { id: currentUser.playerId },
+    });
+
+    if (!player) {
+      return {
+        success: false,
+        error: "Your session is invalid. Please log out and log back in.",
       };
     }
 

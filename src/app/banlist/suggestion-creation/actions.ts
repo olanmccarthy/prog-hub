@@ -26,15 +26,22 @@ export async function canSubmitSuggestions(banlistId: number): Promise<CanSubmit
     // Get the banlist to find its session
     const banlist = await prisma.banlist.findUnique({
       where: { id: banlistId },
-      include: { session: true },
     });
 
     if (!banlist) {
       return { success: false, canSubmit: false, error: 'Banlist not found' };
     }
 
+    // Get the session by number (banlist.sessionId stores session number, not id)
+    const session = await prisma.session.findUnique({
+      where: { number: banlist.sessionId },
+    });
+
+    if (!session) {
+      return { success: false, canSubmit: false, error: 'Session not found' };
+    }
+
     // Check if the session's standings are finalized
-    const session = banlist.session;
     const isFinalized = !!(
       session.first &&
       session.second &&
@@ -206,18 +213,37 @@ export async function createBanlistSuggestion(input: CreateSuggestionInput): Pro
       return { success: false, error: 'Not authenticated' };
     }
 
+    // Verify the player exists in the database
+    const player = await prisma.player.findUnique({
+      where: { id: user.playerId },
+    });
+
+    if (!player) {
+      return {
+        success: false,
+        error: "Your session is invalid. Please log out and log back in.",
+      };
+    }
+
     // Get the banlist to find its session
     const banlist = await prisma.banlist.findUnique({
       where: { id: input.banlistId },
-      include: { session: true },
     });
 
     if (!banlist) {
       return { success: false, error: 'Banlist not found' };
     }
 
+    // Get the session by number (banlist.sessionId stores session number, not id)
+    const session = await prisma.session.findUnique({
+      where: { number: banlist.sessionId },
+    });
+
+    if (!session) {
+      return { success: false, error: 'Session not found' };
+    }
+
     // Check if the session's standings are finalized
-    const session = banlist.session;
     const isFinalized = !!(
       session.first &&
       session.second &&

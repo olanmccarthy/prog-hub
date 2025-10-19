@@ -83,9 +83,12 @@ function CategorySuggestionSection({
       </Typography>
       {cards.map((cardEntry, index) => {
         const hasError = cardEntry.name.length > 0 && cardEntry.id === null;
+        const stableKey = cardEntry.id !== null
+          ? `card-${cardEntry.id}`
+          : `card-${index}-${cardEntry.name.slice(0, 10)}`;
 
         return (
-          <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1 }}>
+          <Box key={stableKey} sx={{ display: 'flex', gap: 1, mb: 1 }}>
             <Autocomplete
               fullWidth
               freeSolo

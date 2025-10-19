@@ -54,21 +54,21 @@ export async function getStandings(
   sessionId?: number
 ): Promise<GetStandingsResult> {
   try {
-    // If no sessionId provided, get the current session (latest session)
+    // If no sessionId provided, get the active session
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const currentSession = await prisma.session.findFirst({
+      const activeSession = await prisma.session.findFirst({
+        where: { active: true },
         select: { id: true },
-        orderBy: { date: "desc" },
       });
 
-      if (!currentSession) {
+      if (!activeSession) {
         return {
           success: false,
-          error: "No sessions found",
+          error: "No active session found",
         };
       }
-      currentSessionId = currentSession.id;
+      currentSessionId = activeSession.id;
     }
 
     const pairings = await prisma.pairing.findMany({
@@ -213,13 +213,20 @@ function sortWithTiebreakers(
 
 export async function getSessions(): Promise<GetSessionsResult> {
   try {
+    // Get all sessions that have been started (active or complete)
     const sessions = await prisma.session.findMany({
+      where: {
+        OR: [
+          { active: true },
+          { complete: true },
+        ],
+      },
       select: {
         id: true,
         number: true,
         date: true,
       },
-      orderBy: { date: "desc" },
+      orderBy: { number: "desc" },
     });
 
     return {
@@ -307,21 +314,21 @@ export async function checkIsAdmin(): Promise<IsAdminResult> {
  */
 export async function canFinalizeStandings(sessionId: number): Promise<CanFinalizeResult> {
   try {
-    // Get the current (most recent) session
-    const currentSession = await prisma.session.findFirst({
-      orderBy: { date: "desc" },
+    // Get the active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
     });
 
-    if (!currentSession) {
+    if (!activeSession) {
       return {
         canFinalize: false,
         isCurrentSession: false,
         allMatchesComplete: false,
-        error: "No current session found",
+        error: "No active session found",
       };
     }
 
-    const isCurrentSession = currentSession.id === sessionId;
+    const isCurrentSession = activeSession.id === sessionId;
 
     // Get all pairings for this session
     const pairings = await prisma.pairing.findMany({

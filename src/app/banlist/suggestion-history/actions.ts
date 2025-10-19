@@ -24,11 +24,7 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
     const suggestions = await prisma.banlistSuggestion.findMany({
       include: {
         player: { select: { name: true } },
-        banlist: {
-          include: {
-            session: { select: { number: true } },
-          },
-        },
+        banlist: { select: { sessionId: true } },
       },
       orderBy: { id: 'desc' },
     });
@@ -38,7 +34,7 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
       suggestions: suggestions.map(s => ({
         id: s.id,
         playerName: s.player.name,
-        sessionNumber: s.banlist.session.number,
+        sessionNumber: s.banlist.sessionId, // sessionId stores the session number
         banned: s.banned as number[],
         limited: s.limited as number[],
         semilimited: s.semilimited as number[],

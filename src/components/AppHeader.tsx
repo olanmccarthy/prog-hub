@@ -59,8 +59,16 @@ const allNavigationRoutes = [
     ],
   },
   {
+    label: 'Shop',
+    path: '/shop',
+  },
+  {
     label: 'Stats',
     path: '/stats',
+  },
+  {
+    label: 'Leaderboard',
+    path: '/leaderboard',
   },
 ];
 

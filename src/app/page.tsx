@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Container, Typography, Box, Paper, Alert } from "@mui/material";
 import YdkUploadBox from "@components/YdkUploadBox";
+import UpcomingSession from "@components/UpcomingSession";
 import { getMostRecentBanlist } from "./actions";
 import type { BanlistData } from "@lib/deckValidator";
 
@@ -61,6 +62,10 @@ export default function Home() {
           {error}
         </Alert>
       )}
+
+      <Box sx={{ mb: 4 }}>
+        <UpcomingSession />
+      </Box>
 
       {loading ? (
         <Paper

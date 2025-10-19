@@ -35,21 +35,21 @@ export async function getPairings(
   sessionId?: number
 ): Promise<GetPairingsResult> {
   try {
-    // If no sessionId provided, get the current session (latest session)
+    // If no sessionId provided, get the active session
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const currentSession = await prisma.session.findFirst({
+      const activeSession = await prisma.session.findFirst({
+        where: { active: true },
         select: { id: true },
-        orderBy: { date: "desc" },
       });
 
-      if (!currentSession) {
+      if (!activeSession) {
         return {
           success: false,
-          error: "No sessions found",
+          error: "No active session found",
         };
       }
-      currentSessionId = currentSession.id;
+      currentSessionId = activeSession.id;
     }
 
     const pairings = await prisma.pairing.findMany({
@@ -103,6 +103,18 @@ export async function updatePairing(
       return {
         success: false,
         error: "You must be logged in to update scores",
+      };
+    }
+
+    // Verify the player exists in the database
+    const player = await prisma.player.findUnique({
+      where: { id: currentUser.playerId },
+    });
+
+    if (!player) {
+      return {
+        success: false,
+        error: "Your session is invalid. Please log out and log back in.",
       };
     }
 

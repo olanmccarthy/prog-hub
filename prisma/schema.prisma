@@ -22,14 +22,19 @@ model Player {
   pairingsAsPlayer2      Pairing[]               @relation("Player2Pairings")
   victoryPoints          VictoryPoint[]
   moderatedSuggestions   BanlistSuggestion[]     @relation("ModeratedSuggestions")
+  wallet                 Wallet?
+  transactions           Transaction[]
 
   @@map("players")
 }
 
 model Session {
-  id     Int      @id @default(autoincrement())
-  number Int      @unique
-  date   DateTime
+  id       Int      @id @default(autoincrement())
+  number   Int      @unique
+  date     DateTime?
+  setId    Int?     @map("set_id")
+  complete Boolean  @default(false)
+  active   Boolean  @default(false)
 
   // Top placements (stored as nullable integers, not relations)
   first  Int?
@@ -40,11 +45,13 @@ model Session {
   sixth  Int?
 
   // Relations
+  set           Set?           @relation(fields: [setId], references: [id])
   decklists     Decklist[]
-  banlists      Banlist[]
   pairings      Pairing[]
   victoryPoints VictoryPoint[]
 
+  @@index([active], map: "idx_active")
+  @@index([complete], map: "idx_complete")
   @@map("sessions")
 }
 
@@ -62,6 +69,8 @@ model Decklist {
   player  Player  @relation(fields: [playerId], references: [id])
   session Session @relation(fields: [sessionId], references: [id])
 
+  @@index([sessionId], map: "idx_session_id")
+  @@index([playerId], map: "idx_player_id")
   @@map("decklists")
 }
 
@@ -75,9 +84,9 @@ model Banlist {
   unlimited   Json
 
   // Relations
-  session     Session               @relation(fields: [sessionId], references: [id])
   suggestions BanlistSuggestion[]
 
+  @@index([sessionId], map: "idx_banlist_session_id")
   @@map("banlists")
 }
 
@@ -99,6 +108,9 @@ model BanlistSuggestion {
   moderator Player?                 @relation("ModeratedSuggestions", fields: [moderatorId], references: [id])
   votes     BanlistSuggestionVote[]
 
+  @@index([banlistId], map: "idx_suggestion_banlist_id")
+  @@index([playerId], map: "idx_suggestion_player_id")
+  @@index([chosen], map: "idx_suggestion_chosen")
   @@map("banlist_suggestions")
 }
 
@@ -111,6 +123,8 @@ model BanlistSuggestionVote {
   player     Player            @relation(fields: [playerId], references: [id])
   suggestion BanlistSuggestion @relation(fields: [suggestionId], references: [id])
 
+  @@index([suggestionId], map: "idx_vote_suggestion_id")
+  @@index([playerId], map: "idx_vote_player_id")
   @@map("banlist_suggestion_votes")
 }
 
@@ -129,6 +143,8 @@ model Pairing {
   player1 Player  @relation("Player1Pairings", fields: [player1Id], references: [id])
   player2 Player  @relation("Player2Pairings", fields: [player2Id], references: [id])
 
+  @@index([sessionId], map: "idx_pairing_session_id")
+  @@index([round], map: "idx_pairing_round")
   @@map("pairings")
 }
 
@@ -142,6 +158,35 @@ model VictoryPoint {
   session Session @relation(fields: [sessionId], references: [id])
 
   @@map("victory_points")
+}
+
+model Wallet {
+  id       Int @id @default(autoincrement())
+  playerId Int @unique @map("player_id")
+  amount   Int @default(0)
+
+  // Relations
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId], map: "idx_wallet_player_id")
+  @@map("wallets")
+}
+
+model Transaction {
+  id        Int      @id @default(autoincrement())
+  playerId  Int      @map("player_id")
+  setId     Int      @map("set_id")
+  amount    Int
+  date      DateTime @default(now())
+
+  // Relations
+  player Player @relation(fields: [playerId], references: [id])
+  set    Set    @relation(fields: [setId], references: [id])
+
+  @@index([playerId], map: "idx_transaction_player_id")
+  @@index([setId], map: "idx_transaction_set_id")
+  @@index([date], map: "idx_transaction_date")
+  @@map("transactions")
 }
 
 model Card {
@@ -170,6 +215,10 @@ model Set {
   isASession    Boolean  @default(false) @map("is_a_session")
   isPurchasable Boolean  @default(true) @map("is_purchasable")
   isPromo       Boolean  @default(false) @map("is_promo")
+
+  // Relations
+  sessions     Session[]
+  transactions Transaction[]
 
   @@index([setCode], map: "idx_set_code")
   @@index([tcgDate], map: "idx_tcg_date")

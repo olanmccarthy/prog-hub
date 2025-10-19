@@ -14,8 +14,10 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./data/yugioh_cards.sql:/docker-entrypoint-initdb.d/yugioh_cards.sql
-      - ./data/yugioh_sets.sql:/docker-entrypoint-initdb.d/yugioh_sets.sql
+      - ./data/yugioh_cards.sql:/docker-entrypoint-initdb.d/01_yugioh_cards.sql
+      - ./data/yugioh_sets.sql:/docker-entrypoint-initdb.d/02_yugioh_sets.sql
+      - ./data/yugioh_sessions.sql:/docker-entrypoint-initdb.d/03_yugioh_sessions.sql
+      - ./data/testdata.sql:/docker-entrypoint-initdb.d/04_testdata.sql
     networks:
       - app-network
     healthcheck:

@@ -34,28 +34,28 @@ export async function notifyPairings(sessionId: number, round: number): Promise<
   console.log(`[Discord] Preparing pairings notification for session ${sessionId}, round ${round}`);
 
   try {
-    // Fetch pairings with player names
-    const pairings = await prisma.pairing.findMany({
-      where: {
-        sessionId,
-        round,
-      },
-      include: {
-        player1: true,
-        player2: true,
-      },
-      orderBy: { id: 'asc' },
-    });
+    // Fetch pairings and session in parallel (optimization)
+    const [pairings, session] = await Promise.all([
+      prisma.pairing.findMany({
+        where: {
+          sessionId,
+          round,
+        },
+        include: {
+          player1: true,
+          player2: true,
+        },
+        orderBy: { id: 'asc' },
+      }),
+      prisma.session.findUnique({
+        where: { id: sessionId },
+      }),
+    ]);
 
     if (pairings.length === 0) {
       console.warn('[Discord] No pairings found for this round');
       return false;
     }
-
-    // Fetch session info
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-    });
 
     if (!session) {
       console.error('[Discord] Session not found');
@@ -93,30 +93,28 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
   console.log(`[Discord] Preparing standings notification for session ${sessionId}`);
 
   try {
-    // Fetch session info
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-    });
+    // Fetch session, victory points, and pairings in parallel (optimization)
+    const [session, victoryPoints, pairings] = await Promise.all([
+      prisma.session.findUnique({
+        where: { id: sessionId },
+      }),
+      prisma.victoryPoint.findMany({
+        where: { sessionId },
+        include: { player: true },
+      }),
+      prisma.pairing.findMany({
+        where: { sessionId },
+        include: {
+          player1: true,
+          player2: true,
+        },
+      }),
+    ]);
 
     if (!session) {
       console.error('[Discord] Session not found');
       return false;
     }
-
-    // Fetch victory points with player names
-    const victoryPoints = await prisma.victoryPoint.findMany({
-      where: { sessionId },
-      include: { player: true },
-    });
-
-    // Get all pairings to calculate match wins and game wins
-    const pairings = await prisma.pairing.findMany({
-      where: { sessionId },
-      include: {
-        player1: true,
-        player2: true,
-      },
-    });
 
     // Calculate standings
     const standingsMap = new Map<number, {
@@ -209,28 +207,28 @@ export async function notifyNewSessionWithPairings(sessionId: number): Promise<b
   console.log(`[Discord] Preparing new session notification with pairings for session ${sessionId}`);
 
   try {
-    // Fetch session info
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-    });
+    // Fetch session and pairings in parallel (optimization)
+    const [session, pairings] = await Promise.all([
+      prisma.session.findUnique({
+        where: { id: sessionId },
+      }),
+      prisma.pairing.findMany({
+        where: { sessionId },
+        include: {
+          player1: true,
+          player2: true,
+        },
+        orderBy: [
+          { round: 'asc' },
+          { id: 'asc' },
+        ],
+      }),
+    ]);
 
     if (!session) {
       console.error('[Discord] Session not found');
       return false;
     }
-
-    // Fetch all pairings with player names
-    const pairings = await prisma.pairing.findMany({
-      where: { sessionId },
-      include: {
-        player1: true,
-        player2: true,
-      },
-      orderBy: [
-        { round: 'asc' },
-        { id: 'asc' },
-      ],
-    });
 
     if (pairings.length === 0) {
       console.warn('[Discord] No pairings found for this session');

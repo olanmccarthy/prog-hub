@@ -211,7 +211,7 @@ export default function YdkUploadBox({
               </Typography>
               <List dense>
                 {validation.errors.map((err, index) => (
-                  <ListItem key={index} sx={{ py: 0.5 }}>
+                  <ListItem key={`error-${index}-${err.slice(0, 20)}`} sx={{ py: 0.5 }}>
                     <ErrorIcon
                       sx={{ color: "#f44336", fontSize: 20, mr: 1 }}
                     />
@@ -235,7 +235,7 @@ export default function YdkUploadBox({
               </Typography>
               <List dense>
                 {validation.warnings.map((warning, index) => (
-                  <ListItem key={index} sx={{ py: 0.5 }}>
+                  <ListItem key={`warning-${index}-${warning.slice(0, 20)}`} sx={{ py: 0.5 }}>
                     <WarningIcon
                       sx={{ color: "#ff9800", fontSize: 20, mr: 1 }}
                     />

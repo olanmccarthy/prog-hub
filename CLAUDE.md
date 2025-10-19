@@ -120,26 +120,33 @@ The application uses Prisma models defined in `prisma/schema.prisma`. The data m
 
 **Core Models** (in `prisma/schema.prisma`):
 - **Player**: Tournament participants with authentication (name, password, isAdmin)
-- **Session**: A progression tournament event with top 6 placements stored as nullable integers (first through sixth)
+- **Session**: A progression tournament event. Pre-populated from sets marked as is_a_session. Fields: number (unique), date (nullable, set when activated), setId (FK to Set), complete (boolean), active (boolean), placements (first-sixth as nullable integers)
 - **Decklist**: Player's deck for a session (maindeck, sidedeck, extradeck as JSON string arrays, submittedAt timestamp)
-- **Banlist**: Card restrictions for a session (banned, limited, semilimited, unlimited as JSON arrays of card IDs)
+- **Banlist**: Card restrictions for a session (sessionId stores session number, not id; banned, limited, semilimited, unlimited as JSON arrays of card IDs)
 - **BanlistSuggestion**: Player-submitted banlist changes for voting (banned, limited, semilimited, unlimited as JSON arrays of card IDs; includes moderatorId and chosen flag)
 - **BanlistSuggestionVote**: Votes on banlist suggestions
 - **Pairing**: Match pairings for each round of a session with win counts
 - **VictoryPoint**: Victory points awarded to players per session
+- **Wallet**: Player wallet tracking funds (playerId unique FK, amount integer; automatically created/deleted with player)
+- **Transaction**: Player spending history (playerId, setId, amount, date with default now())
 - **Card**: Yu-Gi-Oh card data (11,316 cards with name, type, attribute, property, types, level, atk, def, link, pendulumScale)
-- **Set**: Yu-Gi-Oh set/product data (1,004 sets with setName, setCode, numOfCards, tcgDate, setImage; indexed on setCode and tcgDate)
+- **Set**: Yu-Gi-Oh set/product data (1,004 sets with setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo; indexed on setCode and tcgDate)
 
 **Key Relationships**:
-- Sessions store top 6 placements as nullable integer foreign keys (not Prisma relations)
-- Decklists belong to both a Player and a Session with a submittedAt timestamp
-- Banlists belong to Sessions and have many BanlistSuggestions
-- BanlistSuggestions have both a submitting player and an optional moderator
-- Pairings link two players (player1, player2) with win counts for a specific session/round
+- **Sessions**: Pre-populated from Sets where is_a_session=true. Link to Set via setId. Only one session can be active at a time
+- **Sessions → Players**: Store top 6 placements as nullable integer foreign keys (not Prisma relations)
+- **Decklists**: Belong to both a Player and a Session with a submittedAt timestamp
+- **Banlists**: Reference Sessions via sessionId which stores the session **number** (not id), with no foreign key constraint. This allows banlists to be created for future sessions before they are activated
+- **BanlistSuggestions**: Have both a submitting player and an optional moderator
+- **Pairings**: Link two players (player1, player2) with win counts for a specific session/round
+- **Wallets**: One-to-one relationship with Player. Automatically created when player is created (with amount=0), automatically deleted when player is deleted (onDelete: Cascade)
+- **Transactions**: Many-to-one with both Player and Set. Tracks player spending on sets with timestamp
 
 **Important Prisma Notes**:
 - All models use camelCase in the schema but map to snake_case in the database via `@map`
-- Use `findFirst()` for queries with `orderBy` when you need a single result
+- **Session Lifecycle**: Sessions are pre-populated on database init. Use `where: { active: true }` to get current session, `where: { complete: false }` for upcoming sessions
+- **Banlist.sessionId**: Stores the session **number** (not the auto-incremented id) and has no foreign key constraint. Always query with `where: { sessionId: session.number }`
+- Use `findFirst()` for queries that need a single result
 - Use `include` to eagerly load relations, `select` to pick specific fields
 - Session placement fields are stored as nullable integers, not Player relations
 
@@ -176,8 +183,9 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
 - **`data/`**: Data files directory
   - `yugioh_cards.sql`: SQL dump with 11,316 Yu-Gi-Oh cards (auto-loaded on MySQL init)
   - `yugioh_sets.sql`: SQL dump with 1,004 Yu-Gi-Oh sets (auto-loaded on MySQL init)
+  - `yugioh_sessions.sql`: Pre-populates 27 sessions from sets marked as is_a_session (auto-loaded on MySQL init)
+  - `testdata.sql`: Test data (6 players: olan as admin, coog, costello, jason, kris, vlad - all password "123"; empty banlist for session 1) (auto-loaded on MySQL init)
   - `card_sets.json`: Source JSON for set data
-  - `test_data.sql`: Test data for development
   - `testdeck.ydk`, `testdeck2.ydk`: Example deck files for testing
 
 ### Database Schema
@@ -202,7 +210,13 @@ The `prisma/schema.prisma` file is the single source of truth for the database s
 
 The dev configuration (`docker-compose.dev.yml`) mounts the entire project directory excluding `node_modules`, enabling instant code changes without rebuilds. The Discord bot and SQS notifications are disabled in development mode.
 
-**Database Initialization**: Both Docker Compose files mount `data/yugioh_cards.sql` and `data/yugioh_sets.sql` to `/docker-entrypoint-initdb.d/` which MySQL automatically executes on first database initialization. This ensures the `cards` table (11,316 cards) and `sets` table (1,004 sets) are always populated when starting with fresh volumes.
+**Database Initialization**: Both Docker Compose files mount data files to `/docker-entrypoint-initdb.d/` which MySQL automatically executes on first database initialization in alphabetical order:
+1. `01_yugioh_cards.sql`: Populates cards table with 11,316 Yu-Gi-Oh cards
+2. `02_yugioh_sets.sql`: Populates sets table with 1,004 sets (27 marked as is_a_session=true)
+3. `03_yugioh_sessions.sql`: Pre-populates all 27 sessions from sets marked as is_a_session (all start as complete=false, active=false)
+4. `04_testdata.sql`: Test data (6 players, empty banlist for session 1)
+
+This ensures all data is ready when starting with fresh volumes.
 
 **Connecting to containers**:
 ```bash
@@ -264,13 +278,37 @@ The file `src/lib/prisma.ts` exports:
 
 **Important**: Always import and use `prisma` from `@lib/prisma` in server actions and API routes. The singleton pattern prevents multiple client instances and connection exhaustion.
 
+## Session Lifecycle
+
+Sessions are pre-populated on database initialization from sets marked as `is_a_session=true` (27 total). The lifecycle follows this flow:
+
+1. **Pre-populated State**: All sessions exist with `complete=false` and `active=false`. Session 1 has an empty default banlist.
+2. **Banlist Creation**: Admins create a banlist for the next session (banlist.sessionId = session.number)
+3. **Start Session**: Admin starts the session via Session Management page
+   - Sets `active=true` and `date=NOW()`
+   - Generates round-robin pairings for all players
+   - Sends Discord notification with all pairings
+4. **During Session**: Players submit decklists, play matches, update results, submit banlist suggestions
+5. **Complete Session**: Admin completes the session after all requirements are met:
+   - All placements (1st-6th) filled
+   - All decklists submitted
+   - All banlist suggestions submitted
+   - Sets `complete=true` and `active=false`
+6. **Repeat**: Next session (lowest number where complete=false) becomes available to start
+
+**Query Patterns**:
+- Active session: `prisma.session.findFirst({ where: { active: true } })`
+- Next session to start: `prisma.session.findFirst({ where: { complete: false }, orderBy: { number: 'asc' } })`
+- Upcoming sessions: `prisma.session.findMany({ where: { complete: false }, orderBy: { number: 'asc' } })`
+
 ## Implemented Features
 
 ### Completed Pages:
-- **Homepage**: Deck validator with .ydk upload that checks against the most recent banlist
+- **Homepage**: Deck validator with .ydk upload that checks against the active session's banlist, upcoming session navigator
 - **Admin Pages**:
   - Player List: CRUD operations for players (add, rename, delete, change passwords)
-  - Prog Actions: Start new prog sessions with validation and round-robin pairing generation
+  - Set Manager: Manage set metadata (is_a_session, is_purchasable, is_promo)
+  - Session Management: Start and complete sessions with validation (renamed from "Prog Actions")
 - **Play Pages**:
   - Pairings: View and update match results for the current session
   - Standings: View ranked standings with tiebreakers, finalize standings (admin only)
@@ -281,6 +319,8 @@ The file `src/lib/prisma.ts` exports:
   - Current Banlist: View active banlist (⚠️ Stub only)
   - Banlist History: Browse past banlists (⚠️ Stub only)
   - Voting: Vote on banlist suggestions (⚠️ Stub only)
+- **Shop**: Browse and view purchasable sets released before the next session (✅ Complete)
+- **Leaderboard**: View rankings by Victory Points or Wallet balances with toggle view (✅ Complete)
 - **Authentication**: Session-based login with cookies
 
 ### Features Still To Implement:
@@ -303,7 +343,9 @@ The file `src/lib/prisma.ts` exports:
 - **lint-staged**: Likely configured for pre-commit linting (check `.husky/` directory)
 - **Turbopack**: Next.js uses Turbopack for faster builds (`--turbopack` flag in build/dev scripts)
 - **Card data**: 11,316 Yu-Gi-Oh cards stored in the `cards` table, automatically loaded from `data/yugioh_cards.sql` on database initialization
-- **Set data**: 1,004 Yu-Gi-Oh sets stored in the `sets` table, automatically loaded from `data/yugioh_sets.sql` on database initialization
+- **Set data**: 1,004 Yu-Gi-Oh sets stored in the `sets` table (27 marked as is_a_session), automatically loaded from `data/yugioh_sets.sql` on database initialization
+- **Session data**: 27 pre-populated sessions from sets marked as is_a_session, automatically loaded from `data/yugioh_sessions.sql` on database initialization
+- **Test data**: 6 players (olan as admin, coog, costello, jason, kris, vlad) and empty banlist for session 1, automatically loaded from `data/testdata.sql` on database initialization
 
 ## Code Patterns
 
@@ -399,6 +441,67 @@ const validation = validateDeckAgainstBanlist(maindeck, sidedeck, extradeck, ban
 - **YdkUploadBox** (`@components/YdkUploadBox`): Reusable .ydk file upload with validation
   - Props: `banlist`, `sessionNumber`, `onValidationComplete`, `showSubmitButton`, `onSubmit`
   - Handles file parsing, deck validation, and optional submission
+
+### Styling and Color Management
+
+**IMPORTANT**: All colors and styling variables must be defined in global CSS, not inline.
+
+The project uses a centralized color system defined in `src/app/globals.css`:
+
+**Available CSS Variables**:
+```css
+/* Background colors */
+--bg-primary: #1e1e1e         /* Main background */
+--bg-secondary: #252526       /* Sidebar, elevated surfaces */
+--bg-tertiary: #2d2d30        /* Hover states, borders */
+--bg-elevated: #2d2d2d        /* Cards, panels */
+
+/* Text colors */
+--text-primary: #ffffff       /* Main text */
+--text-secondary: #858585     /* Secondary text, disabled */
+--text-bright: #ffffff        /* Emphasized text */
+
+/* Accent colors */
+--accent-primary: #007acc     /* Primary accent - links, buttons */
+--accent-secondary: #1a8fd9   /* Secondary accent */
+--accent-blue: #007acc        /* Primary accent (legacy alias) */
+--accent-blue-hover: #1a8fd9  /* Hover state */
+--accent-blue-dark: #005a9e   /* Active/pressed state */
+
+/* Hover states */
+--hover-light-grey: rgba(255, 255, 255, 0.15)  /* Light grey overlay for button hovers */
+
+/* UI element colors */
+--border-color: #3e3e42       /* Borders, dividers */
+--input-bg: #3c3c3c           /* Input fields */
+--input-border: #3e3e42       /* Input borders */
+
+/* Status colors */
+--success: #4ec9b0            /* Success states */
+--warning: #dcdcaa            /* Warning states */
+--error: #f48771              /* Error states */
+--info: #75beff               /* Info states */
+```
+
+**When adding new colors**:
+1. Add the color to `src/app/globals.css` with a descriptive variable name
+2. Include a comment explaining its purpose
+3. Use `var(--variable-name)` in component styles
+4. **Never** use inline color values (hex, rgb, rgba) directly in components
+
+**Example**:
+```typescript
+// ❌ BAD - inline color
+sx={{ backgroundColor: 'rgba(255, 255, 255, 0.15)' }}
+
+// ✅ GOOD - using CSS variable
+sx={{ backgroundColor: 'var(--hover-light-grey)' }}
+```
+
+**Material-UI Integration**:
+- Use MUI theme colors when appropriate: `primary.main`, `primary.contrastText`
+- For custom colors, always use CSS variables from globals.css
+- Avoid mixing MUI theme colors with inline hex/rgb values
 
 ### Discord Bot Integration
 

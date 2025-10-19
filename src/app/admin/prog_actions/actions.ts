@@ -3,15 +3,30 @@
 import { prisma } from '@lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { notifyNewSessionWithPairings } from '@lib/discordClient';
+import { getCurrentUser } from '@lib/auth';
 
 export interface RequirementStatus {
   met: boolean;
   message: string;
 }
 
-export interface ValidationResult {
-  canStartProg: boolean;
-  reasons: string[];
+export interface SessionStatusResult {
+  success: boolean;
+  error?: string;
+  activeSession: {
+    id: number;
+    number: number;
+    setName: string | null;
+  } | null;
+  nextSession: {
+    id: number;
+    number: number;
+    setName: string | null;
+  } | null;
+  canStartSession: boolean;
+  canCompleteSession: boolean;
+  startReasons: string[];
+  completeReasons: string[];
   requirements: {
     placementsFilled: RequirementStatus;
     decklistsSubmitted: RequirementStatus;
@@ -20,18 +35,60 @@ export interface ValidationResult {
   };
 }
 
-export interface StartProgResult {
+export interface StartSessionResult {
   success: boolean;
   error?: string;
   sessionId?: number;
 }
 
+export interface CompleteSessionResult {
+  success: boolean;
+  error?: string;
+  sessionNumber?: number;
+}
+
 /**
- * Validate if a new prog session can be started
+ * Get session status and validation for start/complete operations
  */
-export async function validateProgStart(): Promise<ValidationResult> {
+export async function getSessionStatus(): Promise<SessionStatusResult> {
   try {
-    const reasons: string[] = [];
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+        activeSession: null,
+        nextSession: null,
+        canStartSession: false,
+        canCompleteSession: false,
+        startReasons: [],
+        completeReasons: [],
+        requirements: {
+          placementsFilled: { met: false, message: 'Unauthorized' },
+          decklistsSubmitted: { met: false, message: 'Unauthorized' },
+          suggestionsSubmitted: { met: false, message: 'Unauthorized' },
+          nextBanlistExists: { met: false, message: 'Unauthorized' },
+        },
+      };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+      include: { set: true },
+    });
+
+    // Get next non-completed session
+    const nextSession = await prisma.session.findFirst({
+      where: { complete: false },
+      orderBy: { number: 'asc' },
+      include: { set: true },
+    });
+
+    const playerCount = await prisma.player.count();
+    const startReasons: string[] = [];
+    const completeReasons: string[] = [];
+
     const requirements = {
       placementsFilled: { met: false, message: '' },
       decklistsSubmitted: { met: false, message: '' },
@@ -39,31 +96,53 @@ export async function validateProgStart(): Promise<ValidationResult> {
       nextBanlistExists: { met: false, message: '' },
     };
 
-    // Get the current (most recent) session
-    const currentSession = await prisma.session.findFirst({
-      orderBy: { date: 'desc' },
-    });
+    // Check if we can start a session
+    let canStartSession = false;
+    if (!activeSession && nextSession) {
+      // Check if next session has a banlist
+      const nextBanlist = await prisma.banlist.findFirst({
+        where: { sessionId: nextSession.number },
+      });
 
-    const playerCount = await prisma.player.count();
+      if (nextBanlist) {
+        canStartSession = true;
+        requirements.nextBanlistExists = {
+          met: true,
+          message: `Banlist ready for Session ${nextSession.number}`,
+        };
+      } else {
+        startReasons.push(`Session ${nextSession.number} needs a banlist chosen`);
+        requirements.nextBanlistExists = {
+          met: false,
+          message: `No banlist chosen for Session ${nextSession.number}`,
+        };
+      }
+    } else if (activeSession) {
+      startReasons.push('A session is currently active and must be completed first');
+    } else if (!nextSession) {
+      startReasons.push('No sessions available to start');
+    }
 
-    if (currentSession) {
+    // Check if we can complete the active session
+    let canCompleteSession = false;
+    if (activeSession) {
       // Check if all placement fields are filled
-      const placementsFilled = !!(currentSession.first && currentSession.second && currentSession.third &&
-          currentSession.fourth && currentSession.fifth && currentSession.sixth);
+      const placementsFilled = !!(activeSession.first && activeSession.second && activeSession.third &&
+          activeSession.fourth && activeSession.fifth && activeSession.sixth);
 
       requirements.placementsFilled = {
         met: placementsFilled,
         message: placementsFilled
           ? 'All placements filled'
-          : 'Current session placements (1st-6th) are not all filled out',
+          : 'All placement fields (1st-6th) must be filled',
       };
       if (!placementsFilled) {
-        reasons.push(requirements.placementsFilled.message);
+        completeReasons.push(requirements.placementsFilled.message);
       }
 
-      // Check if all players have submitted decklists for current session
+      // Check if all players have submitted decklists for active session
       const decklistCount = await prisma.decklist.count({
-        where: { sessionId: currentSession.id },
+        where: { sessionId: activeSession.id },
       });
 
       const decklistsComplete = decklistCount >= playerCount;
@@ -74,17 +153,17 @@ export async function validateProgStart(): Promise<ValidationResult> {
           : `Not all players have submitted decklists (${decklistCount}/${playerCount})`,
       };
       if (!decklistsComplete) {
-        reasons.push(requirements.decklistsSubmitted.message);
+        completeReasons.push(requirements.decklistsSubmitted.message);
       }
 
-      // Check if all players have submitted banlist suggestions for current session
-      const currentBanlist = await prisma.banlist.findFirst({
-        where: { sessionId: currentSession.id },
+      // Check if all players have submitted banlist suggestions for active session
+      const activeBanlist = await prisma.banlist.findFirst({
+        where: { sessionId: activeSession.number },
       });
 
-      if (currentBanlist) {
+      if (activeBanlist) {
         const suggestionCount = await prisma.banlistSuggestion.count({
-          where: { banlistId: currentBanlist.id },
+          where: { banlistId: activeBanlist.id },
         });
 
         const suggestionsComplete = suggestionCount >= playerCount;
@@ -95,79 +174,48 @@ export async function validateProgStart(): Promise<ValidationResult> {
             : `Not all players have submitted suggestions (${suggestionCount}/${playerCount})`,
         };
         if (!suggestionsComplete) {
-          reasons.push(requirements.suggestionsSubmitted.message);
+          completeReasons.push(requirements.suggestionsSubmitted.message);
         }
       } else {
         requirements.suggestionsSubmitted = {
           met: false,
-          message: 'Current session does not have a banlist',
+          message: 'Active session does not have a banlist',
         };
-        reasons.push(requirements.suggestionsSubmitted.message);
+        completeReasons.push(requirements.suggestionsSubmitted.message);
       }
-    } else {
-      // No current session - first prog
-      // Check that we have at least 6 players
-      if (playerCount < 6) {
-        const playerRequirementMessage = `Need at least 6 players to start first prog (currently have ${playerCount})`;
-        requirements.placementsFilled = { met: false, message: playerRequirementMessage };
-        requirements.decklistsSubmitted = { met: false, message: playerRequirementMessage };
-        requirements.suggestionsSubmitted = { met: false, message: playerRequirementMessage };
-        reasons.push(playerRequirementMessage);
-      } else {
-        requirements.placementsFilled = { met: true, message: `${playerCount} players ready for first prog` };
-        requirements.decklistsSubmitted = { met: true, message: 'No current session (first prog)' };
-        requirements.suggestionsSubmitted = { met: true, message: 'No current session (first prog)' };
-      }
-    }
 
-    // Check if there's a banlist for the new session (next session number)
-    const nextSessionNumber = currentSession ? currentSession.number + 1 : 1;
-
-    // For first session, we'll auto-create a default banlist, so skip this check
-    if (!currentSession) {
-      requirements.nextBanlistExists = {
-        met: true,
-        message: 'Default banlist will be created for first session',
-      };
-    } else {
-      const nextSession = await prisma.session.findUnique({
-        where: { number: nextSessionNumber },
-      });
-
-      if (nextSession) {
-        const nextBanlist = await prisma.banlist.findFirst({
-          where: { sessionId: nextSession.id },
-        });
-
-        const banlistExists = !!nextBanlist;
-        requirements.nextBanlistExists = {
-          met: banlistExists,
-          message: banlistExists
-            ? `Banlist chosen for Session ${nextSessionNumber}`
-            : `No banlist chosen for Session ${nextSessionNumber}`,
-        };
-        if (!banlistExists) {
-          reasons.push(requirements.nextBanlistExists.message);
-        }
-      } else {
-        requirements.nextBanlistExists = {
-          met: false,
-          message: `Session ${nextSessionNumber} needs to be created with a banlist`,
-        };
-        reasons.push(requirements.nextBanlistExists.message);
-      }
+      canCompleteSession = completeReasons.length === 0;
     }
 
     return {
-      canStartProg: reasons.length === 0,
-      reasons,
+      success: true,
+      activeSession: activeSession ? {
+        id: activeSession.id,
+        number: activeSession.number,
+        setName: activeSession.set?.setName || null,
+      } : null,
+      nextSession: nextSession ? {
+        id: nextSession.id,
+        number: nextSession.number,
+        setName: nextSession.set?.setName || null,
+      } : null,
+      canStartSession,
+      canCompleteSession,
+      startReasons,
+      completeReasons,
       requirements,
     };
   } catch (error) {
-    console.error('Error validating prog start:', error);
+    console.error('Error getting session status:', error);
     return {
-      canStartProg: false,
-      reasons: ['Failed to validate prog requirements'],
+      success: false,
+      error: 'Failed to get session status',
+      activeSession: null,
+      nextSession: null,
+      canStartSession: false,
+      canCompleteSession: false,
+      startReasons: [],
+      completeReasons: [],
       requirements: {
         placementsFilled: { met: false, message: 'Validation failed' },
         decklistsSubmitted: { met: false, message: 'Validation failed' },
@@ -232,60 +280,36 @@ function generateRoundRobinPairings(playerIds: number[]): { round: number; playe
 }
 
 /**
- * Start a new prog session
+ * Start a new session
  */
-export async function startProg(): Promise<StartProgResult> {
+export async function startSession(): Promise<StartSessionResult> {
   try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
     // Validate first
-    const validation = await validateProgStart();
-    if (!validation.canStartProg) {
+    const status = await getSessionStatus();
+    if (!status.canStartSession) {
       return {
         success: false,
-        error: `Cannot start prog: ${validation.reasons.join(', ')}`,
+        error: `Cannot start session: ${status.startReasons.join(', ')}`,
       };
     }
 
-    // Get current session to determine next session number
-    const currentSession = await prisma.session.findFirst({
-      orderBy: { date: 'desc' },
-    });
-
-    const nextSessionNumber = currentSession ? currentSession.number + 1 : 1;
-    const isFirstSession = !currentSession;
-
-    // Check if session already exists (it should from validation)
-    let nextSession = await prisma.session.findUnique({
-      where: { number: nextSessionNumber },
-    });
-
-    // If it doesn't exist, create it
-    if (!nextSession) {
-      nextSession = await prisma.session.create({
-        data: {
-          number: nextSessionNumber,
-          date: new Date(),
-          first: null,
-          second: null,
-          third: null,
-          fourth: null,
-          fifth: null,
-          sixth: null,
-        },
-      });
-
-      // If this is the first session, create a default banlist
-      if (isFirstSession) {
-        await prisma.banlist.create({
-          data: {
-            sessionId: nextSession.id,
-            banned: [], // Empty array of card IDs
-            limited: [], // Empty array of card IDs
-            semilimited: [], // Empty array of card IDs
-            unlimited: [], // Empty array of card IDs
-          },
-        });
-      }
+    if (!status.nextSession) {
+      return { success: false, error: 'No sessions available to start' };
     }
+
+    // Mark session as active and set date
+    const session = await prisma.session.update({
+      where: { id: status.nextSession.id },
+      data: {
+        active: true,
+        date: new Date(),
+      },
+    });
 
     // Get all players
     const players = await prisma.player.findMany();
@@ -297,7 +321,7 @@ export async function startProg(): Promise<StartProgResult> {
     // Save pairings to database
     await prisma.pairing.createMany({
       data: pairingData.map(p => ({
-        sessionId: nextSession!.id,
+        sessionId: session.id,
         round: p.round,
         player1Id: p.player1,
         player2Id: p.player2,
@@ -307,22 +331,74 @@ export async function startProg(): Promise<StartProgResult> {
     });
 
     // Send Discord notification with all pairings
-    await notifyNewSessionWithPairings(nextSession!.id);
+    await notifyNewSessionWithPairings(session.id);
 
     // Revalidate relevant pages
     revalidatePath('/admin/prog_actions');
     revalidatePath('/play/pairings');
     revalidatePath('/play/standings');
+    revalidatePath('/');
 
     return {
       success: true,
-      sessionId: nextSession.id,
+      sessionId: session.id,
     };
   } catch (error) {
-    console.error('Error starting prog:', error);
+    console.error('Error starting session:', error);
     return {
       success: false,
-      error: 'Failed to start prog session',
+      error: 'Failed to start session',
+    };
+  }
+}
+
+/**
+ * Complete the active session
+ */
+export async function completeSession(): Promise<CompleteSessionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Validate first
+    const status = await getSessionStatus();
+    if (!status.canCompleteSession) {
+      return {
+        success: false,
+        error: `Cannot complete session: ${status.completeReasons.join(', ')}`,
+      };
+    }
+
+    if (!status.activeSession) {
+      return { success: false, error: 'No active session to complete' };
+    }
+
+    // Mark session as complete and inactive
+    const session = await prisma.session.update({
+      where: { id: status.activeSession.id },
+      data: {
+        complete: true,
+        active: false,
+      },
+    });
+
+    // Revalidate relevant pages
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/play/pairings');
+    revalidatePath('/play/standings');
+    revalidatePath('/');
+
+    return {
+      success: true,
+      sessionNumber: session.number,
+    };
+  } catch (error) {
+    console.error('Error completing session:', error);
+    return {
+      success: false,
+      error: 'Failed to complete session',
     };
   }
 }

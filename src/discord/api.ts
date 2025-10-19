@@ -24,6 +24,56 @@ interface NotificationMessage {
 }
 
 /**
+ * Runtime validation helpers
+ */
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number' && !isNaN(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function validateSessionId(payload: Record<string, unknown>): number {
+  const { sessionId } = payload;
+  if (!isNumber(sessionId)) {
+    throw new Error(`Invalid sessionId: expected number, got ${typeof sessionId}`);
+  }
+  return sessionId;
+}
+
+function validatePairingsPayload(payload: Record<string, unknown>): { sessionId: number; round: number } {
+  const sessionId = validateSessionId(payload);
+  const { round } = payload;
+  if (!isNumber(round)) {
+    throw new Error(`Invalid round: expected number, got ${typeof round}`);
+  }
+  return { sessionId, round };
+}
+
+function validateSessionNumber(payload: Record<string, unknown>): number {
+  const { sessionNumber } = payload;
+  if (!isNumber(sessionNumber)) {
+    throw new Error(`Invalid sessionNumber: expected number, got ${typeof sessionNumber}`);
+  }
+  return sessionNumber;
+}
+
+function validateGenericPayload(payload: Record<string, unknown>): { title: string; description: string; color?: number } {
+  const { title, description, color } = payload;
+  if (!isString(title)) {
+    throw new Error(`Invalid title: expected string, got ${typeof title}`);
+  }
+  if (!isString(description)) {
+    throw new Error(`Invalid description: expected string, got ${typeof description}`);
+  }
+  if (color !== undefined && !isNumber(color)) {
+    throw new Error(`Invalid color: expected number or undefined, got ${typeof color}`);
+  }
+  return { title, description, color: color as number | undefined };
+}
+
+/**
  * Process a single message from the queue
  */
 async function processMessage(message: Message): Promise<void> {
@@ -38,31 +88,28 @@ async function processMessage(message: Message): Promise<void> {
 
     switch (notification.type) {
       case 'session-pairings':
-        await notifyNewSessionWithPairings(notification.payload.sessionId as number);
+        await notifyNewSessionWithPairings(validateSessionId(notification.payload));
         break;
 
-      case 'pairings':
-        await notifyPairings(
-          notification.payload.sessionId as number,
-          notification.payload.round as number
-        );
+      case 'pairings': {
+        const { sessionId, round } = validatePairingsPayload(notification.payload);
+        await notifyPairings(sessionId, round);
         break;
+      }
 
       case 'standings':
-        await notifyStandings(notification.payload.sessionId as number);
+        await notifyStandings(validateSessionId(notification.payload));
         break;
 
       case 'new-session':
-        await notifyNewSession(notification.payload.sessionNumber as number);
+        await notifyNewSession(validateSessionNumber(notification.payload));
         break;
 
-      case 'generic':
-        await notifyGeneric(
-          notification.payload.title as string,
-          notification.payload.description as string,
-          notification.payload.color as number | undefined
-        );
+      case 'generic': {
+        const { title, description, color } = validateGenericPayload(notification.payload);
+        await notifyGeneric(title, description, color);
         break;
+      }
 
       default:
         console.warn(`[QueueConsumer] Unknown message type: ${notification.type}`);
