@@ -57,6 +57,10 @@ jobs:
             git fetch origin
             git reset --hard origin/main
 
+            # Clean up docker waste
+            echo "Cleaning up unused Docker data..."
+            docker system prune -af --volumes || true
+
             # Check if .env.production exists
             if [ ! -f .env.production ]; then
               echo "Error: .env.production file not found in repository"
