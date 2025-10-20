@@ -19,40 +19,7 @@ import {
   getAllBanlistSuggestions,
   type BanlistSuggestionHistory,
 } from './actions';
-
-/*
- * TODO: Update this to fetch and display card names from the cards table
- * Currently displays card IDs directly.
- */
-function CategoryCard({ title, cards }: { title: string; cards: number[] }) {
-  return (
-    <Box sx={{ mb: 2 }}>
-      <Typography
-        variant="subtitle1"
-        sx={{ color: 'var(--text-bright)', fontWeight: 'bold', mb: 1 }}
-      >
-        {title} ({cards.length})
-      </Typography>
-      {cards.length > 0 ? (
-        <Box sx={{ pl: 2 }}>
-          {cards.map((card, idx) => (
-            <Typography
-              key={idx}
-              variant="body1"
-              sx={{ color: 'var(--text-primary)', mb: 0.5 }}
-            >
-              {card}
-            </Typography>
-          ))}
-        </Box>
-      ) : (
-        <Typography variant="body1" sx={{ color: 'var(--text-secondary)' }}>
-          No cards
-        </Typography>
-      )}
-    </Box>
-  );
-}
+import { CategoryCard } from '@components/CategoryCard';
 
 function SuggestedBanlistCard({
   suggestion,

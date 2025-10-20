@@ -11,36 +11,41 @@ interface GetMostRecentBanlistResult {
 
 export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult> {
   try {
-    // Get the active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
-
-    if (!activeSession) {
-      return {
-        success: false,
-        banlist: null,
-        error: 'No active session found',
-      };
-    }
-
-    // Get the banlist for this session
+    // Get the most recent banlist (by ID descending)
     const banlistEntity = await prisma.banlist.findFirst({
-      where: { sessionId: activeSession.number },
+      orderBy: { id: 'desc' },
     });
+
+    // // Get the active session
+    // const activeSession = await prisma.session.findFirst({
+    //   where: { active: true },
+    // });
+
+    // if (!activeSession) {
+    //   return {
+    //     success: false,
+    //     banlist: null,
+    //     error: 'No active session found',
+    //   };
+    // }
+
+    // // Get the banlist for this session
+    // const banlistEntity = await prisma.banlist.findFirst({
+    //   where: { sessionId: activeSession.number },
+    // });
 
     if (!banlistEntity) {
       return {
         success: false,
         banlist: null,
-        error: 'No banlist found for the most recent session',
+        error: 'No banlist found',
       };
     }
 
     // Map to Banlist type
     const banlist: Banlist = {
       id: banlistEntity.id,
-      sessionId: activeSession.number,
+      sessionId: banlistEntity.sessionId,
       banned: banlistEntity.banned as number[],
       limited: banlistEntity.limited as number[],
       semilimited: banlistEntity.semilimited as number[],
