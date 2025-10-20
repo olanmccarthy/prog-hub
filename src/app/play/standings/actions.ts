@@ -28,7 +28,7 @@ export interface GetStandingsResult {
 export interface SessionInfo {
   id: number;
   number: number;
-  date: Date;
+  date: Date | null;
 }
 
 export interface GetSessionsResult {

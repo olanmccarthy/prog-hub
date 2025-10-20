@@ -236,7 +236,7 @@ export default function StandingsPage() {
               <MenuItem key={session.id} value={session.id}>
                 {index === 0
                   ? "Current"
-                  : `Session ${session.number} (${new Date(session.date).toLocaleDateString()})`
+                  : `Session ${session.number}${session.date ? ` (${new Date(session.date).toLocaleDateString()})` : ''}`
                 }
               </MenuItem>
             ))}

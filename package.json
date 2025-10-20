@@ -48,7 +48,8 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --fix"
+      "eslint --fix",
+      "bash -c 'npm run typecheck'"
     ]
   }
 }
