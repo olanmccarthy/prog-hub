@@ -38,16 +38,29 @@ interface GetUpcomingSessionResult {
 
 export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult> {
   try {
-    // Get the most recent banlist (highest session ID)
+    // Get the active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return {
+        success: false,
+        banlist: null,
+        error: "No active session found",
+      };
+    }
+
+    // Get the banlist for this session
     const banlist = await prisma.banlist.findFirst({
-      orderBy: { sessionId: 'desc' },
+      where: { sessionId: activeSession.number },
     });
 
     if (!banlist) {
       return {
         success: false,
         banlist: null,
-        error: "No banlist found",
+        error: "No banlist found for the most recent session",
       };
     }
 
@@ -62,7 +75,7 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
     return {
       success: true,
       banlist: banlistData,
-      sessionNumber: banlist.sessionId,
+      sessionNumber: activeSession.number,
     };
   } catch (error) {
     console.error("Error fetching most recent banlist:", error);
