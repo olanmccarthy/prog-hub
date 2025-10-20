@@ -402,3 +402,243 @@ export async function completeSession(): Promise<CompleteSessionResult> {
     };
   }
 }
+
+export interface AutoVoteResult {
+  success: boolean;
+  error?: string;
+  votesCreated?: number;
+}
+
+export interface AutoCreateSuggestionsResult {
+  success: boolean;
+  error?: string;
+  suggestionsCreated?: number;
+}
+
+/**
+ * TEST FUNCTION: Automatically creates votes from all players to skip to moderator phase
+ */
+export async function autoVoteAllPlayers(): Promise<AutoVoteResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can use this test function' };
+    }
+
+    // Get most recent banlist
+    const banlist = await prisma.banlist.findFirst({
+      orderBy: { id: 'desc' },
+    });
+
+    if (!banlist) {
+      return { success: false, error: 'No banlist found' };
+    }
+
+    // Get all suggestions for this banlist
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      where: { banlistId: banlist.id },
+    });
+
+    if (suggestions.length === 0) {
+      return { success: false, error: 'No suggestions found for current banlist' };
+    }
+
+    // Get all players
+    const players = await prisma.player.findMany();
+
+    if (players.length === 0) {
+      return { success: false, error: 'No players found' };
+    }
+
+    // Delete any existing votes
+    await prisma.banlistSuggestionVote.deleteMany({
+      where: {
+        suggestionId: { in: suggestions.map(s => s.id) },
+      },
+    });
+
+    // For each player, vote for 2 random suggestions (excluding their own)
+    let votesCreated = 0;
+    for (const player of players) {
+      // Get suggestions not created by this player
+      const votablesuggestions = suggestions.filter(s => s.playerId !== player.id);
+
+      if (votablesuggestions.length < 2) {
+        continue; // Skip if not enough suggestions to vote for
+      }
+
+      // Randomly select 2 suggestions
+      const shuffled = [...votablesuggestions].sort(() => Math.random() - 0.5);
+      const selectedSuggestions = shuffled.slice(0, 2);
+
+      // Create votes
+      await prisma.banlistSuggestionVote.createMany({
+        data: selectedSuggestions.map(suggestion => ({
+          playerId: player.id,
+          suggestionId: suggestion.id,
+        })),
+      });
+
+      votesCreated += 2;
+    }
+
+    revalidatePath('/banlist/voting');
+
+    return {
+      success: true,
+      votesCreated,
+    };
+  } catch (error) {
+    console.error('Error auto-voting:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to auto-vote',
+    };
+  }
+}
+
+/**
+ * TEST FUNCTION: Automatically creates banlist suggestions for players who haven't submitted yet
+ */
+export async function autoCreateSuggestions(): Promise<AutoCreateSuggestionsResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can use this test function' };
+    }
+
+    // Get most recent banlist
+    const banlist = await prisma.banlist.findFirst({
+      orderBy: { id: 'desc' },
+    });
+
+    if (!banlist) {
+      return { success: false, error: 'No banlist found' };
+    }
+
+    // Get all players
+    const players = await prisma.player.findMany();
+
+    if (players.length === 0) {
+      return { success: false, error: 'No players found' };
+    }
+
+    // Get existing suggestions for this banlist
+    const existingSuggestions = await prisma.banlistSuggestion.findMany({
+      where: { banlistId: banlist.id },
+      select: { playerId: true },
+    });
+
+    const playersWithSuggestions = new Set(existingSuggestions.map(s => s.playerId));
+
+    // Filter to only players without suggestions
+    const playersNeedingSuggestions = players.filter(p => !playersWithSuggestions.has(p.id));
+
+    if (playersNeedingSuggestions.length === 0) {
+      return { success: false, error: 'All players already have suggestions' };
+    }
+
+    // Get current banlist cards
+    const currentBanned = banlist.banned as number[];
+    const currentLimited = banlist.limited as number[];
+    const currentSemilimited = banlist.semilimited as number[];
+    const currentUnlimited = banlist.unlimited as number[];
+
+    const allCurrentCards = [
+      ...currentBanned,
+      ...currentLimited,
+      ...currentSemilimited,
+      ...currentUnlimited,
+    ];
+
+    // Get random cards from database to add as new cards (cards not in current banlist)
+    const randomNewCards = await prisma.card.findMany({
+      where: {
+        id: { notIn: allCurrentCards },
+      },
+      take: playersNeedingSuggestions.length * 2, // 2 cards per player
+      orderBy: {
+        id: 'asc', // Simple ordering, will randomize selection below
+      },
+    });
+
+    if (randomNewCards.length < playersNeedingSuggestions.length * 2) {
+      return { success: false, error: 'Not enough cards in database to generate suggestions' };
+    }
+
+    // Shuffle the new cards array
+    const shuffledNewCards = [...randomNewCards].sort(() => Math.random() - 0.5);
+
+    // Create suggestions for each player
+    let suggestionsCreated = 0;
+    for (let i = 0; i < playersNeedingSuggestions.length; i++) {
+      const player = playersNeedingSuggestions[i];
+
+      // Vary the number of changes per player (some small, some large)
+      const isLargeChange = Math.random() > 0.5;
+      const numChanges = isLargeChange
+        ? Math.floor(Math.random() * 6) + 5 // 5-10 changes
+        : Math.floor(Math.random() * 4) + 2; // 2-5 changes
+
+      // Randomly select cards from current banlist to move
+      const shuffledCurrent = [...allCurrentCards].sort(() => Math.random() - 0.5);
+      const cardsToChange = shuffledCurrent.slice(0, Math.min(numChanges, allCurrentCards.length));
+
+      // Get 2 new cards for this player
+      const newCards = shuffledNewCards.slice(i * 2, i * 2 + 2).map(c => c.id);
+
+      // Build suggestion lists
+      const suggestionBanned: number[] = [];
+      const suggestionLimited: number[] = [];
+      const suggestionSemilimited: number[] = [];
+      const suggestionUnlimited: number[] = [];
+
+      // Randomly assign changed cards to categories
+      cardsToChange.forEach(cardId => {
+        const rand = Math.random();
+        if (rand < 0.25) suggestionBanned.push(cardId);
+        else if (rand < 0.5) suggestionLimited.push(cardId);
+        else if (rand < 0.75) suggestionSemilimited.push(cardId);
+        else suggestionUnlimited.push(cardId);
+      });
+
+      // Randomly assign new cards to categories
+      newCards.forEach(cardId => {
+        const rand = Math.random();
+        if (rand < 0.25) suggestionBanned.push(cardId);
+        else if (rand < 0.5) suggestionLimited.push(cardId);
+        else if (rand < 0.75) suggestionSemilimited.push(cardId);
+        else suggestionUnlimited.push(cardId);
+      });
+
+      // Create the suggestion
+      await prisma.banlistSuggestion.create({
+        data: {
+          banlistId: banlist.id,
+          playerId: player.id,
+          banned: suggestionBanned,
+          limited: suggestionLimited,
+          semilimited: suggestionSemilimited,
+          unlimited: suggestionUnlimited,
+          chosen: false,
+        },
+      });
+
+      suggestionsCreated++;
+    }
+
+    revalidatePath('/banlist/voting');
+    revalidatePath('/banlist/suggestion-history');
+
+    return {
+      success: true,
+      suggestionsCreated,
+    };
+  } catch (error) {
+    console.error('Error auto-creating suggestions:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to auto-create suggestions',
+    };
+  }
+}
