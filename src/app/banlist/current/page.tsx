@@ -1,22 +1,46 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Container, Typography, Box, Paper, Alert } from '@mui/material';
-import { getMostRecentBanlist } from '../../actions';
-import { getCardEntriesFromIds } from '@lib/cardLookup';
-import { BanlistWithNames } from './actions';
+import { Container, Typography, Box, Paper, Alert, Chip } from '@mui/material';
+import {
+  getPreviousBanlist,
+  getNewCards,
+  getMostRecentBanlistBySession,
+  type CurrentBanlist,
+  type BanlistCardWithFlag,
+} from './actions';
 
-interface CardWithName {
-  id: number;
-  name: string;
-}
-
-function BanlistCardItem({ card }: { card: CardWithName }) {
+function BanlistCardItem({
+  card,
+  isNew,
+}: {
+  card: BanlistCardWithFlag;
+  isNew?: boolean;
+}) {
   return (
-    <Typography key={card.id} variant="body1" sx={{ mb: 0.5 }}>
-      {card.name}
-      {/* Add images and NEW icon here when available*/}
-    </Typography>
+    <Box
+      key={card.id}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        mb: 0.5,
+      }}
+    >
+      <Typography variant="body1">{card.name}</Typography>
+      {isNew && (
+        <Chip
+          label="NEW"
+          size="small"
+          sx={{
+            backgroundColor: '#4caf50',
+            color: 'white',
+            fontWeight: 'bold',
+            height: 20,
+          }}
+        />
+      )}
+    </Box>
   );
 }
 
@@ -24,7 +48,7 @@ function BanlistCategoryItems({
   cards,
   emptyMessage,
 }: {
-  cards: CardWithName[];
+  cards: BanlistCardWithFlag[];
   emptyMessage: string;
 }) {
   return (
@@ -32,7 +56,11 @@ function BanlistCategoryItems({
       {cards.length > 0 ? (
         <Box sx={{ pl: 2 }}>
           {cards.map((card) => (
-            <BanlistCardItem key={card.id} card={card} />
+            <BanlistCardItem
+              key={card.id}
+              card={card}
+              isNew={card.isNew || false}
+            />
           ))}
         </Box>
       ) : (
@@ -50,7 +78,7 @@ function BanlistCategory({
   emptyMessage,
 }: {
   title: string;
-  cards: CardWithName[];
+  cards: BanlistCardWithFlag[];
   emptyMessage: string;
 }) {
   return (
@@ -71,7 +99,7 @@ function BanlistCategory({
 }
 
 export default function CurrentBanlistPage() {
-  const [banlist, setBanlist] = useState<BanlistWithNames | null>(null);
+  const [banlist, setBanlist] = useState<CurrentBanlist | null>(null);
   const [sessionNumber, setSessionNumber] = useState<number | undefined>(
     undefined,
   );
@@ -85,21 +113,37 @@ export default function CurrentBanlistPage() {
   const fetchBanlist = async () => {
     setLoading(true);
     setError(null);
-    const result = await getMostRecentBanlist();
-    if (result.success && result.banlist) {
-      const [banned, limited, semilimited, unlimited] = await Promise.all([
-        getCardEntriesFromIds(result.banlist.banned),
-        getCardEntriesFromIds(result.banlist.limited),
-        getCardEntriesFromIds(result.banlist.semilimited),
-        getCardEntriesFromIds(result.banlist.unlimited),
-      ]);
+    try {
+      const result = await getMostRecentBanlistBySession();
+      if (
+        result.success &&
+        result.banlist &&
+        result.sessionNumber !== undefined
+      ) {
+        // Fetch previous banlist for comparison
+        const prevResult = await getPreviousBanlist(result.sessionNumber);
 
-      setBanlist({ banned, limited, semilimited, unlimited });
-      setSessionNumber(result.sessionNumber);
-    } else {
-      setError(result.error || 'Failed to load banlist');
+        // Get new cards with comparison (passing card IDs, not card objects)
+        const banlistWithNewFlags = await getNewCards(
+          {
+            banned: result.banlist.banned,
+            limited: result.banlist.limited,
+            semilimited: result.banlist.semilimited,
+            unlimited: result.banlist.unlimited,
+          },
+          prevResult.success ? prevResult.banlist : null,
+        );
+
+        setBanlist(banlistWithNewFlags);
+        setSessionNumber(result.sessionNumber);
+      } else {
+        setError(result.error || 'Failed to load banlist');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load banlist');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
