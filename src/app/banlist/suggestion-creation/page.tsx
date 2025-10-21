@@ -83,9 +83,8 @@ function CategorySuggestionSection({
       </Typography>
       {cards.map((cardEntry, index) => {
         const hasError = cardEntry.name.length > 0 && cardEntry.id === null;
-        const stableKey = cardEntry.id !== null
-          ? `card-${cardEntry.id}`
-          : `card-${index}-${cardEntry.name.slice(0, 10)}`;
+        // Use index as key - it's stable as long as we don't reorder cards
+        const stableKey = `${title}-card-${index}`;
 
         return (
           <Box key={stableKey} sx={{ display: 'flex', gap: 1, mb: 1 }}>
@@ -220,7 +219,7 @@ export default function BanlistSuggestionCreationPage() {
       setLoading(true);
       setError('');
       const banlistResult = await getMostRecentBanlist();
-      if (banlistResult.success && banlistResult.banlist) {
+      if (banlistResult.success && banlistResult.banlist && banlistResult.banlist.id) {
         setBanlistId(banlistResult.banlist.id);
 
         // Check if suggestions can be submitted

@@ -33,14 +33,14 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
       return {
         success: false,
         banlist: null,
-        error: 'No banlist found for the most recent session',
+        error: 'No banlist found',
       };
     }
 
     // Map to Banlist type
     const banlist: Banlist = {
       id: banlistEntity.id,
-      sessionId: activeSession.number,
+      sessionId: banlistEntity.sessionId,
       banned: banlistEntity.banned as number[],
       limited: banlistEntity.limited as number[],
       semilimited: banlistEntity.semilimited as number[],

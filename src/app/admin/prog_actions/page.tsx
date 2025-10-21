@@ -19,13 +19,17 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import CancelIcon from '@mui/icons-material/Cancel';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
-import { getSessionStatus, startSession, completeSession, SessionStatusResult } from './actions';
+import HowToVoteIcon from '@mui/icons-material/HowToVote';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import { getSessionStatus, startSession, completeSession, autoVoteAllPlayers, autoCreateSuggestions, SessionStatusResult } from './actions';
 
 export default function ProgActionsPage() {
   const [status, setStatus] = useState<SessionStatusResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [autoVoting, setAutoVoting] = useState(false);
+  const [autoCreating, setAutoCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -91,6 +95,46 @@ export default function ProgActionsPage() {
     }
   };
 
+  const handleAutoVote = async () => {
+    try {
+      setAutoVoting(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await autoVoteAllPlayers();
+
+      if (result.success) {
+        setSuccess(`Successfully created ${result.votesCreated} votes from all players!`);
+      } else {
+        setError(result.error || 'Failed to auto-vote');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-vote');
+    } finally {
+      setAutoVoting(false);
+    }
+  };
+
+  const handleAutoCreateSuggestions = async () => {
+    try {
+      setAutoCreating(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await autoCreateSuggestions();
+
+      if (result.success) {
+        setSuccess(`Successfully created ${result.suggestionsCreated} banlist suggestions!`);
+      } else {
+        setError(result.error || 'Failed to auto-create suggestions');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-create suggestions');
+    } finally {
+      setAutoCreating(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -119,7 +163,11 @@ export default function ProgActionsPage() {
       )}
 
       {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
+        <Alert
+          severity="success"
+          sx={{ mb: 2 }}
+          onClose={() => setSuccess(null)}
+        >
           {success}
         </Alert>
       )}
@@ -137,18 +185,26 @@ export default function ProgActionsPage() {
         >
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6" sx={{ color: 'var(--accent-primary)', fontWeight: 'bold' }}>
+              <Typography
+                variant="h6"
+                sx={{ color: 'var(--accent-primary)', fontWeight: 'bold' }}
+              >
                 Active Session: #{status.activeSession.number}
               </Typography>
               {status.activeSession.setName && (
-                <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+                <Typography
+                  variant="body2"
+                  sx={{ color: 'var(--text-secondary)' }}
+                >
                   {status.activeSession.setName}
                 </Typography>
               )}
             </Box>
             <Button
               variant="contained"
-              startIcon={completing ? <CircularProgress size={20} /> : <StopCircleIcon />}
+              startIcon={
+                completing ? <CircularProgress size={20} /> : <StopCircleIcon />
+              }
               onClick={handleCompleteSession}
               disabled={!status.canCompleteSession || completing}
               sx={{
@@ -170,8 +226,12 @@ export default function ProgActionsPage() {
             </Button>
           </Box>
 
-          <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 2 }}>
-            This will mark the session as complete and allow the next session to start.
+          <Typography
+            variant="body2"
+            sx={{ color: 'var(--text-secondary)', mb: 2 }}
+          >
+            This will mark the session as complete and allow the next session to
+            start.
           </Typography>
 
           {status.canCompleteSession ? (
@@ -183,7 +243,9 @@ export default function ProgActionsPage() {
             </Box>
           ) : (
             <>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}
+              >
                 <ErrorIcon sx={{ color: '#ff9800' }} />
                 <Typography sx={{ color: '#ff9800' }}>
                   Requirements not met:
@@ -191,7 +253,9 @@ export default function ProgActionsPage() {
               </Box>
               <List dense>
                 {status.completeReasons.map((reason, index) => (
-                  <ListItem key={`complete-reason-${index}-${reason.slice(0, 20)}`}>
+                  <ListItem
+                    key={`complete-reason-${index}-${reason.slice(0, 20)}`}
+                  >
                     <ListItemIcon sx={{ minWidth: 36 }}>
                       <ErrorIcon sx={{ color: '#ff9800', fontSize: 20 }} />
                     </ListItemIcon>
@@ -220,11 +284,19 @@ export default function ProgActionsPage() {
         >
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6" sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
-                {status?.nextSession ? `Start Session #${status.nextSession.number}` : 'No Sessions Available'}
+              <Typography
+                variant="h6"
+                sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}
+              >
+                {status?.nextSession
+                  ? `Start Session #${status.nextSession.number}`
+                  : 'No Sessions Available'}
               </Typography>
               {status?.nextSession?.setName && (
-                <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+                <Typography
+                  variant="body2"
+                  sx={{ color: 'var(--text-secondary)' }}
+                >
                   {status.nextSession.setName}
                 </Typography>
               )}
@@ -232,7 +304,9 @@ export default function ProgActionsPage() {
             {status?.nextSession && (
               <Button
                 variant="contained"
-                startIcon={starting ? <CircularProgress size={20} /> : <PlayArrowIcon />}
+                startIcon={
+                  starting ? <CircularProgress size={20} /> : <PlayArrowIcon />
+                }
                 onClick={handleStartSession}
                 disabled={!status.canStartSession || starting}
                 sx={{
@@ -255,22 +329,31 @@ export default function ProgActionsPage() {
             )}
           </Box>
 
-          <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 2 }}>
-            This will activate the session and generate randomized round-robin pairings for all players.
+          <Typography
+            variant="body2"
+            sx={{ color: 'var(--text-secondary)', mb: 2 }}
+          >
+            This will activate the session and generate randomized round-robin
+            pairings for all players.
           </Typography>
 
           {status?.canStartSession ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CheckCircleIcon sx={{ color: '#4caf50' }} />
-              <Typography sx={{ color: '#4caf50' }}>
-                Ready to start!
-              </Typography>
+              <Typography sx={{ color: '#4caf50' }}>Ready to start!</Typography>
             </Box>
           ) : (
             <>
               {status?.startReasons && status.startReasons.length > 0 && (
                 <>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      mb: 2,
+                    }}
+                  >
                     <ErrorIcon sx={{ color: '#ff9800' }} />
                     <Typography sx={{ color: '#ff9800' }}>
                       Cannot start:
@@ -278,7 +361,9 @@ export default function ProgActionsPage() {
                   </Box>
                   <List dense>
                     {status.startReasons.map((reason, index) => (
-                      <ListItem key={`start-reason-${index}-${reason.slice(0, 20)}`}>
+                      <ListItem
+                        key={`start-reason-${index}-${reason.slice(0, 20)}`}
+                      >
                         <ListItemIcon sx={{ minWidth: 36 }}>
                           <ErrorIcon sx={{ color: '#ff9800', fontSize: 20 }} />
                         </ListItemIcon>
@@ -364,6 +449,89 @@ export default function ProgActionsPage() {
           </List>
         </Paper>
       )}
+
+      {/* Test Controls */}
+      <Paper
+        sx={{
+          p: 3,
+          mt: 3,
+          backgroundColor: 'var(--bg-secondary)',
+          border: '2px solid #ff9800',
+          color: 'var(--text-bright)',
+        }}
+      >
+        <Typography
+          variant="h6"
+          sx={{ color: '#ff9800', mb: 2, fontWeight: 'bold' }}
+        >
+          Test Controls
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={{ color: 'var(--text-secondary)', mb: 2 }}
+        >
+          These are development/testing shortcuts and should only be used for
+          testing purposes.
+        </Typography>
+
+        <Divider sx={{ my: 2, borderColor: 'var(--border-color)' }} />
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={
+                autoCreating ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <AddCircleIcon />
+                )
+              }
+              onClick={handleAutoCreateSuggestions}
+              disabled={autoCreating}
+              sx={{
+                borderColor: '#ff9800',
+                color: '#ff9800',
+                '&:hover': {
+                  borderColor: '#f57c00',
+                  backgroundColor: 'rgba(255, 152, 0, 0.08)',
+                },
+              }}
+            >
+              {autoCreating ? 'Creating...' : 'Auto-Create Suggestions'}
+            </Button>
+            <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+              Automatically creates banlist suggestions for players who havent
+              submitted yet
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={
+                autoVoting ? <CircularProgress size={20} /> : <HowToVoteIcon />
+              }
+              onClick={handleAutoVote}
+              disabled={autoVoting}
+              sx={{
+                borderColor: '#ff9800',
+                color: '#ff9800',
+                '&:hover': {
+                  borderColor: '#f57c00',
+                  backgroundColor: 'rgba(255, 152, 0, 0.08)',
+                },
+              }}
+            >
+              {autoVoting ? 'Creating Votes...' : 'Auto-Vote All Players'}
+            </Button>
+            <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+              Automatically creates votes from all players to skip to moderator
+              selection phase
+            </Typography>
+          </Box>
+        </Box>
+      </Paper>
     </Box>
   );
 }
