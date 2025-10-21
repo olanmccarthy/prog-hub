@@ -39,33 +39,33 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
       return { success: false, error: 'Not authenticated' };
     }
 
-    // Get current banlist (most recent one)
-    const banlist = await prisma.banlist.findFirst({
-      orderBy: { id: 'desc' },
+    // Get the active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
     });
+
+    if (!activeSession) {
+      return {
+        success: false,
+        error: 'No active session found',
+      };
+    }
+    // Get the banlist for this session
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!banlist) {
+      return {
+        success: false,
+        error: 'No banlist found for the most recent session',
+      };
+    }
 
     if (!banlist) {
       return { success: false, error: 'No banlist found' };
     }
 
-    console.log('Current banlist:', banlist);
-
-    // Find the completed session that matches this banlist
-    const completedSession = await prisma.session.findFirst({
-      where: {
-        number: banlist.sessionId,
-        complete: true,
-      },
-    });
-
-    // console.log('Completed session for banlist:', completedSession);
-
-    // if (!completedSession) {
-    //   return {
-    //     success: false,
-    //     error: 'No completed session found for current banlist',
-    //   };
-    // }
     // Get all suggestions for this banlist
     const suggestions = await prisma.banlistSuggestion.findMany({
       where: { banlistId: banlist.id },
@@ -321,6 +321,20 @@ export async function selectWinningSuggestion(
       },
     });
 
+    // Get current banlist to determine next session number
+    const currentBanlist = await prisma.banlist.findUnique({
+      where: { id: suggestion.banlistId },
+    });
+
+    if (!currentBanlist) {
+      return { success: false, error: 'Current banlist not found' };
+    }
+
+    // Delete any existing banlist for the next session (in case of reselection)
+    await prisma.banlist.deleteMany({
+      where: { sessionId: currentBanlist.sessionId + 1 },
+    });
+
     // Create new banlist for next session from winning suggestion
     const banlistResult = await createBanlistFromWinningSuggestion(
       suggestion.banlistId,
@@ -420,6 +434,84 @@ export async function submitVotes(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to submit votes',
+    };
+  }
+}
+
+export async function clearWinningSuggestion(): Promise<SelectWinnerResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Check if user is moderator (player ID 1)
+    if (user.playerId !== 1) {
+      return {
+        success: false,
+        error: 'Only the moderator can clear the winning suggestion',
+      };
+    }
+
+    // Get the active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return {
+        success: false,
+        error: 'No active session found',
+      };
+    }
+
+    // Get the banlist for this session
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!banlist) {
+      return { success: false, error: 'No banlist found' };
+    }
+
+    // Find and clear the chosen suggestion
+    const chosenSuggestion = await prisma.banlistSuggestion.findFirst({
+      where: {
+        banlistId: banlist.id,
+        chosen: true,
+      },
+    });
+
+    if (!chosenSuggestion) {
+      return { success: false, error: 'No chosen suggestion to clear' };
+    }
+
+    // Unmark as chosen and clear moderator
+    await prisma.banlistSuggestion.update({
+      where: { id: chosenSuggestion.id },
+      data: {
+        chosen: false,
+        moderatorId: null,
+      },
+    });
+
+    // Delete the next session's banlist since the selection changed
+    await prisma.banlist.deleteMany({
+      where: { sessionId: activeSession.number + 1 },
+    });
+
+    // Revalidate pages to show new state
+    revalidatePath('/banlist/voting');
+    revalidatePath('/banlist/current');
+    revalidatePath('/');
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error clearing winning suggestion:', error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to clear selection',
     };
   }
 }
