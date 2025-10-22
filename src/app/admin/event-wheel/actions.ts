@@ -61,8 +61,9 @@ export async function getEventWheelStatus(): Promise<EventWheelStatusResult> {
       };
     }
 
-    // Check if already spun
-    if (activeSession.eventWheelSpun) {
+    // Check if already spun (allow re-spin in dev environment)
+    const isDev = process.env.NODE_ENV === 'development';
+    if (activeSession.eventWheelSpun && !isDev) {
       const entries = await prisma.eventWheelEntry.findMany({
         orderBy: { id: 'asc' },
       });
@@ -148,8 +149,9 @@ export async function spinEventWheel(): Promise<SpinWheelResult> {
       };
     }
 
-    // Check if already spun
-    if (activeSession.eventWheelSpun) {
+    // Check if already spun (allow re-spin in dev environment)
+    const isDev = process.env.NODE_ENV === 'development';
+    if (activeSession.eventWheelSpun && !isDev) {
       return {
         success: false,
         error: 'Event wheel has already been spun for this session',

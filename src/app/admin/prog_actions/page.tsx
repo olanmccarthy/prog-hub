@@ -22,16 +22,22 @@ import StopCircleIcon from '@mui/icons-material/StopCircle';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import { getSessionStatus, startSession, completeSession, autoVoteAllPlayers, autoCreateSuggestions, resetSession, SessionStatusResult } from './actions';
+import GroupsIcon from '@mui/icons-material/Groups';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import { getSessionStatus, startSession, completeSession, generatePairings, autoVoteAllPlayers, autoCreateSuggestions, autoSubmitDecklists, autoModeratorVote, resetSession, resetEntireProg, SessionStatusResult } from './actions';
 
 export default function ProgActionsPage() {
   const [status, setStatus] = useState<SessionStatusResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [generatingPairings, setGeneratingPairings] = useState(false);
   const [autoVoting, setAutoVoting] = useState(false);
   const [autoCreating, setAutoCreating] = useState(false);
+  const [autoSubmitingDecklists, setAutoSubmitingDecklists] = useState(false);
+  const [autoModeratorVoting, setAutoModeratorVoting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [resettingEntireProg, setResettingEntireProg] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -64,7 +70,7 @@ export default function ProgActionsPage() {
       const result = await startSession();
 
       if (result.success) {
-        setSuccess(`Session ${status?.nextSession?.number} started successfully! Pairings have been generated.`);
+        setSuccess(`Session ${status?.nextSession?.number} started successfully!`);
         await loadStatus();
       } else {
         setError(result.error || 'Failed to start session');
@@ -73,6 +79,27 @@ export default function ProgActionsPage() {
       setError(err instanceof Error ? err.message : 'Failed to start session');
     } finally {
       setStarting(false);
+    }
+  };
+
+  const handleGeneratePairings = async () => {
+    try {
+      setGeneratingPairings(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await generatePairings();
+
+      if (result.success) {
+        setSuccess(`Successfully generated ${result.numPairings} pairings! Discord notification sent.`);
+        await loadStatus();
+      } else {
+        setError(result.error || 'Failed to generate pairings');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate pairings');
+    } finally {
+      setGeneratingPairings(false);
     }
   };
 
@@ -137,6 +164,48 @@ export default function ProgActionsPage() {
     }
   };
 
+  const handleAutoSubmitDecklists = async () => {
+    try {
+      setAutoSubmitingDecklists(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await autoSubmitDecklists();
+
+      if (result.success) {
+        setSuccess(`Successfully submitted ${result.decklistsSubmitted} decklists!`);
+        await loadStatus();
+      } else {
+        setError(result.error || 'Failed to auto-submit decklists');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-submit decklists');
+    } finally {
+      setAutoSubmitingDecklists(false);
+    }
+  };
+
+  const handleAutoModeratorVote = async () => {
+    try {
+      setAutoModeratorVoting(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await autoModeratorVote();
+
+      if (result.success) {
+        setSuccess(`${result.moderatorName} has chosen a random banlist suggestion!`);
+        await loadStatus();
+      } else {
+        setError(result.error || 'Failed to auto-vote as moderator');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-vote as moderator');
+    } finally {
+      setAutoModeratorVoting(false);
+    }
+  };
+
   const handleResetSession = async () => {
     if (!confirm('Are you sure you want to reset the current session? This will delete ALL session data including pairings, decklists, victory points, and standings. This action cannot be undone!')) {
       return;
@@ -159,6 +228,37 @@ export default function ProgActionsPage() {
       setError(err instanceof Error ? err.message : 'Failed to reset session');
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleResetEntireProg = async () => {
+    if (!confirm('⚠️ EXTREME DANGER ⚠️\n\nAre you absolutely sure you want to RESET THE ENTIRE PROG?\n\nThis will:\n- Empty all wallets\n- Remove ALL victory points\n- Remove ALL transactions\n- Remove ALL decklists\n- Remove ALL pairings\n- Remove ALL banlist suggestions and votes\n- Remove ALL banlists (except empty one for session 1)\n- Reset ALL sessions to incomplete\n\nPlayers will remain but EVERYTHING else will be deleted!\n\nThis action CANNOT be undone!\n\nType "RESET PROG" in the next prompt if you want to proceed.')) {
+      return;
+    }
+
+    const confirmation = prompt('Type "RESET PROG" (without quotes) to confirm:');
+    if (confirmation !== 'RESET PROG') {
+      setError('Reset cancelled - confirmation text did not match');
+      return;
+    }
+
+    try {
+      setResettingEntireProg(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await resetEntireProg();
+
+      if (result.success) {
+        setSuccess('🔄 ENTIRE PROG HAS BEEN RESET! All data deleted, system returned to initial state.');
+        await loadStatus();
+      } else {
+        setError(result.error || 'Failed to reset entire prog');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset entire prog');
+    } finally {
+      setResettingEntireProg(false);
     }
   };
 
@@ -261,40 +361,212 @@ export default function ProgActionsPage() {
             start.
           </Typography>
 
-          {status.canCompleteSession ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Divider sx={{ my: 2, borderColor: 'var(--border-color)' }} />
+
+          <Typography variant="h6" sx={{ color: 'var(--text-bright)', mb: 2 }}>
+            Completion Requirements
+          </Typography>
+
+          {status.canCompleteSession && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <CheckCircleIcon sx={{ color: '#4caf50' }} />
               <Typography sx={{ color: '#4caf50' }}>
                 All requirements met. Ready to complete!
               </Typography>
             </Box>
-          ) : (
-            <>
-              <Box
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}
-              >
-                <ErrorIcon sx={{ color: '#ff9800' }} />
-                <Typography sx={{ color: '#ff9800' }}>
-                  Requirements not met:
-                </Typography>
-              </Box>
-              <List dense>
-                {status.completeReasons.map((reason, index) => (
-                  <ListItem
-                    key={`complete-reason-${index}-${reason.slice(0, 20)}`}
-                  >
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      <ErrorIcon sx={{ color: '#ff9800', fontSize: 20 }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={reason}
-                      sx={{ color: 'var(--text-primary)' }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </>
           )}
+
+          <List dense>
+            {/* Step 2: Decklists submitted */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.decklistsSubmitted.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.decklistsSubmitted.message}
+                sx={{
+                  color: status.requirements.decklistsSubmitted.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 3: Event wheel spun */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.eventWheelSpun.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.eventWheelSpun.message}
+                sx={{
+                  color: status.requirements.eventWheelSpun.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 4: Pairings generated */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.pairingsGenerated.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.pairingsGenerated.message}
+                sx={{
+                  color: status.requirements.pairingsGenerated.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 7: Placements filled (standings finalized) */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.placementsFilled.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.placementsFilled.message}
+                sx={{
+                  color: status.requirements.placementsFilled.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 8: Victory points assigned */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.victoryPointsAssigned.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.victoryPointsAssigned.message}
+                sx={{
+                  color: status.requirements.victoryPointsAssigned.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 9: Wallet points assigned */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.walletPointsAssigned.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.walletPointsAssigned.message}
+                sx={{
+                  color: status.requirements.walletPointsAssigned.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 11: Banlist suggestions submitted */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.suggestionsSubmitted.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.suggestionsSubmitted.message}
+                sx={{
+                  color: status.requirements.suggestionsSubmitted.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 12: Players voted at least twice */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.votesSubmitted.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.votesSubmitted.message}
+                sx={{
+                  color: status.requirements.votesSubmitted.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 13: Moderator selected */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.moderatorSelected.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.moderatorSelected.message}
+                sx={{
+                  color: status.requirements.moderatorSelected.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+
+            {/* Step 14: Moderator voted (chosen banlist) */}
+            <ListItem>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {status.requirements.moderatorVoted.met ? (
+                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                ) : (
+                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                )}
+              </ListItemIcon>
+              <ListItemText
+                primary={status.requirements.moderatorVoted.message}
+                sx={{
+                  color: status.requirements.moderatorVoted.met
+                    ? '#4caf50'
+                    : 'var(--text-primary)',
+                }}
+              />
+            </ListItem>
+          </List>
         </Paper>
       )}
 
@@ -360,8 +632,7 @@ export default function ProgActionsPage() {
             variant="body2"
             sx={{ color: 'var(--text-secondary)', mb: 2 }}
           >
-            This will activate the session and generate randomized round-robin
-            pairings for all players.
+            This will activate the session and set the date.
           </Typography>
 
           {status?.canStartSession ? (
@@ -408,72 +679,95 @@ export default function ProgActionsPage() {
         </Paper>
       )}
 
-      {/* Requirements Checklist */}
+      {/* Generate Pairings Section */}
       {status?.activeSession && (
         <Paper
           sx={{
             p: 3,
+            mb: 3,
             backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
+            border: status.pairingsGenerated
+              ? '1px solid #4caf50'
+              : '1px solid var(--border-color)',
             color: 'var(--text-bright)',
           }}
         >
-          <Typography variant="h6" sx={{ color: 'var(--text-bright)', mb: 2 }}>
-            Completion Requirements
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography
+                variant="h6"
+                sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}
+              >
+                Generate Pairings
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={
+                generatingPairings ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <GroupsIcon />
+                )
+              }
+              onClick={handleGeneratePairings}
+              disabled={!status.canGeneratePairings || generatingPairings}
+              sx={{
+                backgroundColor: status.canGeneratePairings
+                  ? 'var(--accent-primary)'
+                  : 'var(--grey-300)',
+                '&:hover': {
+                  backgroundColor: status.canGeneratePairings
+                    ? 'var(--accent-hover)'
+                    : 'var(--grey-300)',
+                },
+                '&:disabled': {
+                  backgroundColor: 'var(--grey-300)',
+                  color: 'var(--text-secondary)',
+                },
+              }}
+            >
+              {generatingPairings ? 'Generating...' : 'Generate Pairings'}
+            </Button>
+          </Box>
+
+          <Typography
+            variant="body2"
+            sx={{ color: 'var(--text-secondary)', mb: 2 }}
+          >
+            Generate randomized round-robin pairings for all players and send
+            Discord notification.
           </Typography>
-          <List dense>
-            <ListItem>
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {status.requirements.placementsFilled.met ? (
-                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
-                ) : (
-                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
-                )}
-              </ListItemIcon>
-              <ListItemText
-                primary={status.requirements.placementsFilled.message}
-                sx={{
-                  color: status.requirements.placementsFilled.met
-                    ? '#4caf50'
-                    : 'var(--text-secondary)',
-                }}
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {status.requirements.decklistsSubmitted.met ? (
-                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
-                ) : (
-                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
-                )}
-              </ListItemIcon>
-              <ListItemText
-                primary={status.requirements.decklistsSubmitted.message}
-                sx={{
-                  color: status.requirements.decklistsSubmitted.met
-                    ? '#4caf50'
-                    : 'var(--text-secondary)',
-                }}
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {status.requirements.suggestionsSubmitted.met ? (
-                  <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
-                ) : (
-                  <CancelIcon sx={{ color: '#f44336', fontSize: 20 }} />
-                )}
-              </ListItemIcon>
-              <ListItemText
-                primary={status.requirements.suggestionsSubmitted.message}
-                sx={{
-                  color: status.requirements.suggestionsSubmitted.met
-                    ? '#4caf50'
-                    : 'var(--text-secondary)',
-                }}
-              />
-            </ListItem>
-          </List>
+
+          {status.pairingsGenerated ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CheckCircleIcon sx={{ color: '#4caf50' }} />
+              <Typography sx={{ color: '#4caf50' }}>
+                Pairings have been generated!
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              {!status.canGeneratePairings && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ErrorIcon sx={{ color: '#ff9800' }} />
+                  <Typography sx={{ color: '#ff9800' }}>
+                    {status.pairingsGenerated
+                      ? 'Pairings already exist for this session'
+                      : 'Event wheel must be spun before generating pairings'}
+                  </Typography>
+                </Box>
+              )}
+              {status.canGeneratePairings && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CheckCircleIcon sx={{ color: '#4caf50' }} />
+                  <Typography sx={{ color: '#4caf50' }}>
+                    Ready to generate pairings!
+                  </Typography>
+                </Box>
+              )}
+            </>
+          )}
         </Paper>
       )}
 
@@ -504,6 +798,31 @@ export default function ProgActionsPage() {
         <Divider sx={{ my: 2, borderColor: 'var(--border-color)' }} />
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={
+                autoSubmitingDecklists ? <CircularProgress size={20} /> : <AssignmentIcon />
+              }
+              onClick={handleAutoSubmitDecklists}
+              disabled={autoSubmitingDecklists}
+              sx={{
+                borderColor: '#ff9800',
+                color: '#ff9800',
+                '&:hover': {
+                  borderColor: '#f57c00',
+                  backgroundColor: 'rgba(255, 152, 0, 0.08)',
+                },
+              }}
+            >
+              {autoSubmitingDecklists ? 'Submitting Decklists...' : 'Auto-Submit Decklists'}
+            </Button>
+            <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+              Automatically submits decklists from all players
+            </Typography>
+          </Box>
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Button
               variant="outlined"
@@ -557,6 +876,30 @@ export default function ProgActionsPage() {
               selection phase
             </Typography>
           </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={
+                autoModeratorVoting ? <CircularProgress size={20} /> : <HowToVoteIcon />
+              }
+              onClick={handleAutoModeratorVote}
+              disabled={autoModeratorVoting}
+              sx={{
+                borderColor: '#ff9800',
+                color: '#ff9800',
+                '&:hover': {
+                  borderColor: '#f57c00',
+                  backgroundColor: 'rgba(255, 152, 0, 0.08)',
+                },
+              }}
+            >
+              {autoModeratorVoting ? 'Choosing...' : 'Auto-Choose Banlist (Moderator)'}
+            </Button>
+            <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+              Automatically makes the moderator choose a random banlist suggestion
+            </Typography>
+          </Box>
         </Box>
       </Paper>
 
@@ -575,7 +918,7 @@ export default function ProgActionsPage() {
             variant="h6"
             sx={{ color: '#f44336', mb: 2, fontWeight: 'bold' }}
           >
-            Danger Zone
+            Danger Zone - Reset Session
           </Typography>
           <Typography
             variant="body2"
@@ -611,6 +954,57 @@ export default function ProgActionsPage() {
           </Box>
         </Paper>
       )}
+
+      {/* Reset Entire Prog Section - Always visible */}
+      <Paper
+        sx={{
+          p: 3,
+          mt: 3,
+          backgroundColor: 'var(--bg-secondary)',
+          border: '3px solid #b71c1c',
+          color: 'var(--text-bright)',
+        }}
+      >
+        <Typography
+          variant="h6"
+          sx={{ color: '#d32f2f', mb: 2, fontWeight: 'bold' }}
+        >
+          ⚠️ EXTREME DANGER ZONE ⚠️
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={{ color: 'var(--text-secondary)', mb: 2 }}
+        >
+          This will reset the ENTIRE prog system back to initial state. Players remain but everything else is deleted.
+        </Typography>
+
+        <Divider sx={{ my: 2, borderColor: 'var(--border-color)' }} />
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={
+              resettingEntireProg ? <CircularProgress size={20} /> : <RestartAltIcon />
+            }
+            onClick={handleResetEntireProg}
+            disabled={resettingEntireProg}
+            sx={{
+              borderColor: '#d32f2f',
+              color: '#d32f2f',
+              fontWeight: 'bold',
+              '&:hover': {
+                borderColor: '#b71c1c',
+                backgroundColor: 'rgba(211, 47, 47, 0.12)',
+              },
+            }}
+          >
+            {resettingEntireProg ? 'Resetting Entire Prog...' : 'RESET ENTIRE PROG'}
+          </Button>
+          <Typography variant="body2" sx={{ color: '#f44336', fontWeight: 'bold' }}>
+            Empties ALL wallets, deletes ALL data (decklists, pairings, votes, banlists), resets ALL sessions. CANNOT BE UNDONE!
+          </Typography>
+        </Box>
+      </Paper>
     </Box>
   );
 }

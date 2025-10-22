@@ -25,6 +25,8 @@ export interface SessionStatusResult {
   } | null;
   canStartSession: boolean;
   canCompleteSession: boolean;
+  canGeneratePairings: boolean;
+  pairingsGenerated: boolean;
   startReasons: string[];
   completeReasons: string[];
   requirements: {
@@ -33,9 +35,12 @@ export interface SessionStatusResult {
     suggestionsSubmitted: RequirementStatus;
     nextBanlistExists: RequirementStatus;
     eventWheelSpun: RequirementStatus;
+    pairingsGenerated: RequirementStatus;
     victoryPointsAssigned: RequirementStatus;
     walletPointsAssigned: RequirementStatus;
+    votesSubmitted: RequirementStatus;
     moderatorSelected: RequirementStatus;
+    moderatorVoted: RequirementStatus;
   };
 }
 
@@ -65,6 +70,8 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         nextSession: null,
         canStartSession: false,
         canCompleteSession: false,
+        canGeneratePairings: false,
+        pairingsGenerated: false,
         startReasons: [],
         completeReasons: [],
         requirements: {
@@ -73,9 +80,12 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
           suggestionsSubmitted: { met: false, message: 'Unauthorized' },
           nextBanlistExists: { met: false, message: 'Unauthorized' },
           eventWheelSpun: { met: false, message: 'Unauthorized' },
+          pairingsGenerated: { met: false, message: 'Unauthorized' },
           victoryPointsAssigned: { met: false, message: 'Unauthorized' },
           walletPointsAssigned: { met: false, message: 'Unauthorized' },
+          votesSubmitted: { met: false, message: 'Unauthorized' },
           moderatorSelected: { met: false, message: 'Unauthorized' },
+          moderatorVoted: { met: false, message: 'Unauthorized' },
         },
       };
     }
@@ -103,9 +113,12 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
       suggestionsSubmitted: { met: false, message: '' },
       nextBanlistExists: { met: false, message: '' },
       eventWheelSpun: { met: false, message: '' },
+      pairingsGenerated: { met: false, message: '' },
       victoryPointsAssigned: { met: false, message: '' },
       walletPointsAssigned: { met: false, message: '' },
+      votesSubmitted: { met: false, message: '' },
       moderatorSelected: { met: false, message: '' },
+      moderatorVoted: { met: false, message: '' },
     };
 
     // Check if we can start a session
@@ -138,21 +151,7 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
     // Check if we can complete the active session
     let canCompleteSession = false;
     if (activeSession) {
-      // Check if all placement fields are filled
-      const placementsFilled = !!(activeSession.first && activeSession.second && activeSession.third &&
-          activeSession.fourth && activeSession.fifth && activeSession.sixth);
-
-      requirements.placementsFilled = {
-        met: placementsFilled,
-        message: placementsFilled
-          ? 'All placements filled'
-          : 'All placement fields (1st-6th) must be filled',
-      };
-      if (!placementsFilled) {
-        completeReasons.push(requirements.placementsFilled.message);
-      }
-
-      // Check if all players have submitted decklists for active session
+      // Step 2: Check if all players have submitted decklists for active session
       const decklistCount = await prisma.decklist.count({
         where: { sessionId: activeSession.id },
       });
@@ -168,7 +167,69 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         completeReasons.push(requirements.decklistsSubmitted.message);
       }
 
-      // Check if all players have submitted banlist suggestions for active session
+      // Step 3: Check if event wheel has been spun
+      requirements.eventWheelSpun = {
+        met: activeSession.eventWheelSpun,
+        message: activeSession.eventWheelSpun
+          ? 'Event wheel has been spun'
+          : 'Event wheel has not been spun',
+      };
+      if (!activeSession.eventWheelSpun) {
+        completeReasons.push(requirements.eventWheelSpun.message);
+      }
+
+      // Step 4: Check if pairings have been generated
+      const pairingsExist = await prisma.pairing.findFirst({
+        where: { sessionId: activeSession.id },
+      });
+
+      requirements.pairingsGenerated = {
+        met: !!pairingsExist,
+        message: pairingsExist
+          ? 'Pairings have been generated'
+          : 'Pairings have not been generated',
+      };
+      if (!pairingsExist) {
+        completeReasons.push(requirements.pairingsGenerated.message);
+      }
+
+      // Step 7: Check if all placement fields are filled (standings finalized)
+      const placementsFilled = !!(activeSession.first && activeSession.second && activeSession.third &&
+          activeSession.fourth && activeSession.fifth && activeSession.sixth);
+
+      requirements.placementsFilled = {
+        met: placementsFilled,
+        message: placementsFilled
+          ? 'All placements filled'
+          : 'All placement fields (1st-6th) must be filled',
+      };
+      if (!placementsFilled) {
+        completeReasons.push(requirements.placementsFilled.message);
+      }
+
+      // Step 8: Check if victory points have been assigned
+      requirements.victoryPointsAssigned = {
+        met: activeSession.victoryPointsAssigned,
+        message: activeSession.victoryPointsAssigned
+          ? 'Victory points have been assigned'
+          : 'Victory points have not been assigned',
+      };
+      if (!activeSession.victoryPointsAssigned) {
+        completeReasons.push(requirements.victoryPointsAssigned.message);
+      }
+
+      // Step 9: Check if wallet points have been assigned
+      requirements.walletPointsAssigned = {
+        met: activeSession.walletPointsAssigned,
+        message: activeSession.walletPointsAssigned
+          ? 'Wallet points have been assigned'
+          : 'Wallet points have not been assigned',
+      };
+      if (!activeSession.walletPointsAssigned) {
+        completeReasons.push(requirements.walletPointsAssigned.message);
+      }
+
+      // Step 11: Check if all players have submitted banlist suggestions for active session
       const activeBanlist = await prisma.banlist.findFirst({
         where: { sessionId: activeSession.number },
       });
@@ -196,40 +257,48 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         completeReasons.push(requirements.suggestionsSubmitted.message);
       }
 
-      // Check if event wheel has been spun
-      requirements.eventWheelSpun = {
-        met: activeSession.eventWheelSpun,
-        message: activeSession.eventWheelSpun
-          ? 'Event wheel has been spun'
-          : 'Event wheel has not been spun',
-      };
-      if (!activeSession.eventWheelSpun) {
-        completeReasons.push(requirements.eventWheelSpun.message);
+      // Step 12: Check if all players have voted at least twice on banlist suggestions
+      if (activeBanlist) {
+        // Get all players
+        const allPlayers = await prisma.player.findMany({
+          select: { id: true },
+        });
+
+        // For each player, count how many votes they have submitted
+        let playersWithInsufficientVotes = 0;
+        for (const player of allPlayers) {
+          const voteCount = await prisma.banlistSuggestionVote.count({
+            where: {
+              playerId: player.id,
+              suggestion: {
+                banlistId: activeBanlist.id,
+              },
+            },
+          });
+          if (voteCount < 2) {
+            playersWithInsufficientVotes++;
+          }
+        }
+
+        const votesComplete = playersWithInsufficientVotes === 0;
+        requirements.votesSubmitted = {
+          met: votesComplete,
+          message: votesComplete
+            ? 'All players have voted at least twice'
+            : `${playersWithInsufficientVotes} player(s) need to vote more (minimum 2 votes each)`,
+        };
+        if (!votesComplete) {
+          completeReasons.push(requirements.votesSubmitted.message);
+        }
+      } else {
+        requirements.votesSubmitted = {
+          met: false,
+          message: 'No banlist to vote on',
+        };
+        completeReasons.push(requirements.votesSubmitted.message);
       }
 
-      // Check if victory points have been assigned
-      requirements.victoryPointsAssigned = {
-        met: activeSession.victoryPointsAssigned,
-        message: activeSession.victoryPointsAssigned
-          ? 'Victory points have been assigned'
-          : 'Victory points have not been assigned',
-      };
-      if (!activeSession.victoryPointsAssigned) {
-        completeReasons.push(requirements.victoryPointsAssigned.message);
-      }
-
-      // Check if wallet points have been assigned
-      requirements.walletPointsAssigned = {
-        met: activeSession.walletPointsAssigned,
-        message: activeSession.walletPointsAssigned
-          ? 'Wallet points have been assigned'
-          : 'Wallet points have not been assigned',
-      };
-      if (!activeSession.walletPointsAssigned) {
-        completeReasons.push(requirements.walletPointsAssigned.message);
-      }
-
-      // Check if moderator has been selected
+      // Step 13: Check if moderator has been selected
       requirements.moderatorSelected = {
         met: !!activeSession.moderatorId,
         message: activeSession.moderatorId
@@ -240,7 +309,52 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         completeReasons.push(requirements.moderatorSelected.message);
       }
 
+      // Step 14: Check if moderator has chosen a banlist
+      if (activeBanlist) {
+        const chosenSuggestion = await prisma.banlistSuggestion.findFirst({
+          where: {
+            banlistId: activeBanlist.id,
+            chosen: true,
+          },
+        });
+
+        requirements.moderatorVoted = {
+          met: !!chosenSuggestion,
+          message: chosenSuggestion
+            ? 'Moderator has chosen a banlist'
+            : 'Moderator has not chosen a banlist',
+        };
+        if (!chosenSuggestion) {
+          completeReasons.push(requirements.moderatorVoted.message);
+        }
+      } else {
+        requirements.moderatorVoted = {
+          met: false,
+          message: 'No banlist to vote on',
+        };
+        completeReasons.push(requirements.moderatorVoted.message);
+      }
+
       canCompleteSession = completeReasons.length === 0;
+    }
+
+    // Check pairing generation status
+    let canGeneratePairings = false;
+    let pairingsGenerated = false;
+
+    if (activeSession) {
+      // Check if pairings already exist for the active session
+      const existingPairings = await prisma.pairing.findFirst({
+        where: { sessionId: activeSession.id },
+      });
+
+      pairingsGenerated = !!existingPairings;
+
+      // Can generate pairings if:
+      // - Active session exists
+      // - Event wheel has been spun
+      // - No pairings exist yet
+      canGeneratePairings = activeSession.eventWheelSpun && !pairingsGenerated;
     }
 
     return {
@@ -257,6 +371,8 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
       } : null,
       canStartSession,
       canCompleteSession,
+      canGeneratePairings,
+      pairingsGenerated,
       startReasons,
       completeReasons,
       requirements,
@@ -270,6 +386,8 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
       nextSession: null,
       canStartSession: false,
       canCompleteSession: false,
+      canGeneratePairings: false,
+      pairingsGenerated: false,
       startReasons: [],
       completeReasons: [],
       requirements: {
@@ -278,9 +396,12 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         suggestionsSubmitted: { met: false, message: 'Validation failed' },
         nextBanlistExists: { met: false, message: 'Validation failed' },
         eventWheelSpun: { met: false, message: 'Validation failed' },
+        pairingsGenerated: { met: false, message: 'Validation failed' },
         victoryPointsAssigned: { met: false, message: 'Validation failed' },
         walletPointsAssigned: { met: false, message: 'Validation failed' },
+        votesSubmitted: { met: false, message: 'Validation failed' },
         moderatorSelected: { met: false, message: 'Validation failed' },
+        moderatorVoted: { met: false, message: 'Validation failed' },
       },
     };
   }
@@ -371,32 +492,8 @@ export async function startSession(): Promise<StartSessionResult> {
       },
     });
 
-    // Get all players
-    const players = await prisma.player.findMany();
-    const playerIds = players.map(p => p.id);
-
-    // Generate round-robin pairings with randomization
-    const pairingData = generateRoundRobinPairings(playerIds);
-
-    // Save pairings to database
-    await prisma.pairing.createMany({
-      data: pairingData.map(p => ({
-        sessionId: session.id,
-        round: p.round,
-        player1Id: p.player1,
-        player2Id: p.player2,
-        player1wins: 0,
-        player2wins: 0,
-      })),
-    });
-
-    // Send Discord notification with all pairings
-    await notifyNewSessionWithPairings(session.id);
-
     // Revalidate relevant pages
     revalidatePath('/admin/prog_actions');
-    revalidatePath('/play/pairings');
-    revalidatePath('/play/standings');
     revalidatePath('/');
 
     return {
@@ -408,6 +505,100 @@ export async function startSession(): Promise<StartSessionResult> {
     return {
       success: false,
       error: 'Failed to start session',
+    };
+  }
+}
+
+export interface GeneratePairingsResult {
+  success: boolean;
+  error?: string;
+  numPairings?: number;
+}
+
+/**
+ * Generate pairings for the active session
+ * Must be called after event wheel is spun
+ */
+export async function generatePairings(): Promise<GeneratePairingsResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Check if event wheel has been spun
+    if (!activeSession.eventWheelSpun) {
+      return {
+        success: false,
+        error: 'Event wheel must be spun before generating pairings',
+      };
+    }
+
+    // Check if pairings already exist
+    const existingPairings = await prisma.pairing.findFirst({
+      where: { sessionId: activeSession.id },
+    });
+
+    if (existingPairings) {
+      return {
+        success: false,
+        error: 'Pairings have already been generated for this session',
+      };
+    }
+
+    // Get all players
+    const players = await prisma.player.findMany();
+    const playerIds = players.map(p => p.id);
+
+    if (playerIds.length < 2) {
+      return {
+        success: false,
+        error: 'At least 2 players are required to generate pairings',
+      };
+    }
+
+    // Generate round-robin pairings with randomization
+    const pairingData = generateRoundRobinPairings(playerIds);
+
+    // Save pairings to database
+    await prisma.pairing.createMany({
+      data: pairingData.map(p => ({
+        sessionId: activeSession.id,
+        round: p.round,
+        player1Id: p.player1,
+        player2Id: p.player2,
+        player1wins: 0,
+        player2wins: 0,
+      })),
+    });
+
+    // Send Discord notification with all pairings
+    const { notifyNewSessionWithPairings } = await import('@lib/discordClient');
+    await notifyNewSessionWithPairings(activeSession.id);
+
+    // Revalidate relevant pages
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/play/pairings');
+    revalidatePath('/play/standings');
+
+    return {
+      success: true,
+      numPairings: pairingData.length,
+    };
+  } catch (error) {
+    console.error('Error generating pairings:', error);
+    return {
+      success: false,
+      error: 'Failed to generate pairings',
     };
   }
 }
@@ -703,6 +894,92 @@ export async function autoCreateSuggestions(): Promise<AutoCreateSuggestionsResu
   }
 }
 
+export interface AutoSubmitDecklistsResult {
+  success: boolean;
+  error?: string;
+  decklistsSubmitted?: number;
+}
+
+export async function autoSubmitDecklists(): Promise<AutoSubmitDecklistsResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can use this test function' };
+    }
+
+    // Get current session
+    const session = await prisma.session.findFirst({
+      orderBy: { date: 'desc' }
+    })
+
+    if (!session) {
+      return { success: false, error: 'No session found!'}
+    }
+
+    // Get all players
+    const players = await prisma.player.findMany();
+
+    if (players.length === 0) {
+      return { success: false, error: 'No players found' };
+    }
+
+    const existingDecklists = await prisma.decklist.findMany({
+      where: { sessionId: session.id },
+      select: { playerId: true }
+    });
+
+    const playersWithDecklists = new Set(existingDecklists.map(d => d.playerId));
+
+    const playersNeedingDecklists = players.filter(p => !playersWithDecklists.has(p.id));
+
+    if (playersNeedingDecklists.length === 0) {
+      return { success: false, error: 'All players have already submitted decklists'};
+    }
+
+    // Read and parse testdeck.ydk
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const { parseYdkFile } = await import('@lib/ydkParser');
+
+    const ydkPath = path.join(process.cwd(), 'data', 'testdeck.ydk');
+    const ydkContent = await fs.readFile(ydkPath, 'utf-8');
+    const parseResult = parseYdkFile(ydkContent);
+
+    if (!parseResult.success || !parseResult.deck) {
+      return { success: false, error: `Failed to parse testdeck.ydk: ${parseResult.error}` };
+    }
+
+    const { maindeck, sidedeck, extradeck } = parseResult.deck;
+
+    // Create decklists for all players who need them
+    for (const player of playersNeedingDecklists) {
+      await prisma.decklist.create({
+        data: {
+          playerId: player.id,
+          sessionId: session.id,
+          maindeck: JSON.stringify(maindeck),
+          sidedeck: JSON.stringify(sidedeck),
+          extradeck: JSON.stringify(extradeck),
+        },
+      });
+    }
+
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/play/decklist');
+
+    return { success: true, decklistsSubmitted: playersNeedingDecklists.length };
+
+
+
+  } catch (error) {
+    console.error('Error auto-submitting decklists: ', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to auto-create suggestions',
+    };
+  }
+}
+
 export interface ResetSessionResult {
   success: boolean;
   error?: string;
@@ -810,6 +1087,308 @@ export async function resetSession(): Promise<ResetSessionResult> {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to reset session',
+    };
+  }
+}
+
+export interface AutoModeratorVoteResult {
+  success: boolean;
+  error?: string;
+  chosenSuggestionId?: number;
+  moderatorName?: string;
+}
+
+/**
+ * Test function: Auto-select a random banlist suggestion for the moderator
+ */
+export async function autoModeratorVote(): Promise<AutoModeratorVoteResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can use this test function' };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Check if moderator is selected
+    if (!activeSession.moderatorId) {
+      return { success: false, error: 'No moderator has been selected yet' };
+    }
+
+    // Get moderator info
+    const moderator = await prisma.player.findUnique({
+      where: { id: activeSession.moderatorId },
+    });
+
+    if (!moderator) {
+      return { success: false, error: 'Moderator not found' };
+    }
+
+    // Get active banlist
+    const activeBanlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!activeBanlist) {
+      return { success: false, error: 'No banlist found for active session' };
+    }
+
+    // Get all suggestions for this banlist
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      where: { banlistId: activeBanlist.id },
+    });
+
+    if (suggestions.length === 0) {
+      return { success: false, error: 'No banlist suggestions found' };
+    }
+
+    // Pick a random suggestion
+    const randomIndex = Math.floor(Math.random() * suggestions.length);
+    const chosenSuggestion = suggestions[randomIndex];
+
+    // Clear any existing chosen suggestion
+    await prisma.banlistSuggestion.updateMany({
+      where: {
+        banlistId: activeBanlist.id,
+        chosen: true,
+      },
+      data: {
+        chosen: false,
+        moderatorId: null,
+      },
+    });
+
+    // Mark it as chosen by the moderator
+    await prisma.banlistSuggestion.update({
+      where: { id: chosenSuggestion.id },
+      data: {
+        chosen: true,
+        moderatorId: activeSession.moderatorId,
+      },
+    });
+
+    // Delete any existing banlist for the next session (in case of reselection)
+    await prisma.banlist.deleteMany({
+      where: { sessionId: activeBanlist.sessionId + 1 },
+    });
+
+    // Create new banlist for next session by merging current with winning suggestion
+    // Parse current lists and create Sets for lookup
+    const currentBanned = new Set(activeBanlist.banned as number[]);
+    const currentLimited = new Set(activeBanlist.limited as number[]);
+    const currentSemilimited = new Set(activeBanlist.semilimited as number[]);
+    const currentUnlimited = new Set(activeBanlist.unlimited as number[]);
+
+    // Build map of card locations from winning suggestion
+    const cardLocations = new Map<
+      number,
+      'banned' | 'limited' | 'semilimited' | 'unlimited'
+    >();
+
+    (chosenSuggestion.banned as number[]).forEach((id) => cardLocations.set(id, 'banned'));
+    (chosenSuggestion.limited as number[]).forEach((id) => cardLocations.set(id, 'limited'));
+    (chosenSuggestion.semilimited as number[]).forEach((id) =>
+      cardLocations.set(id, 'semilimited'),
+    );
+    (chosenSuggestion.unlimited as number[]).forEach((id) =>
+      cardLocations.set(id, 'unlimited'),
+    );
+
+    // Create new lists by merging
+    const newBanned: number[] = [];
+    const newLimited: number[] = [];
+    const newSemilimited: number[] = [];
+    const newUnlimited: number[] = [];
+
+    // Helper to add card to appropriate list
+    const addToList = (cardId: number, category: string) => {
+      switch (category) {
+        case 'banned':
+          newBanned.push(cardId);
+          break;
+        case 'limited':
+          newLimited.push(cardId);
+          break;
+        case 'semilimited':
+          newSemilimited.push(cardId);
+          break;
+        case 'unlimited':
+          newUnlimited.push(cardId);
+          break;
+      }
+    };
+
+    // Get all unique card IDs from current banlist
+    const allCurrentCards = new Set([
+      ...currentBanned,
+      ...currentLimited,
+      ...currentSemilimited,
+      ...currentUnlimited,
+    ]);
+
+    // Process each card from current banlist
+    allCurrentCards.forEach((cardId) => {
+      // If card is mentioned in suggestion, use new location; otherwise keep current
+      if (cardLocations.has(cardId)) {
+        addToList(cardId, cardLocations.get(cardId)!);
+      } else {
+        // Keep in current category
+        if (currentBanned.has(cardId)) addToList(cardId, 'banned');
+        else if (currentLimited.has(cardId)) addToList(cardId, 'limited');
+        else if (currentSemilimited.has(cardId))
+          addToList(cardId, 'semilimited');
+        else if (currentUnlimited.has(cardId)) addToList(cardId, 'unlimited');
+      }
+    });
+
+    // Add any new cards from suggestion that weren't in current banlist
+    cardLocations.forEach((category, cardId) => {
+      if (!allCurrentCards.has(cardId)) {
+        addToList(cardId, category);
+      }
+    });
+
+    // Create new banlist for next session
+    await prisma.banlist.create({
+      data: {
+        sessionId: activeBanlist.sessionId + 1,
+        banned: newBanned,
+        limited: newLimited,
+        semilimited: newSemilimited,
+        unlimited: newUnlimited,
+      },
+    });
+
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/banlist/voting');
+    revalidatePath('/banlist/current');
+    revalidatePath('/');
+
+    // Send Discord notification for the new banlist
+    const { notifyBanlistChosen } = await import('@lib/discordClient');
+    await notifyBanlistChosen(activeBanlist.sessionId + 1);
+
+    return {
+      success: true,
+      chosenSuggestionId: chosenSuggestion.id,
+      moderatorName: moderator.name,
+    };
+  } catch (error) {
+    console.error('Error auto-voting as moderator:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to auto-vote',
+    };
+  }
+}
+
+export interface ResetEntireProgResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Resets the entire prog system to initial state
+ * - Keeps players intact
+ * - Empties all wallets
+ * - Removes all victory points
+ * - Removes all transactions
+ * - Removes all decklists
+ * - Removes all pairings
+ * - Removes all banlist suggestions and votes
+ * - Removes all banlists except creates empty banlist for session 1
+ * - Marks all sessions as not complete and not active
+ * - Resets all session fields (no date, no placements, no moderator, etc.)
+ */
+export async function resetEntireProg(): Promise<ResetEntireProgResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can reset the entire prog' };
+    }
+
+    // Delete all data in transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete all banlist suggestion votes
+      await tx.banlistSuggestionVote.deleteMany({});
+
+      // Delete all banlist suggestions
+      await tx.banlistSuggestion.deleteMany({});
+
+      // Delete all banlists
+      await tx.banlist.deleteMany({});
+
+      // Delete all pairings
+      await tx.pairing.deleteMany({});
+
+      // Delete all decklists
+      await tx.decklist.deleteMany({});
+
+      // Delete all victory points
+      await tx.victoryPoint.deleteMany({});
+
+      // Delete all wallet transactions
+      await tx.walletTransaction.deleteMany({});
+
+      // Reset all wallet amounts to 0
+      await tx.wallet.updateMany({
+        data: { amount: 0 },
+      });
+
+      // Reset all sessions
+      await tx.session.updateMany({
+        data: {
+          active: false,
+          complete: false,
+          date: null,
+          first: null,
+          second: null,
+          third: null,
+          fourth: null,
+          fifth: null,
+          sixth: null,
+          moderatorId: null,
+          eventWheelSpun: false,
+          victoryPointsAssigned: false,
+          walletPointsAssigned: false,
+        },
+      });
+
+      // Create empty banlist for session 1
+      await tx.banlist.create({
+        data: {
+          sessionId: 1,
+          banned: [],
+          limited: [],
+          semilimited: [],
+          unlimited: [],
+        },
+      });
+    });
+
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/play/pairings');
+    revalidatePath('/play/standings');
+    revalidatePath('/play/decklist');
+    revalidatePath('/banlist/voting');
+    revalidatePath('/banlist/suggestion');
+    revalidatePath('/banlist/current');
+    revalidatePath('/leaderboard');
+    revalidatePath('/');
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error resetting entire prog:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reset prog',
     };
   }
 }

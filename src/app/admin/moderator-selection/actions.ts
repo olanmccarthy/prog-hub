@@ -62,22 +62,12 @@ export async function getModeratorSelectionStatus(): Promise<ModeratorSelectionS
       };
     }
 
-    // Check if moderator already selected
+    // Check if moderator already selected (but allow re-spinning)
+    let currentModerator = null;
     if (activeSession.moderatorId) {
-      const moderator = await prisma.player.findUnique({
+      currentModerator = await prisma.player.findUnique({
         where: { id: activeSession.moderatorId },
       });
-
-      return {
-        success: true,
-        canSpin: false,
-        reason: 'Moderator has already been selected for this session',
-        players: [],
-        alreadySelected: true,
-        activeSessionNumber: activeSession.number,
-        selectedModeratorId: activeSession.moderatorId,
-        selectedModeratorName: moderator?.name,
-      };
     }
 
     // Get previous session to find last moderator
@@ -95,12 +85,13 @@ export async function getModeratorSelectionStatus(): Promise<ModeratorSelectionS
       orderBy: { name: 'asc' },
     });
 
-    // Check if all players have voted
+    // Check if all players have voted (relaxed in dev for testing)
+    const isDev = process.env.NODE_ENV === 'development';
     const activeBanlist = await prisma.banlist.findFirst({
       where: { sessionId: activeSession.number },
     });
 
-    if (!activeBanlist) {
+    if (!activeBanlist && !isDev) {
       return {
         success: true,
         canSpin: false,
@@ -116,11 +107,11 @@ export async function getModeratorSelectionStatus(): Promise<ModeratorSelectionS
     }
 
     // Get all suggestions for this banlist
-    const suggestions = await prisma.banlistSuggestion.findMany({
+    const suggestions = activeBanlist ? await prisma.banlistSuggestion.findMany({
       where: { banlistId: activeBanlist.id },
-    });
+    }) : [];
 
-    if (suggestions.length === 0) {
+    if (suggestions.length === 0 && !isDev) {
       return {
         success: true,
         canSpin: false,
@@ -149,7 +140,7 @@ export async function getModeratorSelectionStatus(): Promise<ModeratorSelectionS
     const totalPlayers = players.length;
     const allPlayersVoted = votedPlayers.length >= totalPlayers;
 
-    if (!allPlayersVoted) {
+    if (!allPlayersVoted && !isDev) {
       return {
         success: true,
         canSpin: false,
@@ -172,8 +163,10 @@ export async function getModeratorSelectionStatus(): Promise<ModeratorSelectionS
         name: p.name,
         wasLastModerator: p.id === lastModeratorId,
       })),
-      alreadySelected: false,
+      alreadySelected: !!activeSession.moderatorId,
       activeSessionNumber: activeSession.number,
+      selectedModeratorId: activeSession.moderatorId || undefined,
+      selectedModeratorName: currentModerator?.name,
     };
   } catch (error) {
     console.error('Error getting moderator selection status:', error);
@@ -219,14 +212,6 @@ export async function spinModeratorWheel(
       return {
         success: false,
         error: 'No active session found',
-      };
-    }
-
-    // Check if moderator already selected
-    if (activeSession.moderatorId) {
-      return {
-        success: false,
-        error: 'Moderator has already been selected for this session',
       };
     }
 

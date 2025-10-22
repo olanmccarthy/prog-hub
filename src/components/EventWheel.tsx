@@ -12,8 +12,9 @@ interface WheelSegment {
 
 interface EventWheelProps {
   segments: WheelSegment[];
-  onSpinComplete: (selectedIndex: number) => void;
+  onSpinComplete: (selectedIndex?: number) => void;
   spinning: boolean;
+  targetIndex?: number | null; // The segment to land on (null/undefined = random selection)
 }
 
 const WHEEL_COLORS = [
@@ -31,6 +32,7 @@ export default function EventWheel({
   segments,
   onSpinComplete,
   spinning,
+  targetIndex,
 }: EventWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [rotation, setRotation] = useState(0);
@@ -155,14 +157,64 @@ export default function EventWheel({
 
   // Spinning animation
   useEffect(() => {
-    if (!spinning) return;
+    if (!spinning) {
+      return;
+    }
 
+    const totalWeight = segments.reduce((sum, seg) => sum + seg.weight, 0);
     const duration = 5000; // 5 seconds
     const startTime = Date.now();
     const startRotation = rotation;
     const spins = 5; // Number of full rotations
-    const randomOffset = Math.random() * 360; // Random final position
-    const totalRotation = spins * 360 + randomOffset;
+
+    let targetRotation: number;
+    let finalSelectedIndex: number;
+
+    // If targetIndex is provided, calculate rotation to land on that segment
+    if (targetIndex !== null && targetIndex !== undefined) {
+      let segmentStartAngle = 0;
+
+      // Calculate where the target segment starts
+      // Segments are drawn starting at 0° (right/east) going counterclockwise in canvas coords
+      for (let i = 0; i < targetIndex; i++) {
+        const segmentAngle = (segments[i].weight / totalWeight) * 360;
+        segmentStartAngle += segmentAngle;
+      }
+
+      // Add half of the target segment to land in the middle
+      const targetSegmentAngle = (segments[targetIndex].weight / totalWeight) * 360;
+      const segmentMiddleAngle = segmentStartAngle + targetSegmentAngle / 2;
+
+      // Pointer is at top (270° in canvas coords, or -90° from right)
+      // We want to rotate the wheel so that segmentMiddleAngle aligns with 270°
+      // rotation needed = 270 - segmentMiddleAngle
+      targetRotation = (270 - segmentMiddleAngle + 360) % 360;
+      finalSelectedIndex = targetIndex;
+    } else {
+      // Random rotation
+      targetRotation = Math.random() * 360;
+
+      // Calculate which segment this rotation corresponds to
+      const normalizedRotation = (360 - targetRotation) % 360;
+      let currentAngle = 0;
+      finalSelectedIndex = 0;
+
+      for (let i = 0; i < segments.length; i++) {
+        const segmentAngle = (segments[i].weight / totalWeight) * 360;
+        if (normalizedRotation >= currentAngle && normalizedRotation < currentAngle + segmentAngle) {
+          finalSelectedIndex = i;
+          break;
+        }
+        currentAngle += segmentAngle;
+      }
+    }
+
+    // Calculate total rotation: multiple full spins + landing on target
+    let rotationDifference = targetRotation - (startRotation % 360);
+    if (rotationDifference < 0) {
+      rotationDifference += 360;
+    }
+    const totalRotation = spins * 360 + rotationDifference;
 
     const animate = () => {
       const now = Date.now();
@@ -178,23 +230,9 @@ export default function EventWheel({
       if (progress < 1) {
         animationRef.current = requestAnimationFrame(animate);
       } else {
-        // Calculate which segment was selected
-        const normalizedRotation = (360 - (newRotation % 360)) % 360;
-        const totalWeight = segments.reduce((sum, seg) => sum + seg.weight, 0);
-
-        let currentAngle = 0;
-        let selectedIndex = 0;
-
-        for (let i = 0; i < segments.length; i++) {
-          const segmentAngle = (segments[i].weight / totalWeight) * 360;
-          if (normalizedRotation >= currentAngle && normalizedRotation < currentAngle + segmentAngle) {
-            selectedIndex = i;
-            break;
-          }
-          currentAngle += segmentAngle;
-        }
-
-        onSpinComplete(selectedIndex);
+        // Ensure we're exactly at the target rotation
+        setRotation(targetRotation);
+        onSpinComplete(finalSelectedIndex);
       }
     };
 
@@ -205,7 +243,7 @@ export default function EventWheel({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [spinning]);
+  }, [spinning, targetIndex]);
 
   return (
     <Box

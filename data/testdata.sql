@@ -16,5 +16,4 @@ SELECT id, 0 FROM players;
 
 -- Default empty banlist for session 1
 -- Note: session_id stores the session number (not the auto-incremented id)
-INSERT INTO banlists (session_id, banned, limited, semilimited, unlimited) VALUES
-(1, '[]', '[]', '[]', '[]');
+INSERT INTO banlists (session_id, banned, limited, semilimited, unlimited) VALUES (1, '[]', '[]', '[]', '[]');

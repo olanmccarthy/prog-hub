@@ -53,6 +53,7 @@ export default function LoserPrizingPage() {
   const [status, setStatus] = useState<LoserPrizingStatusResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [spinning, setSpinning] = useState(false);
+  const [targetIndex, setTargetIndex] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [selectedResult, setSelectedResult] = useState<{
     name: string;
@@ -270,31 +271,46 @@ export default function LoserPrizingPage() {
     try {
       setError(null);
       setSuccess(null);
+
+      // First, get the result from the server
+      const result = await spinLoserPrizingWheel();
+
+      if (!result.success) {
+        setError(result.error || 'Failed to spin loser prizing wheel');
+        return;
+      }
+
+      // Store the result
+      setSelectedResult(result.selectedEntry || null);
+
+      // Find the index of the selected entry in our segments
+      if (result.selectedEntry) {
+        const index = status?.entries.findIndex(
+          (e) => e.name === result.selectedEntry!.name
+        );
+        if (index !== undefined && index >= 0) {
+          setTargetIndex(index);
+        } else {
+          setError('Could not find selected entry in wheel segments');
+          return;
+        }
+      } else {
+        // "No event" was selected - it's the last segment
+        setTargetIndex(status?.entries.length || 0);
+      }
+
+      // Start the spinning animation
       setSpinning(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initiate spin');
-      setSpinning(false);
     }
   };
 
-  const handleSpinComplete = async () => {
-    try {
-      // Get the actual result from the server
-      const result = await spinLoserPrizingWheel();
-
-      if (result.success) {
-        // Use the server's result instead of the index
-        setSelectedResult(result.selectedEntry || null);
-        setShowResult(true);
-        setSuccess('Loser prizing wheel spun successfully!');
-      } else {
-        setError(result.error || 'Failed to spin loser prizing wheel');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete spin');
-    } finally {
-      setSpinning(false);
-    }
+  const handleSpinComplete = () => {
+    // Animation complete, show the result modal
+    setShowResult(true);
+    setSuccess('Loser prizing wheel spun successfully!');
+    setSpinning(false);
   };
 
   const handleCloseResult = () => {
@@ -304,6 +320,7 @@ export default function LoserPrizingPage() {
   const handleSpinAgain = () => {
     setShowResult(false);
     setSelectedResult(null);
+    setTargetIndex(null);
     handleSpin();
   };
 
@@ -393,6 +410,7 @@ export default function LoserPrizingPage() {
               segments={wheelSegments}
               onSpinComplete={handleSpinComplete}
               spinning={spinning}
+              targetIndex={targetIndex}
             />
           )}
 

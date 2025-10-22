@@ -27,6 +27,7 @@ export default function ModeratorSelectionPage() {
   const [status, setStatus] = useState<ModeratorSelectionStatusResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [spinning, setSpinning] = useState(false);
+  const [targetIndex, setTargetIndex] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [selectedResult, setSelectedResult] = useState<{
     name: string;
@@ -83,34 +84,47 @@ export default function ModeratorSelectionPage() {
     try {
       setError(null);
       setSuccess(null);
-      setSpinning(true);
+
+      // First, get the result from the server
+      const result = await spinModeratorWheel(Array.from(selectedPlayers));
+
+      if (!result.success || !result.selectedModerator) {
+        setError(result.error || 'Failed to select moderator');
+        return;
+      }
+
+      // Store the result
+      setSelectedResult({
+        name: result.selectedModerator.name,
+        description: `${result.selectedModerator.name} has been selected as the moderator for this session`,
+      });
+
+      // Find the index of the selected moderator in the wheel segments
+      const selectedPlayersList = Array.from(selectedPlayers)
+        .map((playerId) => status?.players.find((p) => p.id === playerId))
+        .filter((p) => p !== undefined);
+
+      const index = selectedPlayersList.findIndex(
+        (p) => p!.id === result.selectedModerator!.id
+      );
+
+      if (index >= 0) {
+        setTargetIndex(index);
+        setSpinning(true);
+      } else {
+        setError('Could not find selected moderator in wheel segments');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initiate spin');
-      setSpinning(false);
     }
   };
 
-  const handleSpinComplete = async () => {
-    try {
-      // Get the actual result from the server
-      const result = await spinModeratorWheel(Array.from(selectedPlayers));
-
-      if (result.success && result.selectedModerator) {
-        setSelectedResult({
-          name: result.selectedModerator.name,
-          description: `${result.selectedModerator.name} has been selected as the moderator for this session`,
-        });
-        setShowResult(true);
-        setSuccess('Moderator selected successfully!');
-        await loadStatus();
-      } else {
-        setError(result.error || 'Failed to select moderator');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete spin');
-    } finally {
-      setSpinning(false);
-    }
+  const handleSpinComplete = () => {
+    // Animation complete, show the result modal
+    setShowResult(true);
+    setSuccess('Moderator selected successfully!');
+    setSpinning(false);
+    loadStatus();
   };
 
   const handleCloseResult = () => {
@@ -267,6 +281,7 @@ export default function ModeratorSelectionPage() {
                 segments={wheelSegments}
                 onSpinComplete={handleSpinComplete}
                 spinning={spinning}
+                targetIndex={targetIndex}
               />
             )}
 

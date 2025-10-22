@@ -2,28 +2,27 @@
 This will show how the prog is performed.
 
 None of these steps can be performed until the previous has been completed
-1. Admin starts the session (pairings are generated at this step)
+1. Admin starts the session
 2. Users submit their decklists for the session
 3. Prog event wheel is spun (optional, can affect tournament rules)
-4. Players play their games on Dueling Book
-5. Players submit their scores until all games have been played
-6. Standings get finalised
-7. Victory Point is assigned via passdown system
-8. Dollarydoos (wallet points) get assigned depending on who got the victory point
-9. Decklists are made public
-10. Players make their banlist suggestions
-11. Players each cast minimum 2 votes on banlist suggestions
-12. Moderator is chosen
-13. Moderator chooses which banlist to make legal for the next session
-14. Session is marked as complete
+4. Admin generates pairings (must happen after event wheel is spun)
+5. Players play their games on Dueling Book
+6. Players submit their scores until all games have been played
+7. Standings get finalised
+8. Victory Point is assigned via passdown system
+9. Dollarydoos (wallet points) get assigned depending on who got the victory point
+10. Decklists are made public
+11. Players make their banlist suggestions
+12. Players each cast minimum 2 votes on banlist suggestions
+13. Moderator is chosen
+14. Moderator chooses which banlist to make legal for the next session
+15. Session is marked as complete
 
 ## Detailed View from Backend
 
 ### 1. Admin starts the session
 - First session in db that is not marked as complete is set as active session
 - Session fields updated: `active=true`, `date=NOW()`
-- Round-robin pairings are generated for all players immediately
-- Discord notification sent with all pairings for all rounds
 - **Validation**: Next session must have a banlist created
 
 ### 2. Players submit their decklists for the session
@@ -39,23 +38,30 @@ None of these steps can be performed until the previous has been completed
 - **Validation**: All players must have submitted decklists first
 - **One-time only**: Cannot be spun again for the same session
 
-### 4. Players play their games on Dueling Book
-- Players use the pairings generated in step 1
+### 4. Admin generates pairings
+- Admin clicks "Generate Pairings" button at `/admin/prog_actions`
+- Round-robin pairings are generated for all players with randomization
+- Discord notification sent with all pairings for all rounds
+- **Validation**: Event wheel must have been spun first
+- **One-time only**: Cannot be generated again for the same session
+
+### 5. Players play their games on Dueling Book
+- Players use the pairings generated in step 4
 - Play matches externally (not tracked in this application)
 
-### 5. Players submit their scores until all games have been played
+### 6. Players submit their scores until all games have been played
 - Players/admins report match results at `/play/pairings`
 - Add win counts to the pairing entries (player1wins, player2wins)
 - Continue until all matches in all rounds are complete
 
-### 6. Standings get finalised
+### 7. Standings get finalised
 - Admin finalizes standings at `/play/standings`
 - Rankings calculated with tiebreakers: Match Wins → Game Wins → OMW%
 - Top 6 placements populated (first, second, third, fourth, fifth, sixth)
 - Discord notification sent with final standings
 - **Requirement**: Must be completed before victory points can be assigned
 
-### 7. Victory Point is assigned via passdown system
+### 8. Victory Point is assigned via passdown system
 - Admin goes to `/admin/victory-point-assignment`
 - Starting from 1st place, each player is offered the victory point
 - Player can "Take VP" or "Pass" to next player
@@ -64,7 +70,7 @@ None of these steps can be performed until the previous has been completed
 - **Validation**: Standings must be finalized (all placements filled)
 - **Requirement**: Must be completed before session can be marked complete
 
-### 8. Dollarydoos (wallet points) get assigned
+### 9. Dollarydoos (wallet points) get assigned
 - Happens automatically when victory point is assigned
 - All players EXCEPT last place and the VP taker receive wallet points
 - Amounts based on active `WalletPointBreakdown` configuration
@@ -72,23 +78,23 @@ None of these steps can be performed until the previous has been completed
 - Session gets `walletPointsAssigned=true` marked in database
 - Last place (6th) receives no wallet points regardless
 
-### 9. Decklists are made public
+### 10. Decklists are made public
 - After standings are finalized, all decklists become viewable
 - Players can view each other's deck compositions
 
-### 10. Players make their banlist suggestions
+### 11. Players make their banlist suggestions
 - Players submit suggestions at `/banlist/suggestion`
 - Each creates an entry in banlist_suggestions table
 - Suggestions include changes: banned, limited, semilimited, unlimited
 - **Requirement**: All players must submit before session can be marked complete
 
-### 11. Players each cast minimum 2 votes on banlist suggestions
-- Players vote at `/banlist/voting` (NOT YET IMPLEMENTED)
+### 12. Players each cast minimum 2 votes on banlist suggestions
+- Players vote at `/banlist/voting`
 - Each vote creates an entry in the banlist_suggestion_votes table
 - Cannot vote for their own suggestion
 - Minimum 2 votes required per player
 
-### 12. Moderator is chosen
+### 13. Moderator is chosen
 - Admin goes to `/admin/moderator-selection`
 - Admin selects which players are eligible (all by default except last session's moderator)
 - Admin spins wheel to randomly select moderator
@@ -97,7 +103,7 @@ None of these steps can be performed until the previous has been completed
 - **Validation**: All players must have voted on banlist suggestions
 - **Requirement**: Must be completed before session can be marked complete
 
-### 13. Moderator chooses which banlist to make legal for the next session
+### 14. Moderator chooses which banlist to make legal for the next session
 - Only the selected moderator can access this functionality at `/banlist/voting`
 - Moderator views all suggestions that received 2+ votes
 - Moderator selects winning suggestion with crown icon
@@ -109,7 +115,7 @@ None of these steps can be performed until the previous has been completed
 - Selected suggestion marked with `chosen=true`
 - Previous session's banlist can be deleted and reselected if moderator changes mind
 
-### 14. Session is marked as complete
+### 15. Session is marked as complete
 - Admin completes session at `/admin/prog_actions`
 - Session fields updated: `complete=true`, `active=false`
 - **Validation checks**:

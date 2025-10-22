@@ -20,11 +20,19 @@ import {
   type BanlistSuggestionHistory,
 } from './actions';
 import { CategoryCard } from '@components/CategoryCard';
+import { getCardEntriesFromIds } from '@lib/cardLookup';
+
+interface SuggestionWithNames extends BanlistSuggestionHistory {
+  bannedNames: string[];
+  limitedNames: string[];
+  semilimitedNames: string[];
+  unlimitedNames: string[];
+}
 
 function SuggestedBanlistCard({
   suggestion,
 }: {
-  suggestion: BanlistSuggestionHistory;
+  suggestion: SuggestionWithNames;
 }) {
   return (
     <>
@@ -48,18 +56,16 @@ function SuggestedBanlistCard({
           />
         )}
       </Box>
-      <CategoryCard title="Banned" cards={suggestion.banned} />
-      <CategoryCard title="Limited" cards={suggestion.limited} />
-      <CategoryCard title="Semi-Limited" cards={suggestion.semilimited} />
-      <CategoryCard title="Unlimited" cards={suggestion.unlimited} />
+      <CategoryCard title="Banned" cards={suggestion.bannedNames} />
+      <CategoryCard title="Limited" cards={suggestion.limitedNames} />
+      <CategoryCard title="Semi-Limited" cards={suggestion.semilimitedNames} />
+      <CategoryCard title="Unlimited" cards={suggestion.unlimitedNames} />
     </>
   );
 }
 
 export default function BanlistSuggestionHistoryPage() {
-  const [suggestions, setSuggestions] = useState<BanlistSuggestionHistory[]>(
-    [],
-  );
+  const [suggestions, setSuggestions] = useState<SuggestionWithNames[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<number | 'all'>('all');
@@ -73,7 +79,28 @@ export default function BanlistSuggestionHistoryPage() {
     setError(null);
     const result = await getAllBanlistSuggestions();
     if (result.success && result.suggestions) {
-      setSuggestions(result.suggestions);
+      // Convert card IDs to names for all suggestions
+      const suggestionsWithNames: SuggestionWithNames[] = await Promise.all(
+        result.suggestions.map(async (suggestion) => {
+          const [bannedCards, limitedCards, semilimitedCards, unlimitedCards] =
+            await Promise.all([
+              getCardEntriesFromIds(suggestion.banned),
+              getCardEntriesFromIds(suggestion.limited),
+              getCardEntriesFromIds(suggestion.semilimited),
+              getCardEntriesFromIds(suggestion.unlimited),
+            ]);
+
+          return {
+            ...suggestion,
+            bannedNames: bannedCards.map((c) => c.name),
+            limitedNames: limitedCards.map((c) => c.name),
+            semilimitedNames: semilimitedCards.map((c) => c.name),
+            unlimitedNames: unlimitedCards.map((c) => c.name),
+          };
+        })
+      );
+
+      setSuggestions(suggestionsWithNames);
     } else {
       setError(result.error || 'Failed to load suggestions');
     }
