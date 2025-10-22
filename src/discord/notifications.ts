@@ -336,7 +336,7 @@ async function sendToChannel(channelType: Parameters<typeof getChannel>[0], embe
     }
 
     await channel.send({ embeds: [embed] });
-    console.log(`[Discord] Notification sent to ${channelType} channel`);
+    console.log(`[Discord] Notification sent to ${channel.name} channel`);
     return true;
   } catch (error) {
     console.error(`[Discord] Error sending to ${channelType} channel:`, error);
