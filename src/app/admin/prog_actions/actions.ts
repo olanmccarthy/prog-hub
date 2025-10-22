@@ -32,6 +32,10 @@ export interface SessionStatusResult {
     decklistsSubmitted: RequirementStatus;
     suggestionsSubmitted: RequirementStatus;
     nextBanlistExists: RequirementStatus;
+    eventWheelSpun: RequirementStatus;
+    victoryPointsAssigned: RequirementStatus;
+    walletPointsAssigned: RequirementStatus;
+    moderatorSelected: RequirementStatus;
   };
 }
 
@@ -68,6 +72,10 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
           decklistsSubmitted: { met: false, message: 'Unauthorized' },
           suggestionsSubmitted: { met: false, message: 'Unauthorized' },
           nextBanlistExists: { met: false, message: 'Unauthorized' },
+          eventWheelSpun: { met: false, message: 'Unauthorized' },
+          victoryPointsAssigned: { met: false, message: 'Unauthorized' },
+          walletPointsAssigned: { met: false, message: 'Unauthorized' },
+          moderatorSelected: { met: false, message: 'Unauthorized' },
         },
       };
     }
@@ -94,6 +102,10 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
       decklistsSubmitted: { met: false, message: '' },
       suggestionsSubmitted: { met: false, message: '' },
       nextBanlistExists: { met: false, message: '' },
+      eventWheelSpun: { met: false, message: '' },
+      victoryPointsAssigned: { met: false, message: '' },
+      walletPointsAssigned: { met: false, message: '' },
+      moderatorSelected: { met: false, message: '' },
     };
 
     // Check if we can start a session
@@ -184,6 +196,50 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         completeReasons.push(requirements.suggestionsSubmitted.message);
       }
 
+      // Check if event wheel has been spun
+      requirements.eventWheelSpun = {
+        met: activeSession.eventWheelSpun,
+        message: activeSession.eventWheelSpun
+          ? 'Event wheel has been spun'
+          : 'Event wheel has not been spun',
+      };
+      if (!activeSession.eventWheelSpun) {
+        completeReasons.push(requirements.eventWheelSpun.message);
+      }
+
+      // Check if victory points have been assigned
+      requirements.victoryPointsAssigned = {
+        met: activeSession.victoryPointsAssigned,
+        message: activeSession.victoryPointsAssigned
+          ? 'Victory points have been assigned'
+          : 'Victory points have not been assigned',
+      };
+      if (!activeSession.victoryPointsAssigned) {
+        completeReasons.push(requirements.victoryPointsAssigned.message);
+      }
+
+      // Check if wallet points have been assigned
+      requirements.walletPointsAssigned = {
+        met: activeSession.walletPointsAssigned,
+        message: activeSession.walletPointsAssigned
+          ? 'Wallet points have been assigned'
+          : 'Wallet points have not been assigned',
+      };
+      if (!activeSession.walletPointsAssigned) {
+        completeReasons.push(requirements.walletPointsAssigned.message);
+      }
+
+      // Check if moderator has been selected
+      requirements.moderatorSelected = {
+        met: !!activeSession.moderatorId,
+        message: activeSession.moderatorId
+          ? 'Moderator has been selected'
+          : 'Moderator has not been selected',
+      };
+      if (!activeSession.moderatorId) {
+        completeReasons.push(requirements.moderatorSelected.message);
+      }
+
       canCompleteSession = completeReasons.length === 0;
     }
 
@@ -221,6 +277,10 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         decklistsSubmitted: { met: false, message: 'Validation failed' },
         suggestionsSubmitted: { met: false, message: 'Validation failed' },
         nextBanlistExists: { met: false, message: 'Validation failed' },
+        eventWheelSpun: { met: false, message: 'Validation failed' },
+        victoryPointsAssigned: { met: false, message: 'Validation failed' },
+        walletPointsAssigned: { met: false, message: 'Validation failed' },
+        moderatorSelected: { met: false, message: 'Validation failed' },
       },
     };
   }
@@ -639,6 +699,117 @@ export async function autoCreateSuggestions(): Promise<AutoCreateSuggestionsResu
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to auto-create suggestions',
+    };
+  }
+}
+
+export interface ResetSessionResult {
+  success: boolean;
+  error?: string;
+  sessionNumber?: number;
+}
+
+/**
+ * Reset the current active session and delete all associated data
+ */
+export async function resetSession(): Promise<ResetSessionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can reset sessions' };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Delete all associated data for this session
+    // Order matters due to foreign key constraints
+
+    // If wallet points were assigned, rollback the wallet amounts using transaction records
+    if (activeSession.walletPointsAssigned && activeSession.victoryPointsAssigned) {
+      // Get all wallet transactions for this session
+      const sessionTransactions = await prisma.walletTransaction.findMany({
+        where: { sessionId: activeSession.id },
+        include: { wallet: true },
+      });
+
+      // Rollback each transaction
+      for (const transaction of sessionTransactions) {
+        // Only rollback if wallet has enough balance
+        await prisma.wallet.updateMany({
+          where: {
+            id: transaction.walletId,
+            amount: { gte: transaction.amount },
+          },
+          data: {
+            amount: {
+              decrement: transaction.amount,
+            },
+          },
+        });
+      }
+
+      // Delete the wallet transactions for this session
+      await prisma.walletTransaction.deleteMany({
+        where: { sessionId: activeSession.id },
+      });
+    }
+
+    // Delete victory points
+    await prisma.victoryPoint.deleteMany({
+      where: { sessionId: activeSession.id },
+    });
+
+    // Delete pairings
+    await prisma.pairing.deleteMany({
+      where: { sessionId: activeSession.id },
+    });
+
+    // Delete decklists
+    await prisma.decklist.deleteMany({
+      where: { sessionId: activeSession.id },
+    });
+
+    // Reset session fields
+    await prisma.session.update({
+      where: { id: activeSession.id },
+      data: {
+        active: false,
+        complete: false,
+        date: null,
+        first: null,
+        second: null,
+        third: null,
+        fourth: null,
+        fifth: null,
+        sixth: null,
+        eventWheelSpun: false,
+        victoryPointsAssigned: false,
+        walletPointsAssigned: false,
+      },
+    });
+
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/play/pairings');
+    revalidatePath('/play/standings');
+    revalidatePath('/play/decklist-submission');
+    revalidatePath('/admin/victory-point-assignment');
+
+    return {
+      success: true,
+      sessionNumber: activeSession.number,
+    };
+  } catch (error) {
+    console.error('Error resetting session:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reset session',
     };
   }
 }

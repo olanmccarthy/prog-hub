@@ -265,6 +265,20 @@ export async function createBanlistSuggestion(input: CreateSuggestionInput): Pro
       },
     });
 
+    // Check if all players have now submitted suggestions
+    const [totalPlayers, totalSuggestions] = await Promise.all([
+      prisma.player.count(),
+      prisma.banlistSuggestion.count({
+        where: { banlistId: input.banlistId },
+      }),
+    ]);
+
+    // If all players have submitted, send Discord notification
+    if (totalSuggestions >= totalPlayers) {
+      const { notifyBanlistSuggestions } = await import('@lib/discordClient');
+      await notifyBanlistSuggestions(session.id);
+    }
+
     return { success: true, id: suggestion.id };
   } catch (error) {
     return {

@@ -18,7 +18,7 @@ const sqsClient = new SQSClient({
 const QUEUE_URL = process.env.DISCORD_SQS_QUEUE_URL || '';
 
 interface NotificationMessage {
-  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'generic';
+  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'generic' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction';
   payload: Record<string, unknown>;
 }
 
@@ -106,5 +106,60 @@ export async function notifyGeneric(title: string, description: string, color?: 
   return sendToQueue({
     type: 'generic',
     payload: { title, description, color },
+  });
+}
+
+/**
+ * Send notification when a banlist is chosen by moderator
+ */
+export async function notifyBanlistChosen(sessionId: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing banlist chosen notification for session ${sessionId}`);
+  return sendToQueue({
+    type: 'banlist-chosen',
+    payload: { sessionId },
+  });
+}
+
+/**
+ * Send notifications for all banlist suggestions
+ */
+export async function notifyBanlistSuggestions(sessionId: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing banlist suggestions notifications for session ${sessionId}`);
+  return sendToQueue({
+    type: 'banlist-suggestions',
+    payload: { sessionId },
+  });
+}
+
+/**
+ * Send notification when leaderboard is updated (victory point assigned)
+ */
+export async function notifyLeaderboard(sessionId: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing leaderboard notification for session ${sessionId}`);
+  return sendToQueue({
+    type: 'leaderboard',
+    payload: { sessionId },
+  });
+}
+
+/**
+ * Send notification when wallet points are updated
+ */
+export async function notifyWalletUpdate(sessionId: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing wallet update notification for session ${sessionId}`);
+  return sendToQueue({
+    type: 'wallet-update',
+    payload: { sessionId },
+  });
+}
+
+/**
+ * Send notification when a player makes a purchase
+ */
+export async function notifyTransaction(playerId: number, setId: number, amount: number, sessionId?: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing transaction notification for player ${playerId}`);
+  return sendToQueue({
+    type: 'transaction',
+    payload: { playerId, setId, amount, sessionId },
   });
 }

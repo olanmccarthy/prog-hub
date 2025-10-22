@@ -38,6 +38,17 @@
   --warning: #dcdcaa;           /* Warning states */
   --error: #f48771;             /* Error states */
   --info: #75beff;              /* Info states */
+
+  /* Event wheel colors - distinct, repeating pattern */
+  --wheel-color-1: #ff6b6b;     /* Red */
+  --wheel-color-2: #4ecdc4;     /* Teal */
+  --wheel-color-3: #ffe66d;     /* Yellow */
+  --wheel-color-4: #a8e6cf;     /* Mint */
+  --wheel-color-5: #ffd3b6;     /* Peach */
+  --wheel-color-6: #ffaaa5;     /* Pink */
+  --wheel-color-7: #95e1d3;     /* Light teal */
+  --wheel-color-8: #f38181;     /* Light red */
+  --wheel-color-no-event: #666666;  /* Grey for "no event" */
 }
 
 html,

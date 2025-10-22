@@ -101,8 +101,8 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
     // Get total number of players
     const totalPlayers = await prisma.player.count();
 
-    // Check if current user is moderator (for now, player ID 1 is always moderator)
-    const isModerator = user.playerId === 1;
+    // Check if current user is the moderator for this session
+    const isModerator = activeSession.moderatorId === user.playerId;
 
     // Check if a suggestion has already been chosen
     const chosenSuggestion = suggestions.find((s) => s.chosen);
@@ -283,8 +283,24 @@ export async function selectWinningSuggestion(
       return { success: false, error: 'Not authenticated' };
     }
 
-    // Check if user is moderator (player ID 1)
-    if (user.playerId !== 1) {
+    // Get active session to check moderator
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Check if user is the moderator for this session
+    if (!activeSession.moderatorId) {
+      return {
+        success: false,
+        error: 'No moderator has been selected for this session yet',
+      };
+    }
+
+    if (user.playerId !== activeSession.moderatorId) {
       return {
         success: false,
         error: 'Only the moderator can select the winning suggestion',
@@ -354,6 +370,10 @@ export async function selectWinningSuggestion(
     revalidatePath('/banlist/voting');
     revalidatePath('/banlist/current');
     revalidatePath('/');
+
+    // Send Discord notification for the new banlist
+    const { notifyBanlistChosen } = await import('@lib/discordClient');
+    await notifyBanlistChosen(currentBanlist.sessionId + 1);
 
     return { success: true };
   } catch (error) {
@@ -445,14 +465,6 @@ export async function clearWinningSuggestion(): Promise<SelectWinnerResult> {
       return { success: false, error: 'Not authenticated' };
     }
 
-    // Check if user is moderator (player ID 1)
-    if (user.playerId !== 1) {
-      return {
-        success: false,
-        error: 'Only the moderator can clear the winning suggestion',
-      };
-    }
-
     // Get the active session
     const activeSession = await prisma.session.findFirst({
       where: { active: true },
@@ -462,6 +474,21 @@ export async function clearWinningSuggestion(): Promise<SelectWinnerResult> {
       return {
         success: false,
         error: 'No active session found',
+      };
+    }
+
+    // Check if user is the moderator for this session
+    if (!activeSession.moderatorId) {
+      return {
+        success: false,
+        error: 'No moderator has been selected for this session yet',
+      };
+    }
+
+    if (user.playerId !== activeSession.moderatorId) {
+      return {
+        success: false,
+        error: 'Only the moderator can clear the winning suggestion',
       };
     }
 

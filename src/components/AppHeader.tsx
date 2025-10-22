@@ -23,7 +23,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useState, MouseEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 
 const allNavigationRoutes = [
@@ -37,7 +37,12 @@ const allNavigationRoutes = [
     subItems: [
       { label: 'Player List', path: '/admin/player-list' },
       { label: 'Set Manager', path: '/admin/set-manager' },
-      { label: 'Actions', path: '/admin/prog_actions' },
+      { label: 'Session Management', path: '/admin/prog_actions' },
+      { label: 'Event Wheel', path: '/admin/event-wheel' },
+      { label: 'Victory Point Assignment', path: '/admin/victory-point-assignment' },
+      { label: 'Loser Prizing', path: '/admin/loser-prizing' },
+      { label: 'Moderator Selection', path: '/admin/moderator-selection' },
+      { label: 'Wallet Point Breakdown', path: '/admin/wallet-breakdown' },
     ],
   },
   {
@@ -83,10 +88,20 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
   );
   const theme = useTheme();
   const router = useRouter();
+  const pathname = usePathname();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [anchorEls, setAnchorEls] = useState<Record<string, HTMLElement | null>>({});
+
+  // Helper function to check if a route or its subitems are active
+  const isRouteActive = (route: typeof navigationRoutes[number]): boolean => {
+    if (route.path && pathname === route.path) return true;
+    if (route.subItems) {
+      return route.subItems.some(subItem => pathname === subItem.path);
+    }
+    return false;
+  };
 
   const toggleDrawer = (open: boolean) => () => {
     setDrawerOpen(open);
@@ -182,6 +197,7 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
           {!isMobile && (
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
               {navigationRoutes.map((route) => {
+                const isActive = isRouteActive(route);
                 if (route.subItems) {
                   return (
                     <Box key={route.label}>
@@ -191,6 +207,8 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
                           textTransform: 'none',
                           fontSize: '1rem',
                           color: 'var(--text-bright)',
+                          borderBottom: isActive ? '2px solid white' : '2px solid transparent',
+                          borderRadius: 0,
                           '&:hover': {
                             backgroundColor: 'var(--bg-tertiary)',
                           }
@@ -250,6 +268,8 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
                       textTransform: 'none',
                       fontSize: '1rem',
                       color: 'var(--text-bright)',
+                      borderBottom: isActive ? '2px solid white' : '2px solid transparent',
+                      borderRadius: 0,
                       '&:hover': {
                         backgroundColor: 'var(--bg-tertiary)',
                       }
@@ -312,6 +332,7 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
             <Divider sx={{ borderColor: 'var(--border-color)' }} />
             <List>
               {navigationRoutes.map((route) => {
+                const isActive = isRouteActive(route);
                 if (route.subItems) {
                   return (
                     <div key={route.label}>
@@ -319,6 +340,7 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
                         data-expandable
                         onClick={() => toggleSection(route.label)}
                         sx={{
+                          borderLeft: isActive ? '3px solid white' : '3px solid transparent',
                           '&:hover': {
                             backgroundColor: 'var(--bg-tertiary)',
                           }
@@ -326,7 +348,7 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
                       >
                         <ListItemText
                           primary={route.label}
-                          sx={{ color: 'var(--text-primary)' }}
+                          sx={{ color: isActive ? 'var(--text-bright)' : 'var(--text-primary)' }}
                         />
                         <Typography sx={{ color: 'var(--text-secondary)' }}>
                           {expandedSections[route.label] ? '−' : '+'}
@@ -338,24 +360,28 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
                         unmountOnExit
                       >
                         <List component="div" disablePadding>
-                          {route.subItems.map((subItem) => (
-                            <ListItemButton
-                              key={subItem.path}
-                              sx={{
-                                pl: 4,
-                                '&:hover': {
-                                  backgroundColor: 'var(--bg-tertiary)',
-                                }
-                              }}
-                              component={Link}
-                              href={subItem.path}
-                            >
-                              <ListItemText
-                                primary={subItem.label}
-                                sx={{ color: 'var(--text-primary)' }}
-                              />
-                            </ListItemButton>
-                          ))}
+                          {route.subItems.map((subItem) => {
+                            const isSubItemActive = pathname === subItem.path;
+                            return (
+                              <ListItemButton
+                                key={subItem.path}
+                                sx={{
+                                  pl: 4,
+                                  borderLeft: isSubItemActive ? '3px solid white' : '3px solid transparent',
+                                  '&:hover': {
+                                    backgroundColor: 'var(--bg-tertiary)',
+                                  }
+                                }}
+                                component={Link}
+                                href={subItem.path}
+                              >
+                                <ListItemText
+                                  primary={subItem.label}
+                                  sx={{ color: isSubItemActive ? 'var(--text-bright)' : 'var(--text-primary)' }}
+                                />
+                              </ListItemButton>
+                            );
+                          })}
                         </List>
                       </Collapse>
                     </div>
@@ -368,6 +394,7 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
                       component={Link}
                       href={route.path}
                       sx={{
+                        borderLeft: isActive ? '3px solid white' : '3px solid transparent',
                         '&:hover': {
                           backgroundColor: 'var(--bg-tertiary)',
                         }
@@ -375,7 +402,7 @@ export default function AppHeader({ isAdmin }: AppHeaderProps) {
                     >
                       <ListItemText
                         primary={route.label}
-                        sx={{ color: 'var(--text-primary)' }}
+                        sx={{ color: isActive ? 'var(--text-bright)' : 'var(--text-primary)' }}
                       />
                     </ListItemButton>
                   </ListItem>

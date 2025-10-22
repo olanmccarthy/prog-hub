@@ -60,27 +60,40 @@ export function isBotReady(): boolean {
 }
 
 /**
- * Get the configured notification channel
+ * Get a specific Discord channel by type
  */
-export async function getNotificationChannel(): Promise<TextChannel | null> {
+export async function getChannel(channelType: keyof typeof discordConfig.channels): Promise<TextChannel | null> {
   if (!client || !isReady) {
     console.warn('[Discord] Bot not ready');
     return null;
   }
 
+  const channelId = discordConfig.channels[channelType];
+  if (!channelId) {
+    console.warn(`[Discord] No channel ID configured for ${channelType}`);
+    return null;
+  }
+
   try {
-    const channel = await client.channels.fetch(discordConfig.channelId);
+    const channel = await client.channels.fetch(channelId);
 
     if (!channel || !channel.isTextBased()) {
-      console.error('[Discord] Channel not found or is not text-based');
+      console.error(`[Discord] Channel ${channelType} not found or is not text-based`);
       return null;
     }
 
     return channel as TextChannel;
   } catch (error) {
-    console.error('[Discord] Error fetching channel:', error);
+    console.error(`[Discord] Error fetching ${channelType} channel:`, error);
     return null;
   }
+}
+
+/**
+ * Get the configured notification channel (legacy - defaults to pairings)
+ */
+export async function getNotificationChannel(): Promise<TextChannel | null> {
+  return getChannel('pairings');
 }
 
 /**

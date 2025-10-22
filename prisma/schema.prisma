@@ -29,12 +29,16 @@ model Player {
 }
 
 model Session {
-  id       Int      @id @default(autoincrement())
-  number   Int      @unique
-  date     DateTime?
-  setId    Int?     @map("set_id")
-  complete Boolean  @default(false)
-  active   Boolean  @default(false)
+  id                    Int       @id @default(autoincrement())
+  number                Int       @unique
+  date                  DateTime?
+  setId                 Int?      @map("set_id")
+  complete              Boolean   @default(false)
+  active                Boolean   @default(false)
+  eventWheelSpun        Boolean   @default(false) @map("event_wheel_spun")
+  victoryPointsAssigned Boolean   @default(false) @map("victory_points_assigned")
+  walletPointsAssigned  Boolean   @default(false) @map("wallet_points_assigned")
+  moderatorId           Int?      @map("moderator_id")
 
   // Top placements (stored as nullable integers, not relations)
   first  Int?
@@ -45,13 +49,15 @@ model Session {
   sixth  Int?
 
   // Relations
-  set           Set?           @relation(fields: [setId], references: [id])
-  decklists     Decklist[]
-  pairings      Pairing[]
-  victoryPoints VictoryPoint[]
+  set                Set?                @relation(fields: [setId], references: [id])
+  decklists          Decklist[]
+  pairings           Pairing[]
+  victoryPoints      VictoryPoint[]
+  walletTransactions WalletTransaction[]
 
   @@index([active], map: "idx_active")
   @@index([complete], map: "idx_complete")
+  @@index([moderatorId], map: "idx_moderator_id")
   @@map("sessions")
 }
 
@@ -166,10 +172,30 @@ model Wallet {
   amount   Int @default(0)
 
   // Relations
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  player             Player              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  walletTransactions WalletTransaction[]
 
   @@index([playerId], map: "idx_wallet_player_id")
   @@map("wallets")
+}
+
+model WalletTransaction {
+  id        Int      @id @default(autoincrement())
+  walletId  Int      @map("wallet_id")
+  sessionId Int?     @map("session_id")
+  amount    Int      // Positive for credits, negative for debits
+  type      String   @db.VarChar(50) // e.g., "VICTORY_POINT_AWARD", "SHOP_PURCHASE", "MANUAL_ADJUSTMENT"
+  description String? @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([walletId], map: "idx_wallet_transaction_wallet_id")
+  @@index([sessionId], map: "idx_wallet_transaction_session_id")
+  @@index([createdAt], map: "idx_wallet_transaction_created_at")
+  @@map("wallet_transactions")
 }
 
 model Transaction {
@@ -223,4 +249,36 @@ model Set {
   @@index([setCode], map: "idx_set_code")
   @@index([tcgDate], map: "idx_tcg_date")
   @@map("sets")
+}
+
+model EventWheelEntry {
+  id          Int    @id @default(autoincrement())
+  name        String @db.VarChar(255)
+  description String @db.Text
+  chance      Int
+
+  @@map("event_wheel_entries")
+}
+
+model LoserPrizingEntry {
+  id          Int    @id @default(autoincrement())
+  name        String @db.VarChar(255)
+  description String @db.Text
+  chance      Int
+
+  @@map("loser_prizing_entries")
+}
+
+model WalletPointBreakdown {
+  id     Int     @id @default(autoincrement())
+  name   String  @db.VarChar(255)
+  first  Int     @map("first")
+  second Int     @map("second")
+  third  Int     @map("third")
+  fourth Int     @map("fourth")
+  fifth  Int     @map("fifth")
+  sixth  Int     @map("sixth")
+  active Boolean @default(false)
+
+  @@map("wallet_point_breakdowns")
 }

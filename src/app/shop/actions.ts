@@ -209,6 +209,20 @@ export async function purchaseSet(setId: number): Promise<PurchaseSetResult> {
       return updatedWallet;
     });
 
+    // Get active session for notification context
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    // Send Discord notification for the transaction
+    const { notifyTransaction } = await import('@lib/discordClient');
+    await notifyTransaction(
+      currentUser.playerId,
+      setId,
+      purchaseCost,
+      activeSession?.id
+    );
+
     return {
       success: true,
       newBalance: result.amount,

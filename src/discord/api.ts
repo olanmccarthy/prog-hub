@@ -5,7 +5,18 @@
  */
 
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand, Message } from '@aws-sdk/client-sqs';
-import { notifyNewSessionWithPairings, notifyPairings, notifyStandings, notifyNewSession, notifyGeneric } from './notifications';
+import {
+  notifyNewSessionWithPairings,
+  notifyPairings,
+  notifyStandings,
+  notifyNewSession,
+  notifyGeneric,
+  notifyBanlistChosen,
+  notifyBanlistSuggestions,
+  notifyLeaderboard,
+  notifyWalletUpdate,
+  notifyTransaction
+} from './notifications';
 
 const sqsClient = new SQSClient({
   region: process.env.AWS_REGION || 'us-east-1',
@@ -19,7 +30,7 @@ const QUEUE_URL = process.env.DISCORD_SQS_QUEUE_URL || '';
 const POLL_INTERVAL = parseInt(process.env.SQS_POLL_INTERVAL || '60000', 10); // Default 1 minute
 
 interface NotificationMessage {
-  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'generic';
+  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'generic' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction';
   payload: Record<string, unknown>;
 }
 
@@ -73,6 +84,23 @@ function validateGenericPayload(payload: Record<string, unknown>): { title: stri
   return { title, description, color: color as number | undefined };
 }
 
+function validateTransactionPayload(payload: Record<string, unknown>): { playerId: number; setId: number; amount: number; sessionId?: number } {
+  const { playerId, setId, amount, sessionId } = payload;
+  if (!isNumber(playerId)) {
+    throw new Error(`Invalid playerId: expected number, got ${typeof playerId}`);
+  }
+  if (!isNumber(setId)) {
+    throw new Error(`Invalid setId: expected number, got ${typeof setId}`);
+  }
+  if (!isNumber(amount)) {
+    throw new Error(`Invalid amount: expected number, got ${typeof amount}`);
+  }
+  if (sessionId !== undefined && !isNumber(sessionId)) {
+    throw new Error(`Invalid sessionId: expected number or undefined, got ${typeof sessionId}`);
+  }
+  return { playerId, setId, amount, sessionId: sessionId as number | undefined };
+}
+
 /**
  * Process a single message from the queue
  */
@@ -108,6 +136,28 @@ async function processMessage(message: Message): Promise<void> {
       case 'generic': {
         const { title, description, color } = validateGenericPayload(notification.payload);
         await notifyGeneric(title, description, color);
+        break;
+      }
+
+      case 'banlist-chosen':
+        await notifyBanlistChosen(validateSessionId(notification.payload));
+        break;
+
+      case 'banlist-suggestions':
+        await notifyBanlistSuggestions(validateSessionId(notification.payload));
+        break;
+
+      case 'leaderboard':
+        await notifyLeaderboard(validateSessionId(notification.payload));
+        break;
+
+      case 'wallet-update':
+        await notifyWalletUpdate(validateSessionId(notification.payload));
+        break;
+
+      case 'transaction': {
+        const { playerId, setId, amount, sessionId } = validateTransactionPayload(notification.payload);
+        await notifyTransaction(playerId, setId, amount, sessionId);
         break;
       }
 

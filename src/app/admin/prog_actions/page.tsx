@@ -21,7 +21,8 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
-import { getSessionStatus, startSession, completeSession, autoVoteAllPlayers, autoCreateSuggestions, SessionStatusResult } from './actions';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import { getSessionStatus, startSession, completeSession, autoVoteAllPlayers, autoCreateSuggestions, resetSession, SessionStatusResult } from './actions';
 
 export default function ProgActionsPage() {
   const [status, setStatus] = useState<SessionStatusResult | null>(null);
@@ -30,6 +31,7 @@ export default function ProgActionsPage() {
   const [completing, setCompleting] = useState(false);
   const [autoVoting, setAutoVoting] = useState(false);
   const [autoCreating, setAutoCreating] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -132,6 +134,31 @@ export default function ProgActionsPage() {
       setError(err instanceof Error ? err.message : 'Failed to auto-create suggestions');
     } finally {
       setAutoCreating(false);
+    }
+  };
+
+  const handleResetSession = async () => {
+    if (!confirm('Are you sure you want to reset the current session? This will delete ALL session data including pairings, decklists, victory points, and standings. This action cannot be undone!')) {
+      return;
+    }
+
+    try {
+      setResetting(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await resetSession();
+
+      if (result.success) {
+        setSuccess(`Session ${result.sessionNumber} has been reset successfully! All session data has been deleted.`);
+        await loadStatus();
+      } else {
+        setError(result.error || 'Failed to reset session');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset session');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -532,6 +559,58 @@ export default function ProgActionsPage() {
           </Box>
         </Box>
       </Paper>
+
+      {/* Reset Session Section */}
+      {status?.activeSession && (
+        <Paper
+          sx={{
+            p: 3,
+            mt: 3,
+            backgroundColor: 'var(--bg-secondary)',
+            border: '2px solid #f44336',
+            color: 'var(--text-bright)',
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{ color: '#f44336', mb: 2, fontWeight: 'bold' }}
+          >
+            Danger Zone
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{ color: 'var(--text-secondary)', mb: 2 }}
+          >
+            This action will completely reset the current session and delete all associated data.
+          </Typography>
+
+          <Divider sx={{ my: 2, borderColor: 'var(--border-color)' }} />
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={
+                resetting ? <CircularProgress size={20} /> : <RestartAltIcon />
+              }
+              onClick={handleResetSession}
+              disabled={resetting}
+              sx={{
+                borderColor: '#f44336',
+                color: '#f44336',
+                '&:hover': {
+                  borderColor: '#d32f2f',
+                  backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                },
+              }}
+            >
+              {resetting ? 'Resetting...' : 'Reset Session'}
+            </Button>
+            <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+              Deletes all pairings, decklists, victory points, and standings. Marks session as incomplete and inactive.
+            </Typography>
+          </Box>
+        </Paper>
+      )}
     </Box>
   );
 }
