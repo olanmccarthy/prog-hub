@@ -79,7 +79,7 @@ export async function notifyPairings(sessionId: number, round: number): Promise<
 
     embed.setFooter({ text: 'Good luck, duelists!' });
 
-    return await sendNotification(embed);
+    return await sendToChannel('pairings', embed);
   } catch (error) {
     console.error('[Discord] Error preparing pairings notification:', error);
     return false;
@@ -193,7 +193,7 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
 
     embed.setFooter({ text: 'Congratulations to all participants!' });
 
-    return await sendNotification(embed);
+    return await sendToChannel('standings', embed);
   } catch (error) {
     console.error('[Discord] Error preparing standings notification:', error);
     return false;
@@ -268,7 +268,7 @@ export async function notifyNewSessionWithPairings(sessionId: number): Promise<b
 
     embed.setFooter({ text: `${pairings.length} matches across ${rounds.length} rounds` });
 
-    return await sendNotification(embed);
+    return await sendToChannel('pairings', embed);
   } catch (error) {
     console.error('[Discord] Error preparing new session notification:', error);
     return false;
@@ -292,7 +292,7 @@ export async function notifyNewSession(sessionNumber: number): Promise<boolean> 
       .setTimestamp()
       .setFooter({ text: 'Good luck in this session!' });
 
-    return await sendNotification(embed);
+    return await sendToChannel('pairings', embed);
   } catch (error) {
     console.error('[Discord] Error preparing new session notification:', error);
     return false;
