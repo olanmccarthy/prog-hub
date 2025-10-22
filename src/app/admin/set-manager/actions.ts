@@ -12,6 +12,7 @@ export interface SetData {
   isASession: boolean;
   isPurchasable: boolean;
   isPromo: boolean;
+  price: number;
 }
 
 export interface UpdateSetBooleansInput {
@@ -40,6 +41,7 @@ export async function getAllSets(): Promise<SetData[]> {
         isASession: true,
         isPurchasable: true,
         isPromo: true,
+        price: true,
       },
     });
 
@@ -84,6 +86,7 @@ export async function updateSetBooleans(input: UpdateSetBooleansInput): Promise<
         isASession: true,
         isPurchasable: true,
         isPromo: true,
+        price: true,
       },
     });
 
@@ -94,5 +97,58 @@ export async function updateSetBooleans(input: UpdateSetBooleansInput): Promise<
   } catch (error) {
     console.error('Error updating set:', error);
     throw error instanceof Error ? error : new Error('Failed to update set');
+  }
+}
+
+export interface UpdateSetPriceInput {
+  id: number;
+  price: number;
+}
+
+export async function updateSetPrice(input: UpdateSetPriceInput): Promise<SetData> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      throw new Error('Unauthorized: Admin access required');
+    }
+
+    const { id, price } = input;
+
+    if (!id) {
+      throw new Error('Set ID is required');
+    }
+
+    if (price < 0) {
+      throw new Error('Price cannot be negative');
+    }
+
+    const set = await prisma.set.findUnique({ where: { id } });
+
+    if (!set) {
+      throw new Error('Set not found');
+    }
+
+    const updatedSet = await prisma.set.update({
+      where: { id },
+      data: { price },
+      select: {
+        id: true,
+        setName: true,
+        setCode: true,
+        tcgDate: true,
+        isASession: true,
+        isPurchasable: true,
+        isPromo: true,
+        price: true,
+      },
+    });
+
+    // Revalidate the set manager page
+    revalidatePath('/admin/set-manager');
+
+    return updatedSet;
+  } catch (error) {
+    console.error('Error updating set price:', error);
+    throw error instanceof Error ? error : new Error('Failed to update set price');
   }
 }

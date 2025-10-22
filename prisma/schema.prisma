@@ -241,6 +241,7 @@ model Set {
   isASession    Boolean  @default(false) @map("is_a_session")
   isPurchasable Boolean  @default(true) @map("is_purchasable")
   isPromo       Boolean  @default(false) @map("is_promo")
+  price         Int      @default(4)
 
   // Relations
   sessions     Session[]
@@ -271,7 +272,7 @@ model LoserPrizingEntry {
 
 model WalletPointBreakdown {
   id     Int     @id @default(autoincrement())
-  name   String  @db.VarChar(255)
+  name   String  @default("Unnamed") @db.VarChar(255)
   first  Int     @map("first")
   second Int     @map("second")
   third  Int     @map("third")

@@ -18,7 +18,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import { getAllSets, updateSetBooleans, type SetData } from './actions';
+import { getAllSets, updateSetBooleans, updateSetPrice, type SetData } from './actions';
 
 export default function SetManagerPage() {
   const [sets, setSets] = useState<SetData[]>([]);
@@ -84,6 +84,32 @@ export default function SetManagerPage() {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update set');
+    } finally {
+      setUpdatingSetId(null);
+    }
+  };
+
+  const handlePriceUpdate = async (setId: number, newPrice: string) => {
+    try {
+      const price = parseInt(newPrice, 10);
+      if (isNaN(price) || price < 0) {
+        setError('Price must be a non-negative number');
+        return;
+      }
+
+      setUpdatingSetId(setId);
+      setError(null);
+
+      await updateSetPrice({ id: setId, price });
+
+      // Update local state
+      setSets((prevSets) =>
+        prevSets.map((s) =>
+          s.id === setId ? { ...s, price } : s
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update price');
     } finally {
       setUpdatingSetId(null);
     }
@@ -181,6 +207,9 @@ export default function SetManagerPage() {
                 TCG Date
               </TableCell>
               <TableCell align="center" sx={{ color: 'var(--text-bright)', fontWeight: 'bold', backgroundColor: 'var(--bg-secondary)' }}>
+                Price
+              </TableCell>
+              <TableCell align="center" sx={{ color: 'var(--text-bright)', fontWeight: 'bold', backgroundColor: 'var(--bg-secondary)' }}>
                 Is a Session
               </TableCell>
               <TableCell align="center" sx={{ color: 'var(--text-bright)', fontWeight: 'bold', backgroundColor: 'var(--bg-secondary)' }}>
@@ -194,7 +223,7 @@ export default function SetManagerPage() {
           <TableBody>
             {filteredSets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ color: 'var(--text-secondary)' }}>
+                <TableCell colSpan={7} align="center" sx={{ color: 'var(--text-secondary)' }}>
                   {searchQuery ? 'No sets found matching your search.' : 'No sets found.'}
                 </TableCell>
               </TableRow>
@@ -216,6 +245,25 @@ export default function SetManagerPage() {
                   </TableCell>
                   <TableCell sx={{ color: 'var(--text-primary)' }}>
                     {formatDate(set.tcgDate)}
+                  </TableCell>
+                  <TableCell align="center">
+                    <TextField
+                      type="number"
+                      value={set.price}
+                      onChange={(e) => handlePriceUpdate(set.id, e.target.value)}
+                      disabled={updatingSetId === set.id}
+                      size="small"
+                      inputProps={{ min: 0, style: { textAlign: 'center' } }}
+                      sx={{
+                        width: '80px',
+                        '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                        '& .MuiOutlinedInput-root': {
+                          '& fieldset': { borderColor: 'var(--border-color)' },
+                          '&:hover fieldset': { borderColor: 'var(--accent-primary)' },
+                          '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' },
+                        },
+                      }}
+                    />
                   </TableCell>
                   <TableCell align="center">
                     <Checkbox
