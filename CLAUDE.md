@@ -180,7 +180,10 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
   - `src/app/shop/`: Browse and purchase sets with wallet points
   - `src/app/leaderboard/`: View Victory Point and Wallet rankings
   - `src/app/stats/`: Stats browsing (placeholder)
-  - Each page directory contains an `actions.ts` file with server actions
+  - **IMPORTANT**: Each page directory should contain exactly ONE `actions.ts` file with ALL server actions for that page
+    - Never create multiple action files (e.g., `actions.ts` and `other-actions.ts`) in the same directory
+    - If a page needs actions from different domains, organize them with comments in a single `actions.ts` file
+    - Example: `src/app/play/pairings/actions.ts` contains both pairing and standings actions, clearly separated by comments
 - **`prisma/schema.prisma`**: Prisma schema defining all data models
 - **`src/types/`**: Custom TypeScript type definitions
 - **`src/lib/`**: Shared utilities
