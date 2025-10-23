@@ -9,6 +9,7 @@ import {
   Alert,
   CircularProgress,
   Chip,
+  TextField,
 } from "@mui/material";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -25,6 +26,7 @@ export default function DecklistSubmissionPage() {
   const [existingDecklistDate, setExistingDecklistDate] = useState<Date | null>(null);
   const [parsedDeck, setParsedDeck] = useState<ParsedDeck | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [deckName, setDeckName] = useState<string>("");
 
   useEffect(() => {
     fetchSessionInfo();
@@ -91,7 +93,8 @@ export default function DecklistSubmissionPage() {
       const result = await submitDecklist(
         parsedDeck.maindeck,
         parsedDeck.sidedeck,
-        parsedDeck.extradeck
+        parsedDeck.extradeck,
+        deckName.trim() || undefined
       );
 
       if (result.success) {
@@ -178,6 +181,16 @@ export default function DecklistSubmissionPage() {
         </Box>
 
         <Box sx={{ mb: 3 }}>
+          <TextField
+            label="Deck Name (Optional)"
+            value={deckName}
+            onChange={(e) => setDeckName(e.target.value)}
+            fullWidth
+            placeholder="e.g., Blue-Eyes Deck, Tearlaments, etc."
+            sx={{ mb: 2 }}
+            inputProps={{ maxLength: 255 }}
+          />
+
           <Button
             variant="contained"
             component="label"

@@ -12,8 +12,12 @@ import {
   AccordionSummary,
   AccordionDetails,
   Divider,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ImageIcon from '@mui/icons-material/Image';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
 import { getBanlistHistory, type BanlistHistoryItem } from './actions';
 import { getCardEntriesFromIds } from '@lib/cardLookup';
 
@@ -57,11 +61,13 @@ function BanlistCardList({
 function BanlistHistoryCard({
   banlist,
   banlistWithNames,
+  viewMode,
 }: {
   banlist: BanlistHistoryItem;
   banlistWithNames: BanlistWithNames | null;
+  viewMode: 'image' | 'text';
 }) {
-  const [isLoading, setIsLoading] = useState(!banlistWithNames);
+  const isLoading = !banlistWithNames;
 
   return (
     <Accordion
@@ -102,6 +108,34 @@ function BanlistHistoryCard({
         {isLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
             <CircularProgress size={24} />
+          </Box>
+        ) : viewMode === 'image' ? (
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '400px',
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/banlist-images/${banlist.sessionId}.png`}
+              alt={`Banlist for Session ${banlist.sessionId}`}
+              style={{
+                maxWidth: '100%',
+                height: 'auto',
+                display: 'block',
+              }}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const parent = target.parentElement;
+                if (parent) {
+                  parent.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 2rem;">Banlist image not yet generated. Please view in text mode.</div>`;
+                }
+              }}
+            />
           </Box>
         ) : banlistWithNames ? (
           <>
@@ -168,6 +202,7 @@ export default function BanlistHistoryPage() {
   >(new Map());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'image' | 'text'>('image');
 
   useEffect(() => {
     fetchBanlistHistory();
@@ -207,17 +242,35 @@ export default function BanlistHistoryPage() {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ mb: 4 }}>
-        <Typography
-          variant="h3"
-          component="h1"
-          sx={{
-            color: 'var(--text-bright)',
-            mb: 2,
-            fontWeight: 'bold',
-          }}
-        >
-          Banlist History
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+          <Typography
+            variant="h3"
+            component="h1"
+            sx={{
+              color: 'var(--text-bright)',
+              fontWeight: 'bold',
+            }}
+          >
+            Banlist History
+          </Typography>
+
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={(_, newMode) => newMode && setViewMode(newMode)}
+            size="small"
+          >
+            <ToggleButton value="image" aria-label="image view">
+              <ImageIcon sx={{ mr: 1 }} />
+              Image
+            </ToggleButton>
+            <ToggleButton value="text" aria-label="text view">
+              <TextFieldsIcon sx={{ mr: 1 }} />
+              Text
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+
         <Typography variant="body1" sx={{ color: 'var(--text-secondary)' }}>
           Browse all historical banlists in descending order (most recent
           first).
@@ -270,6 +323,7 @@ export default function BanlistHistoryPage() {
               key={banlist.id}
               banlist={banlist}
               banlistWithNames={banlistsWithNames.get(banlist.id) || null}
+              viewMode={viewMode}
             />
           ))}
         </Box>

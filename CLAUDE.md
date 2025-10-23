@@ -482,6 +482,7 @@ All wallet changes are tracked with:
   - Pairings: View and update match results for the current session (✅ Complete)
   - Standings: View ranked standings with tiebreakers, finalize standings (admin only) (✅ Complete)
   - Decklist Submission: Upload .ydk files with validation and submission (✅ Complete)
+  - Decklists: View submitted decklists with filters for session/player; current session hidden until standings finalized (✅ Complete)
 - **Banlist Pages**:
   - Suggestion Creation: Submit banlist suggestions with card management UI (✅ Complete)
   - Suggestion History: View previously submitted suggestions (✅ Complete)

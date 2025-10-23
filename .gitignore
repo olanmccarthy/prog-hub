@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated deck images
+/public/deck-images/*.png
+/public/banlist-images/*.png

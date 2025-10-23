@@ -11,21 +11,93 @@ import {
   CircularProgress,
   Alert,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { getPairings, updatePairing, PairingData } from "./actions";
+import {
+  getStandings,
+  PlayerStanding,
+  canFinalizeStandings,
+  finalizeStandings,
+  checkIsAdmin,
+  checkIsFinalized
+} from "../standings/actions";
 
+type ViewMode = "pairings" | "standings";
 type GroupBy = "round" | "player";
 
 export default function PairingsPage() {
+  // View mode state
+  const [viewMode, setViewMode] = useState<ViewMode>("pairings");
+
+  // Pairings state
   const [pairings, setPairings] = useState<PairingData[]>([]);
   const [groupBy, setGroupBy] = useState<GroupBy>("round");
+
+  // Standings state
+  const [standings, setStandings] = useState<PlayerStanding[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [canFinalize, setCanFinalize] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+
+  // Shared state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
 
   useEffect(() => {
+    checkAdmin();
     fetchPairings();
   }, []);
+
+  useEffect(() => {
+    if (viewMode === "standings" && sessionId) {
+      fetchStandings();
+      checkCanFinalize(sessionId);
+      checkFinalized(sessionId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, sessionId]);
+
+  const checkAdmin = async () => {
+    try {
+      const result = await checkIsAdmin();
+      setIsAdmin(result.isAdmin);
+    } catch (err) {
+      console.error('Error checking admin status:', err);
+    }
+  };
+
+  const checkCanFinalize = async (sessionId: number) => {
+    try {
+      const result = await canFinalizeStandings(sessionId);
+      setCanFinalize(result.canFinalize);
+    } catch (err) {
+      console.error('Error checking finalize status:', err);
+    }
+  };
+
+  const checkFinalized = async (sessionId: number) => {
+    try {
+      const result = await checkIsFinalized(sessionId);
+      setIsFinalized(result.isFinalized);
+    } catch (err) {
+      console.error('Error checking finalized status:', err);
+    }
+  };
 
   const fetchPairings = async () => {
     try {
@@ -46,6 +118,53 @@ export default function PairingsPage() {
     }
   };
 
+  const fetchStandings = async () => {
+    if (!sessionId) return;
+
+    try {
+      setLoading(true);
+      const result = await getStandings(sessionId);
+
+      if (result.success && result.standings) {
+        setStandings(result.standings);
+        setError(null);
+      } else {
+        setError(result.error || "Failed to fetch standings");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinalizeClick = () => {
+    setConfirmDialogOpen(true);
+  };
+
+  const handleConfirmFinalize = async () => {
+    if (!sessionId) return;
+
+    setFinalizing(true);
+    try {
+      const result = await finalizeStandings(sessionId);
+
+      if (result.success) {
+        setIsFinalized(true);
+        setCanFinalize(false);
+        setConfirmDialogOpen(false);
+        // Refresh standings to show updated state
+        await fetchStandings();
+      } else {
+        setError(result.error || "Failed to finalize standings");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to finalize");
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
   const handleUpdatePairing = async (
     pairingId: number,
     player1wins: number,
@@ -61,6 +180,11 @@ export default function PairingsPage() {
           )
         );
         setError(null);
+
+        // Refresh standings if in standings view
+        if (viewMode === "standings") {
+          fetchStandings();
+        }
       } else {
         setError(result.error || "Failed to update pairing");
       }
@@ -137,7 +261,7 @@ export default function PairingsPage() {
               mb: -0.5,
             }}
           >
-            <Typography variant="caption" sx={{ color: "#ffffff" }}>
+            <Typography variant="caption">
               Round {pairing.round}
             </Typography>
           </Box>
@@ -150,7 +274,6 @@ export default function PairingsPage() {
               minWidth: 250,
               maxWidth: 400,
               width: "100%",
-              backgroundColor: "var(--grey-100)",
             }}
           >
             <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -169,7 +292,6 @@ export default function PairingsPage() {
               <Typography
                 variant="body1"
                 sx={{
-                  color: "#ffffff",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -191,36 +313,8 @@ export default function PairingsPage() {
                     e.target.value
                   )
                 }
-                inputProps={{ min: 0, max: 2, style: { textAlign: "center", color: "#ffffff" } }}
-                sx={{
-                  width: "60px",
-                  "& .MuiOutlinedInput-root": {
-                    color: "#ffffff",
-                    "& fieldset": {
-                      borderColor: "#ffffff",
-                      borderWidth: "1px",
-                    },
-                    "&:hover fieldset": {
-                      borderColor: "var(--accent-blue)",
-                      borderWidth: "1px",
-                    },
-                    "&.Mui-focused fieldset": {
-                      borderColor: "var(--accent-blue)",
-                      borderWidth: "2px",
-                    },
-                  },
-                  "& input[type=number]": {
-                    MozAppearance: "textfield",
-                  },
-                  "& input[type=number]::-webkit-outer-spin-button": {
-                    WebkitAppearance: "none",
-                    margin: 0,
-                  },
-                  "& input[type=number]::-webkit-inner-spin-button": {
-                    WebkitAppearance: "none",
-                    margin: 0,
-                  },
-                }}
+                inputProps={{ min: 0, max: 2, style: { textAlign: "center" } }}
+                sx={{ width: "60px" }}
               />
               <TextField
                 type="number"
@@ -233,36 +327,8 @@ export default function PairingsPage() {
                     e.target.value
                   )
                 }
-                inputProps={{ min: 0, max: 2, style: { textAlign: "center", color: "#ffffff" } }}
-                sx={{
-                  width: "60px",
-                  "& .MuiOutlinedInput-root": {
-                    color: "#ffffff",
-                    "& fieldset": {
-                      borderColor: "#ffffff",
-                      borderWidth: "1px",
-                    },
-                    "&:hover fieldset": {
-                      borderColor: "var(--accent-blue)",
-                      borderWidth: "1px",
-                    },
-                    "&.Mui-focused fieldset": {
-                      borderColor: "var(--accent-blue)",
-                      borderWidth: "2px",
-                    },
-                  },
-                  "& input[type=number]": {
-                    MozAppearance: "textfield",
-                  },
-                  "& input[type=number]::-webkit-outer-spin-button": {
-                    WebkitAppearance: "none",
-                    margin: 0,
-                  },
-                  "& input[type=number]::-webkit-inner-spin-button": {
-                    WebkitAppearance: "none",
-                    margin: 0,
-                  },
-                }}
+                inputProps={{ min: 0, max: 2, style: { textAlign: "center" } }}
+                sx={{ width: "60px" }}
               />
             </Box>
           </Paper>
@@ -281,30 +347,13 @@ export default function PairingsPage() {
           gap: 2,
           flex: "1 1 0",
           minWidth: 0,
-          backgroundColor: "var(--grey-100)",
         }}
       >
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
-          <Typography
-            variant="body1"
-            sx={{
-              color: "#ffffff",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <Typography variant="body1">
             {pairing.player1.name}
           </Typography>
-          <Typography
-            variant="body1"
-            sx={{
-              color: "#ffffff",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <Typography variant="body1">
             {pairing.player2.name}
           </Typography>
         </Box>
@@ -317,36 +366,8 @@ export default function PairingsPage() {
             onChange={(e) =>
               handleWinsChange(pairing.id, "player1", e.target.value)
             }
-            inputProps={{ min: 0, max: 2, style: { textAlign: "center", color: "#ffffff" } }}
-            sx={{
-              width: "60px",
-              "& .MuiOutlinedInput-root": {
-                color: "#ffffff",
-                "& fieldset": {
-                  borderColor: "#ffffff",
-                  borderWidth: "1px",
-                },
-                "&:hover fieldset": {
-                  borderColor: "var(--accent-blue)",
-                  borderWidth: "1px",
-                },
-                "&.Mui-focused fieldset": {
-                  borderColor: "var(--accent-blue)",
-                  borderWidth: "2px",
-                },
-              },
-              "& input[type=number]": {
-                MozAppearance: "textfield",
-              },
-              "& input[type=number]::-webkit-outer-spin-button": {
-                WebkitAppearance: "none",
-                margin: 0,
-              },
-              "& input[type=number]::-webkit-inner-spin-button": {
-                WebkitAppearance: "none",
-                margin: 0,
-              },
-            }}
+            inputProps={{ min: 0, max: 2, style: { textAlign: "center" } }}
+            sx={{ width: "60px" }}
           />
           <TextField
             type="number"
@@ -355,36 +376,8 @@ export default function PairingsPage() {
             onChange={(e) =>
               handleWinsChange(pairing.id, "player2", e.target.value)
             }
-            inputProps={{ min: 0, max: 2, style: { textAlign: "center", color: "#ffffff" } }}
-            sx={{
-              width: "60px",
-              "& .MuiOutlinedInput-root": {
-                color: "#ffffff",
-                "& fieldset": {
-                  borderColor: "#ffffff",
-                  borderWidth: "1px",
-                },
-                "&:hover fieldset": {
-                  borderColor: "var(--accent-blue)",
-                  borderWidth: "1px",
-                },
-                "&.Mui-focused fieldset": {
-                  borderColor: "var(--accent-blue)",
-                  borderWidth: "2px",
-                },
-              },
-              "& input[type=number]": {
-                MozAppearance: "textfield",
-              },
-              "& input[type=number]::-webkit-outer-spin-button": {
-                WebkitAppearance: "none",
-                margin: 0,
-              },
-              "& input[type=number]::-webkit-inner-spin-button": {
-                WebkitAppearance: "none",
-                margin: 0,
-              },
-            }}
+            inputProps={{ min: 0, max: 2, style: { textAlign: "center" } }}
+            sx={{ width: "60px" }}
           />
         </Box>
       </Paper>
@@ -408,16 +401,37 @@ export default function PairingsPage() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1400, mx: "auto" }}>
+      {/* Header with View Toggle */}
       <Box
         sx={{
           mb: 3,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          flexWrap: "wrap",
+          gap: 2,
         }}
       >
-        <Typography variant="h4">
-          Pairings
+        {/* View Mode Toggle - Left Side */}
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={(_, newValue) => {
+            if (newValue !== null) setViewMode(newValue);
+          }}
+          aria-label="view mode"
+        >
+          <ToggleButton value="pairings" aria-label="pairings view">
+            Pairings
+          </ToggleButton>
+          <ToggleButton value="standings" aria-label="standings view">
+            Standings
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        {/* Title - Center/Right */}
+        <Typography variant="h4" sx={{ flex: 1, textAlign: "center" }}>
+          {viewMode === "pairings" ? "Pairings" : "Standings"}
           {sessionId && (
             <Typography
               component="span"
@@ -428,6 +442,28 @@ export default function PairingsPage() {
             </Typography>
           )}
         </Typography>
+
+        {/* Pairings Group Toggle - Right Side (only shown in pairings view) */}
+        {viewMode === "pairings" && (
+          <ToggleButtonGroup
+            value={groupBy}
+            exclusive
+            onChange={(_, newValue) => {
+              if (newValue !== null) setGroupBy(newValue);
+            }}
+            aria-label="group by"
+          >
+            <ToggleButton value="round" aria-label="group by round">
+              By Round
+            </ToggleButton>
+            <ToggleButton value="player" aria-label="group by player">
+              By Player
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
+
+        {/* Placeholder for layout balance in standings view */}
+        {viewMode === "standings" && <Box sx={{ width: 200 }} />}
       </Box>
 
       {error && (
@@ -436,72 +472,146 @@ export default function PairingsPage() {
         </Alert>
       )}
 
-      <Box sx={{ mb: 3 }}>
-        <ToggleButtonGroup
-          value={groupBy}
-          exclusive
-          onChange={(_, newValue) => {
-            if (newValue !== null) setGroupBy(newValue);
-          }}
-          aria-label="group by"
-          sx={{
-            "& .MuiToggleButton-root": {
-              color: "rgba(255, 255, 255, 0.7)",
-              borderColor: "rgba(255, 255, 255, 0.23)",
-              "&.Mui-selected": {
-                backgroundColor: "primary.main",
-                color: "primary.contrastText",
-                borderColor: "primary.main",
-                "&:hover": {
-                  backgroundColor: "primary.dark",
-                },
-              },
-              "&:hover": {
-                backgroundColor: "rgba(255, 255, 255, 0.08)",
-              },
-            },
-          }}
-        >
-          <ToggleButton value="round" aria-label="group by round">
-            Group by Round
-          </ToggleButton>
-          <ToggleButton value="player" aria-label="group by player">
-            Group by Player
-          </ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
-
-      {Object.keys(groupedPairings).length === 0 ? (
-        <Paper sx={{ p: 3, textAlign: "center" }}>
-          <Typography color="text.secondary">
-            No pairings found for the current session.
-          </Typography>
-        </Paper>
-      ) : (
-        <Stack spacing={3}>
-          {Object.entries(groupedPairings).map(([key, pairings]) => (
-            <Box key={key}>
-              <Typography variant="h5" sx={{ mb: 2 }}>
-                {groupBy === "round" ? `Round ${key}` : key}
+      {/* Pairings View */}
+      {viewMode === "pairings" && (
+        <>
+          {Object.keys(groupedPairings).length === 0 ? (
+            <Paper sx={{ p: 3, textAlign: "center" }}>
+              <Typography color="text.secondary">
+                No pairings found for the current session.
               </Typography>
-              <Box
-                sx={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 2,
-                }}
-              >
-                {pairings.map((pairing) =>
-                  renderPairingCard(
-                    pairing,
-                    groupBy === "player" ? key : undefined
-                  )
-                )}
-              </Box>
-            </Box>
-          ))}
-        </Stack>
+            </Paper>
+          ) : (
+            <Stack spacing={3}>
+              {Object.entries(groupedPairings).map(([key, pairings]) => (
+                <Box key={key}>
+                  <Typography variant="h5" sx={{ mb: 2 }}>
+                    {groupBy === "round" ? `Round ${key}` : key}
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 2,
+                    }}
+                  >
+                    {pairings.map((pairing) =>
+                      renderPairingCard(
+                        pairing,
+                        groupBy === "player" ? key : undefined
+                      )
+                    )}
+                  </Box>
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </>
       )}
+
+      {/* Standings View */}
+      {viewMode === "standings" && (
+        <>
+          {isFinalized && (
+            <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mb: 2 }}>
+              Standings have been finalized. Decklists are now public.
+            </Alert>
+          )}
+
+          {isAdmin && canFinalize && !isFinalized && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>All matches are complete. You can finalize standings.</span>
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={handleFinalizeClick}
+                  sx={{ ml: 2 }}
+                >
+                  Finalize Standings
+                </Button>
+              </Box>
+            </Alert>
+          )}
+
+          {standings.length === 0 ? (
+            <Paper sx={{ p: 3, textAlign: "center" }}>
+              <Typography color="text.secondary">
+                No standings available yet.
+              </Typography>
+            </Paper>
+          ) : (
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Rank</TableCell>
+                    <TableCell>Player</TableCell>
+                    <TableCell align="center">Match Record</TableCell>
+                    <TableCell align="center">Game Record</TableCell>
+                    <TableCell align="center">OMW%</TableCell>
+                    <TableCell align="center">GW%</TableCell>
+                    <TableCell align="center">OGW%</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {standings.map((standing) => (
+                    <TableRow key={standing.playerId}>
+                      <TableCell>{standing.rank}</TableCell>
+                      <TableCell>{standing.playerName}</TableCell>
+                      <TableCell align="center">
+                        {standing.matchWins}-{standing.matchLosses}-{standing.matchDraws}
+                      </TableCell>
+                      <TableCell align="center">
+                        {standing.gameWins}-{standing.gameLosses}
+                      </TableCell>
+                      <TableCell align="center">
+                        {standing.omw ? `${(standing.omw * 100).toFixed(2)}%` : 'N/A'}
+                      </TableCell>
+                      <TableCell align="center">
+                        {standing.gw ? `${(standing.gw * 100).toFixed(2)}%` : 'N/A'}
+                      </TableCell>
+                      <TableCell align="center">
+                        {standing.ogw ? `${(standing.ogw * 100).toFixed(2)}%` : 'N/A'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
+      )}
+
+      {/* Finalize Confirmation Dialog */}
+      <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
+        <DialogTitle>Finalize Standings?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to finalize the standings? This will:
+          </Typography>
+          <ul>
+            <li>Lock the final rankings for this session</li>
+            <li>Make all decklists publicly viewable</li>
+            <li>Allow Victory Point assignment</li>
+          </ul>
+          <Typography sx={{ mt: 2, fontWeight: 'bold' }}>
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialogOpen(false)} disabled={finalizing}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmFinalize}
+            variant="contained"
+            disabled={finalizing}
+          >
+            {finalizing ? 'Finalizing...' : 'Finalize'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AppHeader from "@components/AppHeader";
+import ThemeProvider from "@components/ThemeProvider";
 import { getCurrentUser } from "@lib/auth";
 
 const geistSans = Geist({
@@ -30,8 +31,10 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <AppHeader isAdmin={isAdmin} />
-        <main>{children}</main>
+        <ThemeProvider>
+          <AppHeader isAdmin={isAdmin} />
+          <main>{children}</main>
+        </ThemeProvider>
       </body>
     </html>
   );

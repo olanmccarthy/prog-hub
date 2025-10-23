@@ -59,8 +59,8 @@ const allNavigationRoutes = [
     label: 'Play',
     subItems: [
       { label: 'Decklist Submission', path: '/play/decklist-submission' },
+      { label: 'Decklists', path: '/play/decklists' },
       { label: 'Pairings', path: '/play/pairings' },
-      { label: 'Standings', path: '/play/standings' },
     ],
   },
   {

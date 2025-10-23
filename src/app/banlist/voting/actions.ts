@@ -366,6 +366,29 @@ export async function selectWinningSuggestion(
       return { success: false, error: banlistResult.error };
     }
 
+    // Get the newly created banlist for image generation
+    const newBanlist = await prisma.banlist.findFirst({
+      where: { sessionId: currentBanlist.sessionId + 1 },
+    });
+
+    if (newBanlist) {
+      // Generate banlist image
+      try {
+        const { saveBanlistImage } = await import('@lib/banlistImage');
+        await saveBanlistImage({
+          sessionNumber: newBanlist.sessionId,
+          banned: newBanlist.banned as number[],
+          limited: newBanlist.limited as number[],
+          semilimited: newBanlist.semilimited as number[],
+          unlimited: newBanlist.unlimited as number[],
+        });
+        console.log(`Banlist image generated for session ${newBanlist.sessionId}`);
+      } catch (imageError) {
+        console.error('Failed to generate banlist image:', imageError);
+        // Don't fail the entire operation if image generation fails
+      }
+    }
+
     // Revalidate pages to show new state
     revalidatePath('/banlist/voting');
     revalidatePath('/banlist/current');

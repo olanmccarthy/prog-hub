@@ -4,6 +4,7 @@ import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 import { revalidatePath } from "next/cache";
 import { notifyStandings } from "@lib/discordClient";
+import { saveDeckImage } from "@lib/deckImage";
 
 export interface PlayerStanding {
   playerId: number;
@@ -16,6 +17,9 @@ export interface PlayerStanding {
   gameWinsInLosses: number;
   gameLossesInWins: number;
   rank: number;
+  omw?: number; // Opponent Match Win percentage (tiebreaker)
+  gw?: number;  // Game Win percentage (tiebreaker)
+  ogw?: number; // Opponent Game Win percentage (tiebreaker)
 }
 
 export interface GetStandingsResult {
@@ -411,6 +415,9 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
       },
     });
 
+    // Generate deck images for all decklists in this session
+    await generateDecklistImages(sessionId);
+
     // Send Discord notification with final standings
     await notifyStandings(sessionId);
 
@@ -427,5 +434,93 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
       success: false,
       error: "Failed to finalize standings",
     };
+  }
+}
+
+/**
+ * Generate deck images for all decklists in a session
+ */
+async function generateDecklistImages(sessionId: number): Promise<void> {
+  try {
+    // Get the session to find the banlist
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { number: true },
+    });
+
+    if (!session) {
+      console.error("Session not found for image generation");
+      return;
+    }
+
+    // Get the banlist for this session
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: session.number },
+    });
+
+    // Get all decklists for this session
+    const decklists = await prisma.decklist.findMany({
+      where: { sessionId },
+      select: {
+        id: true,
+        maindeck: true,
+        extradeck: true,
+        sidedeck: true,
+      },
+    });
+
+    console.log(`Generating images for ${decklists.length} decklists in session ${session.number}`);
+
+    // Generate images for each decklist
+    const imagePromises = decklists.map(async (decklist) => {
+      try {
+        // Parse JSON arrays (handle JsonValue type)
+        const maindeck = (typeof decklist.maindeck === 'string' ? JSON.parse(decklist.maindeck) : decklist.maindeck) as number[];
+        const extradeck = (typeof decklist.extradeck === 'string' ? JSON.parse(decklist.extradeck) : decklist.extradeck) as number[];
+        const sidedeck = (typeof decklist.sidedeck === 'string' ? JSON.parse(decklist.sidedeck) : decklist.sidedeck) as number[];
+
+        // Parse banlist if available
+        let banlistForImage = undefined;
+        if (banlist) {
+          try {
+            const parseBanlistField = (field: string | number[] | unknown): number[] => {
+              if (!field) return [];
+              if (typeof field === 'string') {
+                if (field.trim() === '') return [];
+                return JSON.parse(field) as number[];
+              }
+              if (Array.isArray(field)) return field;
+              return [];
+            };
+
+            banlistForImage = {
+              banned: parseBanlistField(banlist.banned),
+              limited: parseBanlistField(banlist.limited),
+              semilimited: parseBanlistField(banlist.semilimited),
+            };
+          } catch (parseError) {
+            console.warn(`Failed to parse banlist for session ${session.number}, generating without banlist indicators:`, parseError);
+            banlistForImage = undefined;
+          }
+        }
+
+        // Generate and save the image
+        await saveDeckImage(
+          decklist.id,
+          { maindeck, extradeck, sidedeck },
+          banlistForImage
+        );
+
+        console.log(`Generated image for decklist ${decklist.id}`);
+      } catch (error) {
+        console.error(`Failed to generate image for decklist ${decklist.id}:`, error);
+      }
+    });
+
+    await Promise.all(imagePromises);
+    console.log(`Finished generating all deck images for session ${session.number}`);
+  } catch (error) {
+    console.error("Error generating decklist images:", error);
+    // Don't throw - we don't want image generation failures to block finalization
   }
 }

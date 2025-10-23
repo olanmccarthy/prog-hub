@@ -1,6 +1,14 @@
 FROM node:20-alpine
 WORKDIR /app
 
+# Install fonts and fontconfig for image generation
+RUN apk add --no-cache \
+    fontconfig \
+    ttf-dejavu \
+    font-noto \
+    font-noto-cjk \
+    font-noto-emoji
+
 # Copy package manifests
 COPY package*.json ./
 

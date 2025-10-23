@@ -33,7 +33,8 @@
     "next": "15.5.5",
     "prisma": "^6.17.1",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -44,6 +45,7 @@
     "eslint-config-next": "15.5.5",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   },
   "lint-staged": {

@@ -65,6 +65,7 @@ model Decklist {
   id       Int      @id @default(autoincrement())
   playerId Int      @map("player_id")
   sessionId Int     @map("session_id")
+  name     String?  @db.VarChar(255)
 
   maindeck   Json
   sidedeck   Json

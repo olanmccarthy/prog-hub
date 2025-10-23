@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Container, Typography, Box, Paper, Alert, Chip } from '@mui/material';
+import { Container, Typography, Box, Paper, Alert, Chip, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import ImageIcon from '@mui/icons-material/Image';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
 import {
   getPreviousBanlist,
   getNewCards,
@@ -105,6 +107,7 @@ export default function CurrentBanlistPage() {
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'image' | 'text'>('image');
 
   useEffect(() => {
     fetchBanlist();
@@ -148,13 +151,12 @@ export default function CurrentBanlistPage() {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
         <Typography
           variant="h3"
           component="h1"
           sx={{
             color: 'var(--text-bright)',
-            mb: 2,
             fontWeight: 'bold',
           }}
         >
@@ -162,6 +164,22 @@ export default function CurrentBanlistPage() {
             ? `Current Banlist (Session ${sessionNumber})`
             : 'Current Banlist'}
         </Typography>
+
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={(_, newMode) => newMode && setViewMode(newMode)}
+          size="small"
+        >
+          <ToggleButton value="image" aria-label="image view">
+            <ImageIcon sx={{ mr: 1 }} />
+            Image
+          </ToggleButton>
+          <ToggleButton value="text" aria-label="text view">
+            <TextFieldsIcon sx={{ mr: 1 }} />
+            Text
+          </ToggleButton>
+        </ToggleButtonGroup>
       </Box>
 
       {error && (
@@ -184,26 +202,62 @@ export default function CurrentBanlistPage() {
         </Paper>
       ) : banlist ? (
         <>
-          <BanlistCategory
-            title="Banned"
-            cards={banlist.banned}
-            emptyMessage="No banned cards"
-          />
-          <BanlistCategory
-            title="Limited"
-            cards={banlist.limited}
-            emptyMessage="No limited cards"
-          />
-          <BanlistCategory
-            title="Semi-Limited"
-            cards={banlist.semilimited}
-            emptyMessage="No semi-limited cards"
-          />
-          <BanlistCategory
-            title="Unlimited"
-            cards={banlist.unlimited}
-            emptyMessage="No cards moved to unlimited"
-          />
+          {viewMode === 'image' ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: '400px',
+                backgroundColor: 'var(--bg-secondary)',
+                borderRadius: 1,
+                p: 3,
+                border: '1px solid var(--border-color)',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/banlist-images/${sessionNumber}.png`}
+                alt={`Banlist for Session ${sessionNumber}`}
+                style={{
+                  maxWidth: '100%',
+                  height: 'auto',
+                  display: 'block',
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 2rem;">Banlist image not yet generated. Please view in text mode or wait for image generation.</div>`;
+                  }
+                }}
+              />
+            </Box>
+          ) : (
+            <>
+              <BanlistCategory
+                title="Banned"
+                cards={banlist.banned}
+                emptyMessage="No banned cards"
+              />
+              <BanlistCategory
+                title="Limited"
+                cards={banlist.limited}
+                emptyMessage="No limited cards"
+              />
+              <BanlistCategory
+                title="Semi-Limited"
+                cards={banlist.semilimited}
+                emptyMessage="No semi-limited cards"
+              />
+              <BanlistCategory
+                title="Unlimited"
+                cards={banlist.unlimited}
+                emptyMessage="No cards moved to unlimited"
+              />
+            </>
+          )}
         </>
       ) : null}
     </Container>

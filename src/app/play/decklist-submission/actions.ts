@@ -122,7 +122,8 @@ export async function getMyDecklist(): Promise<GetDecklistResult> {
 export async function submitDecklist(
   maindeck: number[],
   sidedeck: number[],
-  extradeck: number[]
+  extradeck: number[],
+  name?: string
 ): Promise<SubmitDecklistResult> {
   try {
     const currentUser = await getCurrentUser();
@@ -191,6 +192,7 @@ export async function submitDecklist(
           maindeck,
           sidedeck,
           extradeck,
+          name: name || null,
           submittedAt: new Date(),
         },
       });
@@ -203,6 +205,7 @@ export async function submitDecklist(
           maindeck,
           sidedeck,
           extradeck,
+          name: name || null,
           submittedAt: new Date(),
         },
       });

@@ -14,10 +14,12 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./data/00_schema.sql:/docker-entrypoint-initdb.d/00_schema.sql
       - ./data/yugioh_cards.sql:/docker-entrypoint-initdb.d/01_yugioh_cards.sql
       - ./data/yugioh_sets.sql:/docker-entrypoint-initdb.d/02_yugioh_sets.sql
       - ./data/yugioh_sessions.sql:/docker-entrypoint-initdb.d/03_yugioh_sessions.sql
-      - ./data/testdata.sql:/docker-entrypoint-initdb.d/04_testdata.sql
+      - ./data/wallet_point_breakdowns.sql:/docker-entrypoint-initdb.d/04_wallet_point_breakdowns.sql
+      - ./data/testdata.sql:/docker-entrypoint-initdb.d/05_testdata.sql
     networks:
       - app-network
     healthcheck:
@@ -39,6 +41,9 @@ services:
         condition: service_healthy
     env_file:
       - .env.production
+    volumes:
+      - ./public/deck-images:/app/public/deck-images  # persist deck images
+      - ./public/banlist-images:/app/public/banlist-images  # persist banlist images
     networks:
       - app-network
 

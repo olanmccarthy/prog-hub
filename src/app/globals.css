@@ -15,7 +15,7 @@
 
   /* Text colors */
   --text-primary: #ffffff;      /* Main text - white for dark theme */
-  --text-secondary: #858585;    /* Secondary text, disabled */
+  --text-secondary: #ffffff;    /* Secondary text, disabled */
   --text-bright: #ffffff;       /* Emphasized text */
 
   /* Accent colors */
@@ -33,11 +33,16 @@
   --input-bg: #3c3c3c;          /* Input fields */
   --input-border: #3e3e42;      /* Input borders */
 
-  /* Status colors (optional for future use) */
+  /* Status colors */
   --success: #4ec9b0;           /* Success states */
+  --success-green: #4caf50;     /* Material green for success */
   --warning: #dcdcaa;           /* Warning states */
+  --warning-orange: #ff9800;    /* Material orange for warnings */
   --error: #f48771;             /* Error states */
+  --error-red: #f44336;         /* Material red for errors */
+  --error-red-dark: #cc0000;    /* Dark red for delete/danger */
   --info: #75beff;              /* Info states */
+  --gold: #FFD700;              /* Gold for special highlights */
 
   /* Event wheel colors - distinct, repeating pattern */
   --wheel-color-1: #ff6b6b;     /* Red */

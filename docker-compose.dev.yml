@@ -14,10 +14,12 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data_dev:/var/lib/mysql
+      - ./data/00_schema.sql:/docker-entrypoint-initdb.d/00_schema.sql
       - ./data/yugioh_cards.sql:/docker-entrypoint-initdb.d/01_yugioh_cards.sql
       - ./data/yugioh_sets.sql:/docker-entrypoint-initdb.d/02_yugioh_sets.sql
       - ./data/yugioh_sessions.sql:/docker-entrypoint-initdb.d/03_yugioh_sessions.sql
-      - ./data/testdata.sql:/docker-entrypoint-initdb.d/04_testdata.sql
+      - ./data/wallet_point_breakdowns.sql:/docker-entrypoint-initdb.d/04_wallet_point_breakdowns.sql
+      - ./data/testdata.sql:/docker-entrypoint-initdb.d/05_testdata.sql
 
   nextjs:
     build:
@@ -35,6 +37,8 @@ services:
     volumes:
       - .:/app
       - /app/node_modules  # prevent node_modules on host from clashing
+      - ./public/deck-images:/app/public/deck-images  # persist deck images
+      - ./public/banlist-images:/app/public/banlist-images  # persist banlist images
     command: sh -c "sleep 5 && npx prisma db push && npm run dev"
 
 volumes:
