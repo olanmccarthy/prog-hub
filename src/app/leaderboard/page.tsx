@@ -37,6 +37,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     fetchLeaderboards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchLeaderboards = async () => {

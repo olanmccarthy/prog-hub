@@ -243,6 +243,7 @@ export default function EventWheel({
         cancelAnimationFrame(animationRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spinning, targetIndex]);
 
   return (

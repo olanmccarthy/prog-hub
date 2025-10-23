@@ -2,7 +2,6 @@
 
 import { prisma } from '@lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { notifyNewSessionWithPairings } from '@lib/discordClient';
 import { getCurrentUser } from '@lib/auth';
 
 export interface RequirementStatus {

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Box,
   Button,
@@ -13,7 +12,6 @@ import {
 } from '@mui/material';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

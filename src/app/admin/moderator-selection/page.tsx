@@ -14,7 +14,6 @@ import {
   Chip,
 } from '@mui/material';
 import CasinoIcon from '@mui/icons-material/Casino';
-import PersonIcon from '@mui/icons-material/Person';
 import EventWheel from '@components/EventWheel';
 import EventResultModal from '@components/EventResultModal';
 import {

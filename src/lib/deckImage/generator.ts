@@ -169,7 +169,7 @@ export class DeckImageGenerator {
         // Add banlist indicator if needed
         let finalImage = cardImage;
         if (banlist) {
-          finalImage = await this.addBanlistIndicator(cardImage, cardId, banlist, position.width, position.height);
+          finalImage = await this.addBanlistIndicator(cardImage, cardId, banlist, position.width);
         }
 
         compositeOps.push({
@@ -192,8 +192,7 @@ export class DeckImageGenerator {
     cardImage: Buffer,
     cardId: number,
     banlist: BanlistForImage,
-    width: number,
-    _height: number
+    width: number
   ): Promise<Buffer> {
     let badgeText: string | null = null;
     let badgeColor: string | null = null;

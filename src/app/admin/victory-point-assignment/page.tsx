@@ -17,7 +17,6 @@ import {
   Chip,
 } from '@mui/material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import {
   getVictoryPointStatus,
   assignVictoryPoint,
