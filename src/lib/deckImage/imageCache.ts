@@ -80,19 +80,52 @@ export class ImageCache {
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Validate we got actual data
+    if (!buffer || buffer.length === 0) {
+      throw new Error(`Downloaded image for card ${cardId} is empty`);
+    }
+
+    return buffer;
   }
 
   /**
    * Resize an image buffer to the specified dimensions
    */
   private async resizeImage(buffer: Buffer, width: number, height: number): Promise<Buffer> {
-    return sharp(buffer)
-      .resize(width, height, {
-        fit: 'fill',
-        kernel: sharp.kernel.lanczos3,
-      })
-      .toBuffer();
+    // Validate buffer is not empty
+    if (!buffer || buffer.length === 0) {
+      console.error('Cannot resize empty buffer, returning fallback image');
+      return sharp({
+        create: {
+          width,
+          height,
+          channels: 3,
+          background: { r: 50, g: 50, b: 50 },
+        },
+      }).jpeg().toBuffer();
+    }
+
+    try {
+      return await sharp(buffer)
+        .resize(width, height, {
+          fit: 'fill',
+          kernel: sharp.kernel.lanczos3,
+        })
+        .toBuffer();
+    } catch (error) {
+      console.error('Failed to resize image:', error);
+      // Return solid color fallback
+      return sharp({
+        create: {
+          width,
+          height,
+          channels: 3,
+          background: { r: 50, g: 50, b: 50 },
+        },
+      }).jpeg().toBuffer();
+    }
   }
 
   /**
