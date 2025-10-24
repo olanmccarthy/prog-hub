@@ -17,13 +17,16 @@ RUN npx next build
 FROM node:20-alpine
 WORKDIR /app
 
-# Install fonts and fontconfig for image generation
+# Install fonts, fontconfig, and Sharp/libvips dependencies for image generation
 RUN apk add --no-cache \
     fontconfig \
     ttf-dejavu \
     font-noto \
     font-noto-cjk \
-    font-noto-emoji
+    font-noto-emoji \
+    vips-dev \
+    build-base \
+    python3
 
 # Copy package.json for metadata (optional)
 COPY package*.json ./
@@ -40,10 +43,17 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 # Copy data directory for test deck files
 COPY --from=builder /app/data ./data
 
+# Create directories for image generation and ensure proper permissions
+RUN mkdir -p /app/public/deck-images /app/public/banlist-images /tmp/card-image-cache && \
+    chmod -R 755 /app/public/deck-images /app/public/banlist-images /tmp/card-image-cache
+
 # Create startup script
 RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'echo "Waiting for database..."' >> /app/start.sh && \
     echo 'sleep 5' >> /app/start.sh && \
+    echo 'echo "Ensuring image directories exist..."' >> /app/start.sh && \
+    echo 'mkdir -p /app/public/deck-images /app/public/banlist-images /tmp/card-image-cache' >> /app/start.sh && \
+    echo 'chmod -R 755 /app/public/deck-images /app/public/banlist-images /tmp/card-image-cache' >> /app/start.sh && \
     echo 'echo "Running Prisma DB push..."' >> /app/start.sh && \
     echo 'npx prisma db push --skip-generate' >> /app/start.sh && \
     echo 'echo "Starting Next.js..."' >> /app/start.sh && \

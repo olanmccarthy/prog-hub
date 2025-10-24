@@ -19,20 +19,31 @@ export async function saveDeckImage(
   deck: DeckForImage,
   banlist?: BanlistForImage
 ): Promise<string> {
-  // Generate the deck image
-  const imageBuffer = await generateDeckImage(deck, banlist);
+  try {
+    console.log(`[saveDeckImage] Starting image generation for decklist ${decklistId}`);
 
-  // Ensure the deck-images directory exists
-  const deckImagesDir = path.join(process.cwd(), 'public', 'deck-images');
-  await fs.mkdir(deckImagesDir, { recursive: true });
+    // Generate the deck image
+    const imageBuffer = await generateDeckImage(deck, banlist);
+    console.log(`[saveDeckImage] Generated image buffer (${imageBuffer.length} bytes) for decklist ${decklistId}`);
 
-  // Save the image with the decklist ID as the filename
-  const filename = `${decklistId}.png`;
-  const filePath = path.join(deckImagesDir, filename);
-  await fs.writeFile(filePath, imageBuffer);
+    // Ensure the deck-images directory exists
+    const deckImagesDir = path.join(process.cwd(), 'public', 'deck-images');
+    console.log(`[saveDeckImage] Creating directory: ${deckImagesDir}`);
+    await fs.mkdir(deckImagesDir, { recursive: true });
 
-  // Return the public URL path
-  return `/deck-images/${filename}`;
+    // Save the image with the decklist ID as the filename
+    const filename = `${decklistId}.png`;
+    const filePath = path.join(deckImagesDir, filename);
+    console.log(`[saveDeckImage] Writing image to: ${filePath}`);
+    await fs.writeFile(filePath, imageBuffer);
+    console.log(`[saveDeckImage] Successfully saved image for decklist ${decklistId}`);
+
+    // Return the public URL path
+    return `/deck-images/${filename}`;
+  } catch (error) {
+    console.error(`[saveDeckImage] Failed to save deck image for decklist ${decklistId}:`, error);
+    throw error;
+  }
 }
 
 /**
