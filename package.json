@@ -10,7 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "docker:build": "DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose build",
-    "docker:up": "DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose up",
+    "docker:up": "DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:clean": "docker-compose down -v --rmi all --remove-orphans",
     "docker:nuke": "docker system prune -a --volumes",
