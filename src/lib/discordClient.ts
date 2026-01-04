@@ -18,7 +18,7 @@ const sqsClient = new SQSClient({
 const QUEUE_URL = process.env.DISCORD_SQS_QUEUE_URL || '';
 
 interface NotificationMessage {
-  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'generic' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction';
+  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists';
   payload: Record<string, unknown>;
 }
 
@@ -98,25 +98,16 @@ export async function notifyNewSession(sessionNumber: number): Promise<boolean> 
   });
 }
 
-/**
- * Send a generic notification message
- */
-export async function notifyGeneric(title: string, description: string, color?: number): Promise<boolean> {
-  console.log(`[DiscordClient] Queuing generic notification: ${title}`);
-  return sendToQueue({
-    type: 'generic',
-    payload: { title, description, color },
-  });
-}
 
 /**
  * Send notification when a banlist is chosen by moderator
+ * @param sessionNumber - The session NUMBER (not id) for which the new banlist was created
  */
-export async function notifyBanlistChosen(sessionId: number): Promise<boolean> {
-  console.log(`[DiscordClient] Queuing banlist chosen notification for session ${sessionId}`);
+export async function notifyBanlistChosen(sessionNumber: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing banlist chosen notification for session ${sessionNumber}`);
   return sendToQueue({
     type: 'banlist-chosen',
-    payload: { sessionId },
+    payload: { sessionNumber },
   });
 }
 
@@ -161,5 +152,16 @@ export async function notifyTransaction(playerId: number, setId: number, amount:
   return sendToQueue({
     type: 'transaction',
     payload: { playerId, setId, amount, sessionId },
+  });
+}
+
+/**
+ * Send notification with decklist images when decklists become available
+ */
+export async function notifyDecklists(sessionId: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing decklists notification for session ${sessionId}`);
+  return sendToQueue({
+    type: 'decklists',
+    payload: { sessionId },
   });
 }

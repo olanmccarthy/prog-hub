@@ -1,30 +1,14 @@
-import { EmbedBuilder } from 'discord.js';
-import { getNotificationChannel, getChannel, isBotReady } from './bot';
+import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { getChannel, isBotReady } from './bot';
 import { prisma } from '@lib/prisma';
 
 /**
- * Send a Discord notification to the configured channel
+ * Helper function to strip language code suffix from set code
+ * Example: "LOB-EN" -> "LOB", "SDK-EN" -> "SDK"
  */
-async function sendNotification(embed: EmbedBuilder): Promise<boolean> {
-  if (!isBotReady()) {
-    console.warn('[Discord] Cannot send notification - bot not ready');
-    return false;
-  }
-
-  try {
-    const channel = await getNotificationChannel();
-    if (!channel) {
-      console.error('[Discord] Failed to get notification channel');
-      return false;
-    }
-
-    await channel.send({ embeds: [embed] });
-    console.log('[Discord] Notification sent successfully');
-    return true;
-  } catch (error) {
-    console.error('[Discord] Error sending notification:', error);
-    return false;
-  }
+function stripLanguageCode(setCode: string | null | undefined): string {
+  if (!setCode) return 'N/A';
+  return setCode.replace(/-[A-Z]{2}$/, '');
 }
 
 /**
@@ -49,6 +33,7 @@ export async function notifyPairings(sessionId: number, round: number): Promise<
       }),
       prisma.session.findUnique({
         where: { id: sessionId },
+        include: { set: true },
       }),
     ]);
 
@@ -64,7 +49,7 @@ export async function notifyPairings(sessionId: number, round: number): Promise<
 
     // Build embed message
     const embed = new EmbedBuilder()
-      .setTitle(`🎮 Round ${round} Pairings - Session ${session.number}`)
+      .setTitle(`🎮 Round ${round} Pairings - Session ${session.number} (${stripLanguageCode(session.set?.setCode)})`)
       .setColor('#0099ff')
       .setTimestamp();
 
@@ -93,20 +78,17 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
   console.log(`[Discord] Preparing standings notification for session ${sessionId}`);
 
   try {
-    // Fetch session, victory points, and pairings in parallel (optimization)
-    const [session, victoryPoints, pairings] = await Promise.all([
+    // Fetch session and pairings
+    const [session, pairings] = await Promise.all([
       prisma.session.findUnique({
         where: { id: sessionId },
-      }),
-      prisma.victoryPoint.findMany({
-        where: { sessionId },
-        include: { player: true },
+        include: { set: true },
       }),
       prisma.pairing.findMany({
         where: { sessionId },
         include: {
-          player1: true,
-          player2: true,
+          player1: { select: { id: true, name: true } },
+          player2: { select: { id: true, name: true } },
         },
       }),
     ]);
@@ -116,53 +98,115 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
       return false;
     }
 
-    // Calculate standings
-    const standingsMap = new Map<number, {
+    if (pairings.length === 0) {
+      console.warn('[Discord] No pairings found for this session');
+      return false;
+    }
+
+    // Calculate player stats
+    interface PlayerStats {
       playerId: number;
       playerName: string;
-      vp: number;
       matchWins: number;
+      matchLosses: number;
+      matchDraws: number;
       gameWins: number;
-    }>();
+      gameLosses: number;
+      gameWinsInLosses: number;
+      gameLossesInWins: number;
+    }
 
-    // Initialize standings with VP
-    victoryPoints.forEach(vp => {
-      standingsMap.set(vp.playerId, {
-        playerId: vp.playerId,
-        playerName: vp.player.name,
-        vp: 1,
-        matchWins: 0,
-        gameWins: 0,
-      });
-    });
+    const playerStatsMap = new Map<number, PlayerStats>();
 
-    // Calculate match wins and game wins
-    pairings.forEach(pairing => {
-      const p1 = standingsMap.get(pairing.player1Id);
-      const p2 = standingsMap.get(pairing.player2Id);
+    pairings.forEach((pairing) => {
+      const p1Id = pairing.player1.id;
+      const p2Id = pairing.player2.id;
+      const p1Wins = pairing.player1wins;
+      const p2Wins = pairing.player2wins;
 
-      if (!p1 || !p2) return;
+      // Initialize player1 if not exists
+      if (!playerStatsMap.has(p1Id)) {
+        playerStatsMap.set(p1Id, {
+          playerId: p1Id,
+          playerName: pairing.player1.name,
+          matchWins: 0,
+          matchLosses: 0,
+          matchDraws: 0,
+          gameWins: 0,
+          gameLosses: 0,
+          gameWinsInLosses: 0,
+          gameLossesInWins: 0,
+        });
+      }
 
-      p1.gameWins += pairing.player1wins;
-      p2.gameWins += pairing.player2wins;
+      // Initialize player2 if not exists
+      if (!playerStatsMap.has(p2Id)) {
+        playerStatsMap.set(p2Id, {
+          playerId: p2Id,
+          playerName: pairing.player2.name,
+          matchWins: 0,
+          matchLosses: 0,
+          matchDraws: 0,
+          gameWins: 0,
+          gameLosses: 0,
+          gameWinsInLosses: 0,
+          gameLossesInWins: 0,
+        });
+      }
 
-      if (pairing.player1wins > pairing.player2wins) {
-        p1.matchWins += 1;
-      } else if (pairing.player2wins > pairing.player1wins) {
-        p2.matchWins += 1;
+      const p1Stats = playerStatsMap.get(p1Id)!;
+      const p2Stats = playerStatsMap.get(p2Id)!;
+
+      // Update game wins/losses
+      p1Stats.gameWins += p1Wins;
+      p1Stats.gameLosses += p2Wins;
+      p2Stats.gameWins += p2Wins;
+      p2Stats.gameLosses += p1Wins;
+
+      // Determine match result (best of 3: first to 2 wins)
+      if (p1Wins === 2) {
+        // Player 1 won the match
+        p1Stats.matchWins++;
+        p2Stats.matchLosses++;
+        p1Stats.gameLossesInWins += p2Wins;
+        p2Stats.gameWinsInLosses += p2Wins;
+      } else if (p2Wins === 2) {
+        // Player 2 won the match
+        p2Stats.matchWins++;
+        p1Stats.matchLosses++;
+        p2Stats.gameLossesInWins += p1Wins;
+        p1Stats.gameWinsInLosses += p1Wins;
+      } else if (p1Wins === 1 && p2Wins === 1) {
+        // Draw
+        p1Stats.matchDraws++;
+        p2Stats.matchDraws++;
       }
     });
 
-    // Sort standings: VP > Match Wins > Game Wins
-    const standings = Array.from(standingsMap.values()).sort((a, b) => {
-      if (b.vp !== a.vp) return b.vp - a.vp;
-      if (b.matchWins !== a.matchWins) return b.matchWins - a.matchWins;
-      return b.gameWins - a.gameWins;
+    // Sort standings with tiebreakers (same as app logic)
+    const playerStats = Array.from(playerStatsMap.values());
+    const standings = playerStats.sort((a, b) => {
+      // Primary: Most match wins
+      if (a.matchWins !== b.matchWins) {
+        return b.matchWins - a.matchWins;
+      }
+
+      // Tiebreaker 1: Most game wins in lost matches
+      if (a.gameWinsInLosses !== b.gameWinsInLosses) {
+        return b.gameWinsInLosses - a.gameWinsInLosses;
+      }
+
+      // Tiebreaker 2: Least game losses in won matches
+      if (a.gameLossesInWins !== b.gameLossesInWins) {
+        return a.gameLossesInWins - b.gameLossesInWins;
+      }
+
+      return 0;
     });
 
     // Build embed message
     const embed = new EmbedBuilder()
-      .setTitle(`🏆 Final Standings - Session ${session.number}`)
+      .setTitle(`🏆 Final Standings - Session ${session.number} (${stripLanguageCode(session.set?.setCode)})`)
       .setColor('#ffd700')
       .setTimestamp();
 
@@ -171,9 +215,11 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
     const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣'];
 
     topPlayers.forEach((standing, index) => {
+      const matchRecord = `${standing.matchWins}-${standing.matchLosses}${standing.matchDraws > 0 ? `-${standing.matchDraws}` : ''}`;
+      const gameRecord = `${standing.gameWins}-${standing.gameLosses}`;
       embed.addFields({
         name: `${medals[index]} ${standing.playerName}`,
-        value: `VP: ${standing.vp} | Match Wins: ${standing.matchWins} | Game Wins: ${standing.gameWins}`,
+        value: `Match Record: ${matchRecord} | Game Record: ${gameRecord}`,
         inline: false,
       });
     });
@@ -181,7 +227,10 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
     // Add remaining players if any
     if (standings.length > 6) {
       const others = standings.slice(6)
-        .map((s, i) => `${i + 7}. ${s.playerName} (${s.matchWins}-${s.gameWins})`)
+        .map((s, i) => {
+          const matchRecord = `${s.matchWins}-${s.matchLosses}${s.matchDraws > 0 ? `-${s.matchDraws}` : ''}`;
+          return `${i + 7}. ${s.playerName} (${matchRecord})`;
+        })
         .join('\n');
 
       embed.addFields({
@@ -211,6 +260,7 @@ export async function notifyNewSessionWithPairings(sessionId: number): Promise<b
     const [session, pairings] = await Promise.all([
       prisma.session.findUnique({
         where: { id: sessionId },
+        include: { set: true },
       }),
       prisma.pairing.findMany({
         where: { sessionId },
@@ -246,7 +296,7 @@ export async function notifyNewSessionWithPairings(sessionId: number): Promise<b
 
     // Build embed message
     const embed = new EmbedBuilder()
-      .setTitle(`🎉 Session ${session.number} - New Prog Started!`)
+      .setTitle(`🎉 Session ${session.number} (${stripLanguageCode(session.set?.setCode)}) - New Prog Started!`)
       .setDescription(`All pairings have been generated. Good luck, duelists!`)
       .setColor('#00ff00')
       .setTimestamp();
@@ -282,9 +332,20 @@ export async function notifyNewSession(sessionNumber: number): Promise<boolean> 
   console.log(`[Discord] Preparing new session notification for session ${sessionNumber}`);
 
   try {
+    // Get session info for set code
+    const session = await prisma.session.findFirst({
+      where: { number: sessionNumber },
+      include: { set: true },
+    });
+
+    if (!session) {
+      console.error('[Discord] Session not found');
+      return false;
+    }
+
     const embed = new EmbedBuilder()
       .setTitle(`🎉 New Session Started!`)
-      .setDescription(`**Session ${sessionNumber}** has begun!`)
+      .setDescription(`**Session ${sessionNumber} (${stripLanguageCode(session.set?.setCode)})** has begun!`)
       .setColor('#00ff00')
       .addFields(
         { name: 'What to do next', value: '1. Submit your decklist\n2. Wait for round 1 pairings\n3. Report your match results', inline: false }
@@ -299,25 +360,6 @@ export async function notifyNewSession(sessionNumber: number): Promise<boolean> 
   }
 }
 
-/**
- * Send a generic notification message
- */
-export async function notifyGeneric(title: string, description: string, color?: number): Promise<boolean> {
-  console.log(`[Discord] Sending generic notification: ${title}`);
-
-  try {
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(description)
-      .setColor(color || '#0099ff')
-      .setTimestamp();
-
-    return await sendNotification(embed);
-  } catch (error) {
-    console.error('[Discord] Error sending generic notification:', error);
-    return false;
-  }
-}
 
 /**
  * Send notification to a specific channel
@@ -360,30 +402,35 @@ async function getCardNames(cardIds: number[]): Promise<Map<number, string>> {
 
 /**
  * Send notification when a banlist is chosen by moderator
+ * @param sessionNumber - The session NUMBER (not id) for which the new banlist was created
  */
-export async function notifyBanlistChosen(sessionId: number): Promise<boolean> {
-  console.log(`[Discord] Preparing banlist chosen notification for session ${sessionId}`);
+export async function notifyBanlistChosen(sessionNumber: number): Promise<boolean> {
+  console.log(`[Discord] Preparing banlist chosen notification for session number ${sessionNumber}`);
 
   try {
-    const [session, banlist] = await Promise.all([
-      prisma.session.findUnique({
-        where: { id: sessionId },
+    // Get the session and banlist using session NUMBER
+    const [session, banlist, previousBanlist] = await Promise.all([
+      prisma.session.findFirst({
+        where: { number: sessionNumber },
         include: { set: true },
       }),
       prisma.banlist.findFirst({
-        where: { sessionId },
+        where: { sessionId: sessionNumber },
+      }),
+      prisma.banlist.findFirst({
+        where: { sessionId: sessionNumber - 1 },
       }),
     ]);
 
-    if (!session || !banlist) {
-      console.error('[Discord] Session or banlist not found');
+    if (!session) {
+      console.error(`[Discord] Session not found for number ${sessionNumber}`);
       return false;
     }
 
-    // Get previous banlist to compare
-    const previousBanlist = await prisma.banlist.findFirst({
-      where: { sessionId: sessionId - 1 },
-    });
+    if (!banlist) {
+      console.error(`[Discord] Banlist not found for session number ${sessionNumber}`);
+      return false;
+    }
 
     // Get all card IDs
     const allCardIds = new Set([
@@ -412,8 +459,8 @@ export async function notifyBanlistChosen(sessionId: number): Promise<boolean> {
     };
 
     const embed = new EmbedBuilder()
-      .setTitle(`📜 Banlist Updated - Session ${session.number}`)
-      .setDescription(`**Set:** ${session.set?.setName || 'Unknown'} (${session.set?.setCode || 'N/A'})`)
+      .setTitle(`📜 Banlist Updated - Session ${sessionNumber} (${stripLanguageCode(session.set?.setCode)})`)
+      .setDescription(`**Set:** ${session.set?.setName || 'Unknown'}`)
       .setColor('#9b59b6')
       .setTimestamp();
 
@@ -435,23 +482,29 @@ export async function notifyBanlistChosen(sessionId: number): Promise<boolean> {
 
 /**
  * Send notifications for all banlist suggestions
+ * sessionId parameter is the session.id (auto-incremented), not the session number
  */
 export async function notifyBanlistSuggestions(sessionId: number): Promise<boolean> {
   console.log(`[Discord] Preparing banlist suggestions notifications for session ${sessionId}`);
 
   try {
-    const [session, banlist] = await Promise.all([
-      prisma.session.findUnique({
-        where: { id: sessionId },
-        include: { set: true },
-      }),
-      prisma.banlist.findFirst({
-        where: { sessionId },
-      }),
-    ]);
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { set: true },
+    });
 
-    if (!session || !banlist) {
-      console.error('[Discord] Session or banlist not found');
+    if (!session) {
+      console.error('[Discord] Session not found');
+      return false;
+    }
+
+    // Banlist uses session.number, not session.id
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: session.number },
+    });
+
+    if (!banlist) {
+      console.error(`[Discord] Banlist not found for session number ${session.number}`);
       return false;
     }
 
@@ -490,8 +543,8 @@ export async function notifyBanlistSuggestions(sessionId: number): Promise<boole
       };
 
       const embed = new EmbedBuilder()
-        .setTitle(`💡 Banlist Suggestion - Session ${session.number}`)
-        .setDescription(`**Suggested by:** ${suggestion.player.name}\n**Set:** ${session.set?.setName || 'Unknown'} (${session.set?.setCode || 'N/A'})`)
+        .setTitle(`💡 Banlist Suggestion - Session ${session.number} (${stripLanguageCode(session.set?.setCode)})`)
+        .setDescription(`**Suggested by:** ${suggestion.player.name}`)
         .setColor('#3498db')
         .setTimestamp();
 
@@ -550,7 +603,7 @@ export async function notifyLeaderboard(sessionId: number): Promise<boolean> {
 
     const embed = new EmbedBuilder()
       .setTitle(`🏆 Victory Point Leaderboard Updated`)
-      .setDescription(`**Session ${session.number}** - ${session.set?.setName || 'Unknown'} (${session.set?.setCode || 'N/A'})`)
+      .setDescription(`**Session ${session.number} (${stripLanguageCode(session.set?.setCode)})**`)
       .setColor('#ffd700')
       .setTimestamp();
 
@@ -598,7 +651,7 @@ export async function notifyWalletUpdate(sessionId: number): Promise<boolean> {
 
     const embed = new EmbedBuilder()
       .setTitle(`💰 Wallet Balances Updated`)
-      .setDescription(`**Session ${session.number}** - ${session.set?.setName || 'Unknown'} (${session.set?.setCode || 'N/A'})`)
+      .setDescription(`**Session ${session.number} (${stripLanguageCode(session.set?.setCode)})**`)
       .setColor('#2ecc71')
       .setTimestamp();
 
@@ -641,7 +694,7 @@ export async function notifyTransaction(playerId: number, setId: number, amount:
       .setTitle(`💸 Purchase Made`)
       .setDescription(
         session
-          ? `**Session ${session.number}** - ${session.set?.setName || 'Unknown'} (${session.set?.setCode || 'N/A'})`
+          ? `**Session ${session.number} (${stripLanguageCode(session.set?.setCode)})**`
           : 'Purchase'
       )
       .setColor('#e74c3c')
@@ -656,6 +709,96 @@ export async function notifyTransaction(playerId: number, setId: number, amount:
     return await sendToChannel('spending', embed);
   } catch (error) {
     console.error('[Discord] Error preparing transaction notification:', error);
+    return false;
+  }
+}
+
+/**
+ * Send notification with decklist images when decklists become available (after standings are finalized)
+ * @param sessionId - The session ID (auto-incremented)
+ */
+export async function notifyDecklists(sessionId: number): Promise<boolean> {
+  console.log(`[Discord] Preparing decklists notification for session ${sessionId}`);
+
+  try {
+    // Get session info
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { set: true },
+    });
+
+    if (!session) {
+      console.error('[Discord] Session not found');
+      return false;
+    }
+
+    // Get all decklists with player info for this session
+    const decklists = await prisma.decklist.findMany({
+      where: { sessionId },
+      include: {
+        player: { select: { name: true } },
+      },
+      orderBy: { playerId: 'asc' },
+    });
+
+    if (decklists.length === 0) {
+      console.warn('[Discord] No decklists found for this session');
+      return false;
+    }
+
+    const channel = await getChannel('decklists');
+    if (!channel) {
+      console.error('[Discord] Failed to get decklists channel');
+      return false;
+    }
+
+    // Get the base URL from environment
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!baseUrl) {
+      console.error('[Discord] NEXT_PUBLIC_API_URL not configured, cannot fetch decklist images');
+      return false;
+    }
+
+    // Send each decklist as a separate message with image
+    for (const decklist of decklists) {
+      try {
+        // Fetch the image from the web
+        const imageUrl = `${baseUrl}/deck-images/${decklist.id}.png`;
+        console.log(`[Discord] Fetching decklist image from ${imageUrl}`);
+
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          console.warn(`[Discord] Decklist image not found for decklist ${decklist.id} (HTTP ${response.status}), skipping`);
+          continue;
+        }
+
+        // Convert response to buffer
+        const imageBuffer = Buffer.from(await response.arrayBuffer());
+        const attachment = new AttachmentBuilder(imageBuffer, { name: `decklist-${decklist.id}.png` });
+
+        // Create embed with player and session info
+        const embed = new EmbedBuilder()
+          .setTitle(`${decklist.player.name}'s Decklist`)
+          .setDescription(`**Session ${session.number} (${stripLanguageCode(session.set?.setCode)})**`)
+          .setColor('#00ff00')
+          .setImage(`attachment://decklist-${decklist.id}.png`)
+          .setTimestamp();
+
+        await channel.send({
+          embeds: [embed],
+          files: [attachment],
+        });
+
+        console.log(`[Discord] Sent decklist image for ${decklist.player.name}`);
+      } catch (error) {
+        console.error(`[Discord] Error sending decklist for player ${decklist.player.name}:`, error);
+      }
+    }
+
+    console.log(`[Discord] Sent ${decklists.length} decklist notifications`);
+    return true;
+  } catch (error) {
+    console.error('[Discord] Error preparing decklists notification:', error);
     return false;
   }
 }

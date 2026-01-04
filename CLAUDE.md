@@ -710,7 +710,7 @@ The Discord bot runs as a separate service and can be called from server actions
 
 **Sending Notifications from Server Actions**:
 ```typescript
-import { notifyPairings, notifyStandings, notifyNewSession, notifyGeneric } from '@lib/discordClient';
+import { notifyPairings, notifyStandings, notifyNewSession, notifyBanlistChosen, notifyBanlistSuggestions, notifyLeaderboard, notifyWalletUpdate, notifyTransaction, notifyDecklists } from '@lib/discordClient';
 
 // After generating pairings for a round
 await notifyPairings(sessionId, roundNumber);
@@ -718,21 +718,41 @@ await notifyPairings(sessionId, roundNumber);
 // After finalizing standings
 await notifyStandings(sessionId);
 
+// After generating decklist images
+await notifyDecklists(sessionId);
+
 // When starting a new session
 await notifyNewSession(sessionNumber);
 
-// For custom notifications
-await notifyGeneric('Tournament Update', 'Custom message here', 0x00ff00);
+// When banlist is chosen by moderator
+await notifyBanlistChosen(sessionId);
+
+// When all banlist suggestions are submitted
+await notifyBanlistSuggestions(sessionId);
+
+// When victory points are assigned
+await notifyLeaderboard(sessionId);
+
+// When wallet points are distributed
+await notifyWalletUpdate(sessionId);
+
+// When a player makes a purchase
+await notifyTransaction(playerId, setId, amount, sessionId);
 ```
 
 **Architecture**: The Discord bot runs as a separate service with an SQS queue consumer. The Next.js app sends messages to AWS SQS (via `src/lib/discordClient.ts`), and the Discord bot polls the queue to process notifications asynchronously. This decouples the Discord.js library from the Next.js runtime and provides reliable, asynchronous message delivery with automatic retries.
 
 **Available Notification Functions** (in `src/discord/notifications.ts`):
-- `notifyNewSessionWithPairings(sessionId: number)`: Posts all pairings for a new session, grouped by round (automatically called in `startProg()`)
-- `notifyPairings(sessionId: number, round: number)`: Posts round pairings with player matchups
-- `notifyStandings(sessionId: number)`: Posts final standings with rankings and scores
-- `notifyNewSession(sessionNumber: number)`: Announces a new session has started (basic version without pairings)
-- `notifyGeneric(title: string, description: string, color?: number)`: Posts a custom message
+- `notifyNewSessionWithPairings(sessionId: number)`: Posts all pairings for a new session, grouped by round (automatically called in `startProg()`) → sent to **pairings** channel
+- `notifyPairings(sessionId: number, round: number)`: Posts round pairings with player matchups → sent to **pairings** channel
+- `notifyStandings(sessionId: number)`: Posts final standings with rankings and scores → sent to **standings** channel
+- `notifyDecklists(sessionId: number)`: Posts each player's decklist as a separate message with image (automatically called after `finalizeStandings()`). Fetches images from web URL using `NEXT_PUBLIC_API_URL` → sent to **decklists** channel
+- `notifyNewSession(sessionNumber: number)`: Announces a new session has started (basic version without pairings) → sent to **pairings** channel
+- `notifyBanlistChosen(sessionNumber: number)`: Posts the chosen banlist with changes highlighted → sent to **banlist** channel
+- `notifyBanlistSuggestions(sessionId: number)`: Posts all submitted banlist suggestions → sent to **banlistSuggestions** channel
+- `notifyLeaderboard(sessionId: number)`: Posts updated victory point leaderboard → sent to **leaderboard** channel
+- `notifyWalletUpdate(sessionId: number)`: Posts updated wallet balances for all players → sent to **wallet** channel
+- `notifyTransaction(playerId: number, setId: number, amount: number, sessionId?: number)`: Posts a player's purchase → sent to **spending** channel
 
 **Setup for Production**:
 1. **Create Discord Bot**:
@@ -776,3 +796,4 @@ await notifyGeneric('Tournament Update', 'Custom message here', 0x00ff00);
 - All notifications use Discord embeds for rich formatting
 - The bot only sends messages; it does not respond to commands
 - Uses AWS SQS FIFO queue to ensure messages are processed in order
+- **Decklist images**: The `notifyDecklists()` function fetches decklist images from `${NEXT_PUBLIC_API_URL}/deck-images/{decklistId}.png` to work with containerized services. The Discord bot container must have network access to the Next.js app URL

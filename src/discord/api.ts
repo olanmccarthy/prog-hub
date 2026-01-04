@@ -10,12 +10,12 @@ import {
   notifyPairings,
   notifyStandings,
   notifyNewSession,
-  notifyGeneric,
   notifyBanlistChosen,
   notifyBanlistSuggestions,
   notifyLeaderboard,
   notifyWalletUpdate,
-  notifyTransaction
+  notifyTransaction,
+  notifyDecklists
 } from './notifications';
 
 const sqsClient = new SQSClient({
@@ -30,7 +30,7 @@ const QUEUE_URL = process.env.DISCORD_SQS_QUEUE_URL || '';
 const POLL_INTERVAL = parseInt(process.env.SQS_POLL_INTERVAL || '60000', 10); // Default 1 minute
 
 interface NotificationMessage {
-  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'generic' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction';
+  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists';
   payload: Record<string, unknown>;
 }
 
@@ -70,19 +70,6 @@ function validateSessionNumber(payload: Record<string, unknown>): number {
   return sessionNumber;
 }
 
-function validateGenericPayload(payload: Record<string, unknown>): { title: string; description: string; color?: number } {
-  const { title, description, color } = payload;
-  if (!isString(title)) {
-    throw new Error(`Invalid title: expected string, got ${typeof title}`);
-  }
-  if (!isString(description)) {
-    throw new Error(`Invalid description: expected string, got ${typeof description}`);
-  }
-  if (color !== undefined && !isNumber(color)) {
-    throw new Error(`Invalid color: expected number or undefined, got ${typeof color}`);
-  }
-  return { title, description, color: color as number | undefined };
-}
 
 function validateTransactionPayload(payload: Record<string, unknown>): { playerId: number; setId: number; amount: number; sessionId?: number } {
   const { playerId, setId, amount, sessionId } = payload;
@@ -133,14 +120,8 @@ async function processMessage(message: Message): Promise<void> {
         await notifyNewSession(validateSessionNumber(notification.payload));
         break;
 
-      case 'generic': {
-        const { title, description, color } = validateGenericPayload(notification.payload);
-        await notifyGeneric(title, description, color);
-        break;
-      }
-
       case 'banlist-chosen':
-        await notifyBanlistChosen(validateSessionId(notification.payload));
+        await notifyBanlistChosen(validateSessionNumber(notification.payload));
         break;
 
       case 'banlist-suggestions':
@@ -160,6 +141,10 @@ async function processMessage(message: Message): Promise<void> {
         await notifyTransaction(playerId, setId, amount, sessionId);
         break;
       }
+
+      case 'decklists':
+        await notifyDecklists(validateSessionId(notification.payload));
+        break;
 
       default:
         console.warn(`[QueueConsumer] Unknown message type: ${notification.type}`);

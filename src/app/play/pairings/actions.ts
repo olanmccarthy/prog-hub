@@ -615,6 +615,10 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
     // Send Discord notification with final standings
     await notifyStandings(sessionId);
 
+    // Send Discord notification with decklist images
+    const { notifyDecklists } = await import('@lib/discordClient');
+    await notifyDecklists(sessionId);
+
     // Revalidate relevant pages
     revalidatePath("/play/pairings");
     revalidatePath("/admin/prog_actions");

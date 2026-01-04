@@ -69,6 +69,7 @@ export async function getChannel(channelType: keyof typeof discordConfig.channel
   }
 
   const channelId = discordConfig.channels[channelType];
+  console.log(discordConfig.channels)
   if (!channelId) {
     console.warn(`[Discord] No channel ID configured for ${channelType}`);
     return null;
@@ -89,12 +90,6 @@ export async function getChannel(channelType: keyof typeof discordConfig.channel
   }
 }
 
-/**
- * Get the configured notification channel (legacy - defaults to pairings)
- */
-export async function getNotificationChannel(): Promise<TextChannel | null> {
-  return getChannel('pairings');
-}
 
 /**
  * Gracefully shutdown the bot
