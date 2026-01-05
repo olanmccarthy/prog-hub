@@ -374,7 +374,7 @@ export async function getStandings(
 
     // Convert to array and sort with tiebreakers
     const playerStats = Array.from(playerStatsMap.values());
-    const sortedStandings = sortWithTiebreakers(playerStats);
+    const sortedStandings = sortWithTiebreakersAndHeadToHead(playerStats, pairings);
 
     // Assign ranks
     const standings: PlayerStanding[] = sortedStandings.map((stats, index) => ({
@@ -404,10 +404,20 @@ export async function getStandings(
   }
 }
 
-function sortWithTiebreakers(
-  players: PlayerStats[]
+/**
+ * Sort players with full tiebreaker support including recursive multi-way head-to-head
+ */
+function sortWithTiebreakersAndHeadToHead(
+  players: PlayerStats[],
+  pairings: Array<{
+    player1: { id: number };
+    player2: { id: number };
+    player1wins: number;
+    player2wins: number;
+  }>
 ): PlayerStats[] {
-  return players.sort((a, b) => {
+  // Step 1: Sort by first 3 criteria (match wins, game wins in losses, game losses in wins)
+  const initialSort = [...players].sort((a, b) => {
     // Primary: Most match wins
     if (a.matchWins !== b.matchWins) {
       return b.matchWins - a.matchWins;
@@ -423,10 +433,285 @@ function sortWithTiebreakers(
       return a.gameLossesInWins - b.gameLossesInWins;
     }
 
-    // Tiebreaker 3: Head to head
-    // Note: For full implementation of multi-way tie resolution, additional logic would be needed
+    // Still tied - will be resolved in next step
     return 0;
   });
+
+  // Step 2: Identify groups of tied players
+  const tiedGroups: PlayerStats[][] = [];
+  let currentGroup: PlayerStats[] = [initialSort[0]];
+
+  for (let i = 1; i < initialSort.length; i++) {
+    const prev = initialSort[i - 1];
+    const curr = initialSort[i];
+
+    // Check if current player is tied with previous on all 3 criteria
+    if (
+      curr.matchWins === prev.matchWins &&
+      curr.gameWinsInLosses === prev.gameWinsInLosses &&
+      curr.gameLossesInWins === prev.gameLossesInWins
+    ) {
+      currentGroup.push(curr);
+    } else {
+      // Group ended, save it if it has 2+ players
+      if (currentGroup.length >= 2) {
+        tiedGroups.push(currentGroup);
+      }
+      currentGroup = [curr];
+    }
+  }
+  // Don't forget the last group
+  if (currentGroup.length >= 2) {
+    tiedGroups.push(currentGroup);
+  }
+
+  // Step 3: Resolve each tied group with recursive head-to-head
+  const finalStandings = [...initialSort];
+
+  for (const group of tiedGroups) {
+    // Recursively resolve the tied group
+    const resolvedGroup = resolveMultiWayTie(group, pairings);
+
+    // Replace the group in finalStandings with the resolved group
+    const firstIdx = finalStandings.findIndex(p => p.playerId === group[0].playerId);
+    for (let i = 0; i < resolvedGroup.length; i++) {
+      finalStandings[firstIdx + i] = resolvedGroup[i];
+    }
+  }
+
+  return finalStandings;
+}
+
+/**
+ * Recursively resolve a multi-way tie by calculating stats within the tied group
+ * and applying all tiebreakers
+ */
+function resolveMultiWayTie(
+  tiedPlayers: PlayerStats[],
+  allPairings: Array<{
+    player1: { id: number };
+    player2: { id: number };
+    player1wins: number;
+    player2wins: number;
+  }>
+): PlayerStats[] {
+  // Base case: only 1 player (no tie to resolve)
+  if (tiedPlayers.length === 1) {
+    return tiedPlayers;
+  }
+
+  // Base case: 2 players (simple head-to-head)
+  if (tiedPlayers.length === 2) {
+    const [player1, player2] = tiedPlayers;
+    const h2h = resolveHeadToHead(player1.playerId, player2.playerId, allPairings);
+
+    if (h2h < 0) {
+      return [player1, player2]; // player1 won, maintains order
+    } else if (h2h > 0) {
+      return [player2, player1]; // player2 won, swap order
+    } else {
+      return tiedPlayers; // Can't resolve (no match, draw, or incomplete)
+    }
+  }
+
+  // Multi-way tie (3+ players): Calculate mini-standings
+  const playerIds = tiedPlayers.map(p => p.playerId);
+
+  // Calculate stats for each player against only the other tied players
+  const miniStandings = tiedPlayers.map(player => {
+    const stats = calculateStatsAgainstGroup(player.playerId, playerIds, allPairings);
+    return {
+      ...player,
+      miniMatchWins: stats.matchWins,
+      miniGameWinsInLosses: stats.gameWinsInLosses,
+      miniGameLossesInWins: stats.gameLossesInWins,
+    };
+  });
+
+  // Sort by mini-standings using the same 3 criteria
+  const sorted = miniStandings.sort((a, b) => {
+    // 1. Most match wins (within the group)
+    if (a.miniMatchWins !== b.miniMatchWins) {
+      return b.miniMatchWins - a.miniMatchWins;
+    }
+
+    // 2. Most game wins in lost matches (within the group)
+    if (a.miniGameWinsInLosses !== b.miniGameWinsInLosses) {
+      return b.miniGameWinsInLosses - a.miniGameWinsInLosses;
+    }
+
+    // 3. Least game losses in won matches (within the group)
+    if (a.miniGameLossesInWins !== b.miniGameLossesInWins) {
+      return a.miniGameLossesInWins - b.miniGameLossesInWins;
+    }
+
+    // Still tied
+    return 0;
+  });
+
+  // Identify any remaining ties within the sorted mini-standings
+  const result: PlayerStats[] = [];
+  let i = 0;
+
+  while (i < sorted.length) {
+    // Find all players tied with current player
+    const currentPlayer = sorted[i];
+    const subGroup: PlayerStats[] = [currentPlayer];
+    let j = i + 1;
+
+    while (
+      j < sorted.length &&
+      sorted[j].miniMatchWins === currentPlayer.miniMatchWins &&
+      sorted[j].miniGameWinsInLosses === currentPlayer.miniGameWinsInLosses &&
+      sorted[j].miniGameLossesInWins === currentPlayer.miniGameLossesInWins
+    ) {
+      subGroup.push(sorted[j]);
+      j++;
+    }
+
+    // If we have a sub-tie, recurse ONLY if we made progress
+    // (i.e., the subGroup is smaller than the original group)
+    if (subGroup.length >= 2) {
+      if (subGroup.length < tiedPlayers.length) {
+        // Made progress, safe to recurse
+        const resolved = resolveMultiWayTie(subGroup, allPairings);
+        result.push(...resolved);
+      } else {
+        // No progress made (perfectly symmetric tie)
+        // Randomize order to be fair since no objective tiebreaker exists
+        const randomized = shuffleArray([...subGroup]);
+        result.push(...randomized);
+      }
+    } else {
+      result.push(currentPlayer);
+    }
+
+    i = j;
+  }
+
+  return result;
+}
+
+/**
+ * Fisher-Yates shuffle algorithm for fair randomization
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
+ * Calculate a player's stats against a specific group of opponents
+ */
+function calculateStatsAgainstGroup(
+  playerId: number,
+  opponentIds: number[],
+  pairings: Array<{
+    player1: { id: number };
+    player2: { id: number };
+    player1wins: number;
+    player2wins: number;
+  }>
+): {
+  matchWins: number;
+  gameWinsInLosses: number;
+  gameLossesInWins: number;
+} {
+  let matchWins = 0;
+  let gameWinsInLosses = 0;
+  let gameLossesInWins = 0;
+
+  for (const opponentId of opponentIds) {
+    if (opponentId === playerId) continue; // Skip self
+
+    // Find the pairing between this player and the opponent
+    const pairing = pairings.find(
+      (p) =>
+        (p.player1.id === playerId && p.player2.id === opponentId) ||
+        (p.player1.id === opponentId && p.player2.id === playerId)
+    );
+
+    if (!pairing) continue;
+
+    const isPlayer1 = pairing.player1.id === playerId;
+    const playerWins = isPlayer1 ? pairing.player1wins : pairing.player2wins;
+    const opponentWins = isPlayer1 ? pairing.player2wins : pairing.player1wins;
+
+    // Determine match result (first to 2 wins)
+    if (playerWins === 2) {
+      // Won the match
+      matchWins++;
+      gameLossesInWins += opponentWins;
+    } else if (opponentWins === 2) {
+      // Lost the match
+      gameWinsInLosses += playerWins;
+    }
+    // If neither has 2 wins, it's incomplete or a draw - don't count
+  }
+
+  return { matchWins, gameWinsInLosses, gameLossesInWins };
+}
+
+/**
+ * Resolve head-to-head matchup between two players
+ * Returns:
+ *   -1 if player A beat player B (A should rank higher)
+ *    1 if player B beat player A (B should rank higher)
+ *    0 if they didn't play, drew, or match incomplete
+ */
+function resolveHeadToHead(
+  playerAId: number,
+  playerBId: number,
+  pairings: Array<{
+    player1: { id: number };
+    player2: { id: number };
+    player1wins: number;
+    player2wins: number;
+  }>
+): number {
+  // Find the pairing between these two players
+  const headToHeadPairing = pairings.find(
+    (pairing) =>
+      (pairing.player1.id === playerAId && pairing.player2.id === playerBId) ||
+      (pairing.player1.id === playerBId && pairing.player2.id === playerAId)
+  );
+
+  if (!headToHeadPairing) {
+    // Players didn't face each other
+    return 0;
+  }
+
+  // Determine who won the match (first to 2 wins)
+  const { player1, player2, player1wins, player2wins } = headToHeadPairing;
+
+  // Check if match is complete (someone has 2 wins)
+  if (player1wins !== 2 && player2wins !== 2) {
+    // Match not complete or was a draw
+    return 0;
+  }
+
+  // Determine which player is which in the pairing
+  const isAPlayer1 = player1.id === playerAId;
+
+  if (isAPlayer1) {
+    // Player A is player1 in the pairing
+    if (player1wins === 2) {
+      return -1; // Player A won, A ranks higher
+    } else {
+      return 1; // Player B won, B ranks higher
+    }
+  } else {
+    // Player A is player2 in the pairing
+    if (player2wins === 2) {
+      return -1; // Player A won, A ranks higher
+    } else {
+      return 1; // Player B won, B ranks higher
+    }
+  }
 }
 
 export async function getSessions(): Promise<GetSessionsResult> {
