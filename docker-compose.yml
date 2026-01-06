@@ -5,6 +5,8 @@ services:
     image: mysql:8.0
     container_name: mysql_db_prod
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3306:3306"
     env_file:
       - .env.production
     environment:
