@@ -1,25 +1,37 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Paper, Typography, Box, Chip, Alert, CircularProgress, IconButton } from '@mui/material';
+import { Paper, Typography, Box, Chip, Alert, CircularProgress, IconButton, Button } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import { getUpcomingSession, type UpcomingSessionData } from '@/src/app/actions';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { getUpcomingSession, deleteSession, type UpcomingSessionData } from '@/src/app/actions';
+import { getCurrentUser } from '@lib/auth';
 
 export default function UpcomingSession() {
   const [data, setData] = useState<UpcomingSessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const result = await getUpcomingSession();
-        if (result.success && result.data) {
-          setData(result.data);
+        const [sessionResult, user] = await Promise.all([
+          getUpcomingSession(),
+          getCurrentUser(),
+        ]);
+
+        if (sessionResult.success && sessionResult.data) {
+          setData(sessionResult.data);
         } else {
-          setError(result.error || 'Failed to load upcoming session');
+          setError(sessionResult.error || 'Failed to load upcoming session');
+        }
+
+        if (user?.isAdmin) {
+          setIsAdmin(true);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -40,6 +52,47 @@ export default function UpcomingSession() {
   const handleNext = () => {
     if (data && currentIndex < data.sessions.length - 1) {
       setCurrentIndex(currentIndex + 1);
+    }
+  };
+
+  const handleDelete = async (sessionNumber: number) => {
+    const confirmed = confirm(
+      `Are you sure you want to delete Session #${sessionNumber}?\n\n` +
+      'This will permanently delete:\n' +
+      '- The session itself\n' +
+      '- All decklists for this session\n' +
+      '- All pairings for this session\n' +
+      '- All banlist suggestions and votes\n' +
+      '- The banlist for this session\n' +
+      '- All victory points for this session\n' +
+      '- All wallet transactions for this session\n\n' +
+      'This action cannot be undone!'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeleting(true);
+      setError(null);
+      const result = await deleteSession(sessionNumber);
+
+      if (result.success) {
+        // Refresh the data
+        const sessionResult = await getUpcomingSession();
+        if (sessionResult.success && sessionResult.data) {
+          setData(sessionResult.data);
+          // Adjust currentIndex if needed
+          if (currentIndex > 0 && currentIndex >= sessionResult.data.sessions.length) {
+            setCurrentIndex(sessionResult.data.sessions.length - 1);
+          }
+        }
+      } else {
+        setError(result.error || 'Failed to delete session');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete session');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -256,6 +309,26 @@ export default function UpcomingSession() {
         <Typography sx={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
           No sets being released before this session.
         </Typography>
+      )}
+
+      {isAdmin && (
+        <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid var(--border-color)' }}>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={() => handleDelete(currentSession.sessionNumber)}
+            disabled={deleting}
+            sx={{
+              backgroundColor: 'var(--error)',
+              '&:hover': {
+                backgroundColor: '#d66e5d',
+              },
+            }}
+          >
+            {deleting ? 'Deleting...' : 'Delete Session'}
+          </Button>
+        </Box>
       )}
     </Paper>
   );

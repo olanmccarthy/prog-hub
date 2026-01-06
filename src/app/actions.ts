@@ -2,12 +2,20 @@
 
 import { prisma } from "@lib/prisma";
 import type { BanlistData } from "@lib/deckValidator";
+import { getCurrentUser } from "@lib/auth";
+import { revalidatePath } from "next/cache";
 
 interface GetMostRecentBanlistResult {
   success: boolean;
   banlist: BanlistData | null;
   sessionNumber?: number;
   error?: string;
+}
+
+interface DeleteSessionResult {
+  success: boolean;
+  error?: string;
+  sessionNumber?: number;
 }
 
 export interface SessionWithSets {
@@ -179,6 +187,119 @@ export async function getUpcomingSession(): Promise<GetUpcomingSessionResult> {
     return {
       success: false,
       data: null,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+export async function deleteSession(sessionNumber: number): Promise<DeleteSessionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return {
+        success: false,
+        error: "Unauthorized: Admin access required",
+      };
+    }
+
+    // Find the session
+    const session = await prisma.session.findFirst({
+      where: { number: sessionNumber },
+    });
+
+    if (!session) {
+      return {
+        success: false,
+        error: "Session not found",
+      };
+    }
+
+    // Check if session is active
+    if (session.active) {
+      return {
+        success: false,
+        error: "Cannot delete an active session. Please complete it first.",
+      };
+    }
+
+    // Check if session is already complete
+    if (session.complete) {
+      return {
+        success: false,
+        error: "Cannot delete a completed session",
+      };
+    }
+
+    // Delete related data in correct order (respecting foreign key constraints)
+    // 1. Delete decklists for this session
+    await prisma.decklist.deleteMany({
+      where: { sessionId: session.id },
+    });
+
+    // 2. Delete pairings for this session
+    await prisma.pairing.deleteMany({
+      where: { sessionId: session.id },
+    });
+
+    // 3. Delete banlist suggestions for this session
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      where: {
+        banlist: {
+          sessionId: sessionNumber,
+        },
+      },
+      select: { id: true },
+    });
+
+    const suggestionIds = suggestions.map(s => s.id);
+
+    // Delete votes for these suggestions
+    if (suggestionIds.length > 0) {
+      await prisma.banlistSuggestionVote.deleteMany({
+        where: { suggestionId: { in: suggestionIds } },
+      });
+    }
+
+    // Delete the suggestions themselves
+    await prisma.banlistSuggestion.deleteMany({
+      where: {
+        banlist: {
+          sessionId: sessionNumber,
+        },
+      },
+    });
+
+    // 4. Delete banlist for this session (sessionId stores session number)
+    await prisma.banlist.deleteMany({
+      where: { sessionId: sessionNumber },
+    });
+
+    // 5. Delete victory points for this session
+    await prisma.victoryPoint.deleteMany({
+      where: { sessionId: session.id },
+    });
+
+    // 6. Delete wallet transactions for this session
+    await prisma.walletTransaction.deleteMany({
+      where: { sessionId: session.id },
+    });
+
+    // 7. Finally, delete the session itself
+    await prisma.session.delete({
+      where: { id: session.id },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/admin/prog_actions");
+
+    return {
+      success: true,
+      sessionNumber: sessionNumber,
+    };
+  } catch (error) {
+    console.error("Error deleting session:", error);
+    return {
+      success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
