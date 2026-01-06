@@ -8,7 +8,9 @@ export interface SetData {
   id: number;
   setName: string;
   setCode: string;
+  numOfCards: number;
   tcgDate: Date;
+  setImage: string | null;
   isASession: boolean;
   isPurchasable: boolean;
   isPromo: boolean;
@@ -37,7 +39,9 @@ export async function getAllSets(): Promise<SetData[]> {
         id: true,
         setName: true,
         setCode: true,
+        numOfCards: true,
         tcgDate: true,
+        setImage: true,
         isASession: true,
         isPurchasable: true,
         isPromo: true,
@@ -82,7 +86,9 @@ export async function updateSetBooleans(input: UpdateSetBooleansInput): Promise<
         id: true,
         setName: true,
         setCode: true,
+        numOfCards: true,
         tcgDate: true,
+        setImage: true,
         isASession: true,
         isPurchasable: true,
         isPromo: true,
@@ -135,7 +141,9 @@ export async function updateSetPrice(input: UpdateSetPriceInput): Promise<SetDat
         id: true,
         setName: true,
         setCode: true,
+        numOfCards: true,
         tcgDate: true,
+        setImage: true,
         isASession: true,
         isPurchasable: true,
         isPromo: true,
@@ -208,7 +216,9 @@ export async function createSet(input: CreateSetInput): Promise<SetData> {
         id: true,
         setName: true,
         setCode: true,
+        numOfCards: true,
         tcgDate: true,
+        setImage: true,
         isASession: true,
         isPurchasable: true,
         isPromo: true,
@@ -223,5 +233,102 @@ export async function createSet(input: CreateSetInput): Promise<SetData> {
   } catch (error) {
     console.error('Error creating set:', error);
     throw error instanceof Error ? error : new Error('Failed to create set');
+  }
+}
+
+export interface UpdateSetInput {
+  id: number;
+  setName: string;
+  setCode: string;
+  numOfCards: number;
+  tcgDate: string; // ISO date string
+  setImage?: string;
+  isASession: boolean;
+  isPurchasable: boolean;
+  isPromo: boolean;
+  price: number;
+}
+
+export async function updateSet(input: UpdateSetInput): Promise<SetData> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      throw new Error('Unauthorized: Admin access required');
+    }
+
+    const { id, setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo, price } = input;
+
+    // Validate required fields
+    if (!id) {
+      throw new Error('Set ID is required');
+    }
+
+    if (!setName || !setCode || !numOfCards || !tcgDate) {
+      throw new Error('Set name, set code, number of cards, and TCG date are required');
+    }
+
+    if (numOfCards < 1) {
+      throw new Error('Number of cards must be at least 1');
+    }
+
+    if (price < 0) {
+      throw new Error('Price cannot be negative');
+    }
+
+    // Check if set exists
+    const existingSet = await prisma.set.findUnique({
+      where: { id },
+    });
+
+    if (!existingSet) {
+      throw new Error('Set not found');
+    }
+
+    // Check if set code is taken by another set
+    const duplicateSetCode = await prisma.set.findFirst({
+      where: {
+        setCode,
+        id: { not: id },
+      },
+    });
+
+    if (duplicateSetCode) {
+      throw new Error(`A different set with code "${setCode}" already exists`);
+    }
+
+    const updatedSet = await prisma.set.update({
+      where: { id },
+      data: {
+        setName,
+        setCode,
+        numOfCards,
+        tcgDate: new Date(tcgDate),
+        setImage: setImage || null,
+        isASession,
+        isPurchasable,
+        isPromo,
+        price,
+      },
+      select: {
+        id: true,
+        setName: true,
+        setCode: true,
+        numOfCards: true,
+        tcgDate: true,
+        setImage: true,
+        isASession: true,
+        isPurchasable: true,
+        isPromo: true,
+        price: true,
+      },
+    });
+
+    // Revalidate the set manager page
+    revalidatePath('/admin/set-manager');
+
+    return updatedSet;
+  } catch (error) {
+    console.error('Error updating set:', error);
+    throw error instanceof Error ? error : new Error('Failed to update set');
   }
 }

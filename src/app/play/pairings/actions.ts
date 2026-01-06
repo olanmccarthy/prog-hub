@@ -686,7 +686,7 @@ function resolveHeadToHead(
   }
 
   // Determine who won the match (first to 2 wins)
-  const { player1, player2, player1wins, player2wins } = headToHeadPairing;
+  const { player1, player1wins, player2wins } = headToHeadPairing;
 
   // Check if match is complete (someone has 2 wins)
   if (player1wins !== 2 && player2wins !== 2) {

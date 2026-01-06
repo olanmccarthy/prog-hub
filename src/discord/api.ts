@@ -41,10 +41,6 @@ function isNumber(value: unknown): value is number {
   return typeof value === 'number' && !isNaN(value);
 }
 
-function isString(value: unknown): value is string {
-  return typeof value === 'string';
-}
-
 function validateSessionId(payload: Record<string, unknown>): number {
   const { sessionId } = payload;
   if (!isNumber(sessionId)) {

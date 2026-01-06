@@ -24,7 +24,8 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
-import { getAllSets, updateSetBooleans, updateSetPrice, createSet, type SetData } from './actions';
+import EditIcon from '@mui/icons-material/Edit';
+import { getAllSets, updateSetBooleans, updateSetPrice, createSet, updateSet, type SetData } from './actions';
 
 export default function SetManagerPage() {
   const [sets, setSets] = useState<SetData[]>([]);
@@ -45,6 +46,9 @@ export default function SetManagerPage() {
     isPromo: false,
     price: 4,
   });
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editingSet, setEditingSet] = useState<SetData | null>(null);
 
   useEffect(() => {
     fetchSets();
@@ -139,9 +143,25 @@ export default function SetManagerPage() {
       setCreating(true);
       setError(null);
 
-      // Validate required fields
-      if (!newSet.setName || !newSet.setCode || !newSet.tcgDate || newSet.numOfCards <= 0) {
-        setError('Please fill in all required fields');
+      // Validate required fields with specific messages
+      if (!newSet.setName?.trim()) {
+        setError('Set name is required');
+        return;
+      }
+      if (!newSet.setCode?.trim()) {
+        setError('Set code is required');
+        return;
+      }
+      if (!newSet.numOfCards || newSet.numOfCards <= 0) {
+        setError('Number of cards must be at least 1');
+        return;
+      }
+      if (!newSet.tcgDate) {
+        setError('TCG release date is required');
+        return;
+      }
+      if (newSet.price < 0) {
+        setError('Price cannot be negative');
         return;
       }
 
@@ -179,6 +199,70 @@ export default function SetManagerPage() {
       setError(err instanceof Error ? err.message : 'Failed to create set');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleOpenEditDialog = (set: SetData) => {
+    setEditingSet(set);
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateSet = async () => {
+    if (!editingSet) return;
+
+    try {
+      setEditing(true);
+      setError(null);
+
+      // Validate required fields with specific messages
+      if (!editingSet.setName?.trim()) {
+        setError('Set name is required');
+        return;
+      }
+      if (!editingSet.setCode?.trim()) {
+        setError('Set code is required');
+        return;
+      }
+      if (!editingSet.numOfCards || editingSet.numOfCards <= 0) {
+        setError('Number of cards must be at least 1');
+        return;
+      }
+      if (!editingSet.tcgDate) {
+        setError('TCG release date is required');
+        return;
+      }
+      if (editingSet.price < 0) {
+        setError('Price cannot be negative');
+        return;
+      }
+
+      const updatedSet = await updateSet({
+        id: editingSet.id,
+        setName: editingSet.setName,
+        setCode: editingSet.setCode,
+        numOfCards: editingSet.numOfCards,
+        tcgDate: typeof editingSet.tcgDate === 'string' ? editingSet.tcgDate : new Date(editingSet.tcgDate).toISOString().split('T')[0],
+        setImage: editingSet.setImage || undefined,
+        isASession: editingSet.isASession,
+        isPurchasable: editingSet.isPurchasable,
+        isPromo: editingSet.isPromo,
+        price: editingSet.price,
+      });
+
+      // Update local state
+      setSets((prevSets) =>
+        prevSets.map((s) => (s.id === updatedSet.id ? updatedSet : s)).sort((a, b) =>
+          new Date(a.tcgDate).getTime() - new Date(b.tcgDate).getTime()
+        )
+      );
+
+      // Close dialog
+      setEditDialogOpen(false);
+      setEditingSet(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update set');
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -300,12 +384,15 @@ export default function SetManagerPage() {
               <TableCell align="center" sx={{ color: 'var(--text-bright)', fontWeight: 'bold', backgroundColor: 'var(--bg-secondary)' }}>
                 Is a Promo
               </TableCell>
+              <TableCell align="center" sx={{ color: 'var(--text-bright)', fontWeight: 'bold', backgroundColor: 'var(--bg-secondary)' }}>
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredSets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ color: 'var(--text-secondary)' }}>
+                <TableCell colSpan={8} align="center" sx={{ color: 'var(--text-secondary)' }}>
                   {searchQuery ? 'No sets found matching your search.' : 'No sets found.'}
                 </TableCell>
               </TableRow>
@@ -385,6 +472,21 @@ export default function SetManagerPage() {
                         '&.Mui-checked': { color: 'var(--accent-primary)' },
                       }}
                     />
+                  </TableCell>
+                  <TableCell align="center">
+                    <Button
+                      size="small"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleOpenEditDialog(set)}
+                      sx={{
+                        color: 'var(--text-primary)',
+                        '&:hover': {
+                          backgroundColor: 'var(--hover-light-grey)',
+                        },
+                      }}
+                    >
+                      Edit
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -576,6 +678,195 @@ export default function SetManagerPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Edit Set Dialog */}
+      {editingSet && (
+        <Dialog
+          open={editDialogOpen}
+          onClose={() => !editing && setEditDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+            },
+          }}
+        >
+          <DialogTitle sx={{ color: 'var(--text-bright)' }}>
+            Edit Set
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <TextField
+                label="Set Name"
+                required
+                fullWidth
+                value={editingSet.setName}
+                onChange={(e) => setEditingSet({ ...editingSet, setName: e.target.value })}
+                sx={{
+                  '& .MuiInputLabel-root': { color: 'var(--text-secondary)' },
+                  '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'var(--border-color)' },
+                    '&:hover fieldset': { borderColor: 'var(--accent-primary)' },
+                    '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' },
+                  },
+                }}
+              />
+              <TextField
+                label="Set Code"
+                required
+                fullWidth
+                value={editingSet.setCode}
+                onChange={(e) => setEditingSet({ ...editingSet, setCode: e.target.value })}
+                sx={{
+                  '& .MuiInputLabel-root': { color: 'var(--text-secondary)' },
+                  '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'var(--border-color)' },
+                    '&:hover fieldset': { borderColor: 'var(--accent-primary)' },
+                    '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' },
+                  },
+                }}
+              />
+              <TextField
+                label="Number of Cards"
+                required
+                type="number"
+                fullWidth
+                value={editingSet.numOfCards}
+                onChange={(e) => setEditingSet({ ...editingSet, numOfCards: parseInt(e.target.value) || 0 })}
+                inputProps={{ min: 1 }}
+                sx={{
+                  '& .MuiInputLabel-root': { color: 'var(--text-secondary)' },
+                  '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'var(--border-color)' },
+                    '&:hover fieldset': { borderColor: 'var(--accent-primary)' },
+                    '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' },
+                  },
+                }}
+              />
+              <TextField
+                label="TCG Release Date"
+                required
+                type="date"
+                fullWidth
+                value={typeof editingSet.tcgDate === 'string' ? editingSet.tcgDate : new Date(editingSet.tcgDate).toISOString().split('T')[0]}
+                onChange={(e) => setEditingSet({ ...editingSet, tcgDate: new Date(e.target.value) })}
+                InputLabelProps={{ shrink: true }}
+                sx={{
+                  '& .MuiInputLabel-root': { color: 'var(--text-secondary)' },
+                  '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'var(--border-color)' },
+                    '&:hover fieldset': { borderColor: 'var(--accent-primary)' },
+                    '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' },
+                  },
+                }}
+              />
+              <TextField
+                label="Set Image URL (optional)"
+                fullWidth
+                value={editingSet.setImage || ''}
+                onChange={(e) => setEditingSet({ ...editingSet, setImage: e.target.value })}
+                sx={{
+                  '& .MuiInputLabel-root': { color: 'var(--text-secondary)' },
+                  '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'var(--border-color)' },
+                    '&:hover fieldset': { borderColor: 'var(--accent-primary)' },
+                    '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' },
+                  },
+                }}
+              />
+              <TextField
+                label="Price"
+                type="number"
+                fullWidth
+                value={editingSet.price}
+                onChange={(e) => setEditingSet({ ...editingSet, price: parseInt(e.target.value) || 4 })}
+                inputProps={{ min: 0 }}
+                sx={{
+                  '& .MuiInputLabel-root': { color: 'var(--text-secondary)' },
+                  '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'var(--border-color)' },
+                    '&:hover fieldset': { borderColor: 'var(--accent-primary)' },
+                    '&.Mui-focused fieldset': { borderColor: 'var(--accent-primary)' },
+                  },
+                }}
+              />
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Checkbox
+                    checked={editingSet.isASession}
+                    onChange={(e) => setEditingSet({ ...editingSet, isASession: e.target.checked })}
+                    sx={{
+                      color: 'var(--text-secondary)',
+                      '&.Mui-checked': { color: 'var(--accent-primary)' },
+                    }}
+                  />
+                  <Typography sx={{ color: 'var(--text-primary)' }}>Is a Session</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Checkbox
+                    checked={editingSet.isPurchasable}
+                    onChange={(e) => setEditingSet({ ...editingSet, isPurchasable: e.target.checked })}
+                    sx={{
+                      color: 'var(--text-secondary)',
+                      '&.Mui-checked': { color: 'var(--accent-primary)' },
+                    }}
+                  />
+                  <Typography sx={{ color: 'var(--text-primary)' }}>Is Purchasable</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Checkbox
+                    checked={editingSet.isPromo}
+                    onChange={(e) => setEditingSet({ ...editingSet, isPromo: e.target.checked })}
+                    sx={{
+                      color: 'var(--text-secondary)',
+                      '&.Mui-checked': { color: 'var(--accent-primary)' },
+                    }}
+                  />
+                  <Typography sx={{ color: 'var(--text-primary)' }}>Is a Promo</Typography>
+                </Box>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button
+              onClick={() => {
+                setEditDialogOpen(false);
+                setEditingSet(null);
+              }}
+              disabled={editing}
+              sx={{
+                color: 'var(--text-secondary)',
+                '&:hover': {
+                  backgroundColor: 'var(--hover-light-grey)',
+                },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateSet}
+              disabled={editing}
+              variant="contained"
+              sx={{
+                backgroundColor: 'var(--accent-primary)',
+                '&:hover': {
+                  backgroundColor: 'var(--accent-blue-hover)',
+                },
+              }}
+            >
+              {editing ? <CircularProgress size={24} /> : 'Update Set'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 }
