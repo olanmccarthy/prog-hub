@@ -18,6 +18,10 @@ interface DeleteSessionResult {
   sessionNumber?: number;
 }
 
+interface IsAdminResult {
+  isAdmin: boolean;
+}
+
 export interface SessionWithSets {
   sessionNumber: number;
   sessionSet: {
@@ -189,6 +193,15 @@ export async function getUpcomingSession(): Promise<GetUpcomingSessionResult> {
       data: null,
       error: error instanceof Error ? error.message : "Unknown error",
     };
+  }
+}
+
+export async function checkIsAdmin(): Promise<IsAdminResult> {
+  try {
+    const user = await getCurrentUser();
+    return { isAdmin: user?.isAdmin || false };
+  } catch {
+    return { isAdmin: false };
   }
 }
 

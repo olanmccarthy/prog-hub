@@ -5,8 +5,7 @@ import { Paper, Typography, Box, Chip, Alert, CircularProgress, IconButton, Butt
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { getUpcomingSession, deleteSession, type UpcomingSessionData } from '@/src/app/actions';
-import { getCurrentUser } from '@lib/auth';
+import { getUpcomingSession, deleteSession, checkIsAdmin, type UpcomingSessionData } from '@/src/app/actions';
 
 export default function UpcomingSession() {
   const [data, setData] = useState<UpcomingSessionData | null>(null);
@@ -19,9 +18,9 @@ export default function UpcomingSession() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [sessionResult, user] = await Promise.all([
+        const [sessionResult, adminResult] = await Promise.all([
           getUpcomingSession(),
-          getCurrentUser(),
+          checkIsAdmin(),
         ]);
 
         if (sessionResult.success && sessionResult.data) {
@@ -30,9 +29,7 @@ export default function UpcomingSession() {
           setError(sessionResult.error || 'Failed to load upcoming session');
         }
 
-        if (user?.isAdmin) {
-          setIsAdmin(true);
-        }
+        setIsAdmin(adminResult.isAdmin);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
