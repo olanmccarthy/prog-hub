@@ -178,13 +178,13 @@ export default function VictoryPointAssignmentPage() {
                   <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>Rank</TableCell>
                   <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>Player</TableCell>
                   <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                    Match Wins
+                    Current VP
                   </TableCell>
                   <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                    Game Wins
+                    Current Wallet
                   </TableCell>
                   <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                    OMW%
+                    Earned This Session
                   </TableCell>
                   {status.canAssign && !status.alreadyAssigned && (
                     <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
@@ -236,13 +236,13 @@ export default function VictoryPointAssignmentPage() {
                         )}
                       </TableCell>
                       <TableCell sx={{ color: 'var(--text-primary)' }} align="center">
-                        {player.matchWins}
+                        {player.currentVictoryPoints}
                       </TableCell>
                       <TableCell sx={{ color: 'var(--text-primary)' }} align="center">
-                        {player.gameWins}
+                        {player.currentWalletPoints}
                       </TableCell>
                       <TableCell sx={{ color: 'var(--text-primary)' }} align="center">
-                        {(player.opponentMatchWinRate * 100).toFixed(1)}%
+                        {player.walletPointsThisSession}
                       </TableCell>
                       {status.canAssign && !status.alreadyAssigned && (
                         <TableCell align="center">

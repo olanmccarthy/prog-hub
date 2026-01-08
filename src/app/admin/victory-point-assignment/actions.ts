@@ -11,6 +11,9 @@ export interface RankedPlayer {
   matchWins: number;
   gameWins: number;
   opponentMatchWinRate: number;
+  currentVictoryPoints: number;
+  currentWalletPoints: number;
+  walletPointsThisSession: number;
 }
 
 export interface VictoryPointStatusResult {
@@ -139,6 +142,22 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
 
   if (!session) return [];
 
+  // Get active wallet point breakdown
+  const activeBreakdown = await prisma.walletPointBreakdown.findFirst({
+    where: { active: true },
+  });
+
+  const walletPoints = activeBreakdown
+    ? [
+        activeBreakdown.first,
+        activeBreakdown.second,
+        activeBreakdown.third,
+        activeBreakdown.fourth,
+        activeBreakdown.fifth,
+        activeBreakdown.sixth,
+      ]
+    : [0, 0, 0, 0, 0, 0];
+
   // Get all unique players in the session
   const playerIds = new Set<number>();
   session.pairings.forEach(pairing => {
@@ -224,16 +243,31 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
     const stats = playerStats[i];
     const player = await prisma.player.findUnique({
       where: { id: stats.playerId },
+      include: {
+        wallet: true,
+      },
     });
 
     if (player) {
+      // Get current victory points
+      const victoryPointCount = await prisma.victoryPoint.count({
+        where: { playerId: stats.playerId },
+      });
+
+      // Wallet points this session based on rank (0 for last place)
+      const rank = i + 1;
+      const walletPointsThisSession = rank === playerStats.length ? 0 : walletPoints[rank - 1] || 0;
+
       rankedPlayers.push({
         playerId: stats.playerId,
         playerName: player.name,
-        rank: i + 1,
+        rank,
         matchWins: stats.matchWins,
         gameWins: stats.gameWins,
         opponentMatchWinRate: stats.opponentMatchWinRate,
+        currentVictoryPoints: victoryPointCount,
+        currentWalletPoints: player.wallet?.amount || 0,
+        walletPointsThisSession,
       });
     }
   }
@@ -321,10 +355,10 @@ export async function assignVictoryPoint(
       .filter(p => p.playerId !== selectedPlayerId)
       .filter((_, index, array) => index < array.length - 1); // Exclude last place
 
-    // Award wallet points based on adjusted position (after removing VP winner)
+    // Award wallet points based on original ranking position
     for (let i = 0; i < playersForWalletPoints.length; i++) {
       const player = playersForWalletPoints[i];
-      const pointsToAward = walletPoints[i] || 0;
+      const pointsToAward = walletPoints[player.rank - 1] || 0;
 
       if (pointsToAward > 0) {
         // Update player's wallet
@@ -348,7 +382,7 @@ export async function assignVictoryPoint(
             sessionId: activeSession.id,
             amount: pointsToAward,
             type: 'VICTORY_POINT_AWARD',
-            description: `Session ${activeSession.number} - ${i + 1}${i === 0 ? 'st' : i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'} place award (VP declined)`,
+            description: `Session ${activeSession.number} - ${player.rank}${player.rank === 1 ? 'st' : player.rank === 2 ? 'nd' : player.rank === 3 ? 'rd' : 'th'} place award (VP declined)`,
           },
         });
       }

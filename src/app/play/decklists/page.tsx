@@ -35,16 +35,28 @@ import {
   getPlayers,
   getCardNames,
   updateDecklistName,
+  getCurrentUserInfo,
   DecklistWithDetails,
   SessionOption,
   PlayerOption,
+  CurrentUserInfo,
 } from "./actions";
+
+const getOrdinalSuffix = (num: number): string => {
+  const j = num % 10;
+  const k = num % 100;
+  if (j === 1 && k !== 11) return "st";
+  if (j === 2 && k !== 12) return "nd";
+  if (j === 3 && k !== 13) return "rd";
+  return "th";
+};
 
 export default function DecklistsPage() {
   const [decklists, setDecklists] = useState<DecklistWithDetails[]>([]);
   const [sessions, setSessions] = useState<SessionOption[]>([]);
   const [players, setPlayers] = useState<PlayerOption[]>([]);
   const [cardNames, setCardNames] = useState<Record<number, string>>({});
+  const [currentUser, setCurrentUser] = useState<CurrentUserInfo | null>(null);
 
   const [selectedSession, setSelectedSession] = useState<number | "" | "all">("all");
   const [selectedPlayer, setSelectedPlayer] = useState<number | "" | "all">("all");
@@ -71,7 +83,11 @@ export default function DecklistsPage() {
   }, [selectedSession, selectedPlayer, filtersLoaded]);
 
   const loadFilters = async () => {
-    const [sessionsRes, playersRes] = await Promise.all([getSessions(), getPlayers()]);
+    const [sessionsRes, playersRes, userRes] = await Promise.all([
+      getSessions(),
+      getPlayers(),
+      getCurrentUserInfo(),
+    ]);
 
     if (sessionsRes.success && sessionsRes.data) {
       setSessions(sessionsRes.data);
@@ -90,6 +106,10 @@ export default function DecklistsPage() {
 
     if (playersRes.success && playersRes.data) {
       setPlayers(playersRes.data);
+    }
+
+    if (userRes.success && userRes.data) {
+      setCurrentUser(userRes.data);
     }
 
     setFiltersLoaded(true);
@@ -322,7 +342,23 @@ export default function DecklistsPage() {
                         <CardContent>
                           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
                             <Box sx={{ flex: 1 }}>
-                              <Typography variant="h6">{decklist.playerName}</Typography>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                                <Typography variant="h6">{decklist.playerName}</Typography>
+                                {decklist.matchRecord && (
+                                  <Chip
+                                    label={decklist.matchRecord}
+                                    size="small"
+                                    sx={{ backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)" }}
+                                  />
+                                )}
+                                {decklist.placement && (
+                                  <Chip
+                                    label={`${decklist.placement}${getOrdinalSuffix(decklist.placement)} Place`}
+                                    size="small"
+                                    color={decklist.placement <= 3 ? "primary" : "default"}
+                                  />
+                                )}
+                              </Box>
                               {!showSessionDividers && (
                                 <>
                                   <Typography variant="body2" color="text.secondary">
@@ -381,7 +417,9 @@ export default function DecklistsPage() {
                               >
                                 {decklist.name || "Unnamed Deck"}
                               </Typography>
-                              {decklist.sessionNumber === mostRecentSessionNumber && (
+                              {decklist.sessionNumber === mostRecentSessionNumber &&
+                                currentUser &&
+                                (currentUser.isAdmin || decklist.playerId === currentUser.playerId) && (
                                 <IconButton
                                   size="small"
                                   onClick={() => handleStartEdit(decklist.id, decklist.name)}

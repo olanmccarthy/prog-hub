@@ -17,6 +17,8 @@ export interface DecklistWithDetails {
   submittedAt: Date;
   sessionComplete: boolean;
   standingsFinalized: boolean;
+  matchRecord: string | null; // e.g. "3-2"
+  placement: number | null; // 1-6 for top 6 placements
 }
 
 export interface SessionOption {
@@ -29,6 +31,36 @@ export interface SessionOption {
 export interface PlayerOption {
   id: number;
   name: string;
+}
+
+export interface CurrentUserInfo {
+  playerId: number;
+  playerName: string;
+  isAdmin: boolean;
+}
+
+/**
+ * Get current user information
+ */
+export async function getCurrentUserInfo(): Promise<{ success: boolean; data?: CurrentUserInfo; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    return {
+      success: true,
+      data: {
+        playerId: user.playerId,
+        playerName: user.playerName,
+        isAdmin: user.isAdmin || false,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching current user:", error);
+    return { success: false, error: "Failed to fetch user information" };
+  }
 }
 
 /**
@@ -141,6 +173,54 @@ export async function getDecklists(
       ],
     });
 
+    // Get unique session IDs to fetch pairings
+    const sessionIds = [...new Set(decklists.map(d => d.sessionId))];
+
+    // Fetch all pairings for these sessions
+    const pairings = await prisma.pairing.findMany({
+      where: {
+        sessionId: { in: sessionIds },
+      },
+      select: {
+        sessionId: true,
+        player1Id: true,
+        player2Id: true,
+        player1wins: true,
+        player2wins: true,
+      },
+    });
+
+    // Calculate match records for each player in each session
+    const matchRecords = new Map<string, { wins: number; losses: number }>();
+
+    pairings.forEach(pairing => {
+      const p1Key = `${pairing.sessionId}-${pairing.player1Id}`;
+      const p2Key = `${pairing.sessionId}-${pairing.player2Id}`;
+
+      // Initialize if not exists
+      if (!matchRecords.has(p1Key)) {
+        matchRecords.set(p1Key, { wins: 0, losses: 0 });
+      }
+      if (!matchRecords.has(p2Key)) {
+        matchRecords.set(p2Key, { wins: 0, losses: 0 });
+      }
+
+      const p1Record = matchRecords.get(p1Key)!;
+      const p2Record = matchRecords.get(p2Key)!;
+
+      // Determine match result (first to 2 wins)
+      if (pairing.player1wins === 2) {
+        // Player 1 won the match
+        p1Record.wins++;
+        p2Record.losses++;
+      } else if (pairing.player2wins === 2) {
+        // Player 2 won the match
+        p2Record.wins++;
+        p1Record.losses++;
+      }
+      // If neither has 2 wins, match isn't complete or is a draw - don't count
+    });
+
     // Helper function to parse JSON fields that might be strings or already parsed
     const parseJsonField = (field: string | number[] | unknown): number[] => {
       if (typeof field === 'string') {
@@ -149,7 +229,7 @@ export async function getDecklists(
       return Array.isArray(field) ? field : [];
     };
 
-    // Check if standings are finalized for each session
+    // Check if standings are finalized for each session and get placement
     const decklistsWithDetails: DecklistWithDetails[] = decklists.map(decklist => {
       const standingsFinalized =
         decklist.session.first !== null &&
@@ -158,6 +238,22 @@ export async function getDecklists(
         decklist.session.fourth !== null &&
         decklist.session.fifth !== null &&
         decklist.session.sixth !== null;
+
+      // Get match record
+      const recordKey = `${decklist.sessionId}-${decklist.playerId}`;
+      const record = matchRecords.get(recordKey);
+      const matchRecord = record ? `${record.wins}-${record.losses}` : null;
+
+      // Get placement (1-6)
+      let placement: number | null = null;
+      if (standingsFinalized) {
+        if (decklist.session.first === decklist.playerId) placement = 1;
+        else if (decklist.session.second === decklist.playerId) placement = 2;
+        else if (decklist.session.third === decklist.playerId) placement = 3;
+        else if (decklist.session.fourth === decklist.playerId) placement = 4;
+        else if (decklist.session.fifth === decklist.playerId) placement = 5;
+        else if (decklist.session.sixth === decklist.playerId) placement = 6;
+      }
 
       return {
         id: decklist.id,
@@ -173,6 +269,8 @@ export async function getDecklists(
         submittedAt: decklist.submittedAt,
         sessionComplete: decklist.session.complete,
         standingsFinalized,
+        matchRecord,
+        placement,
       };
     });
 
@@ -243,8 +341,8 @@ export async function updateDecklistName(decklistId: number, name: string): Prom
       return { success: false, error: "Decklist not found" };
     }
 
-    // Check if it's the user's own decklist
-    if (decklist.playerId !== user.playerId) {
+    // Check if it's the user's own decklist (admins can edit any decklist)
+    if (decklist.playerId !== user.playerId && !user.isAdmin) {
       return { success: false, error: "You can only edit your own decklists" };
     }
 

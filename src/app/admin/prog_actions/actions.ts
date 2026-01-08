@@ -906,9 +906,9 @@ export async function autoSubmitDecklists(): Promise<AutoSubmitDecklistsResult> 
       return { success: false, error: 'Only admins can use this test function' };
     }
 
-    // Get current session
+    // Get active session
     const session = await prisma.session.findFirst({
-      orderBy: { date: 'desc' }
+      where: { active: true }
     })
 
     if (!session) {
@@ -956,9 +956,9 @@ export async function autoSubmitDecklists(): Promise<AutoSubmitDecklistsResult> 
         data: {
           playerId: player.id,
           sessionId: session.id,
-          maindeck: JSON.stringify(maindeck),
-          sidedeck: JSON.stringify(sidedeck),
-          extradeck: JSON.stringify(extradeck),
+          maindeck,
+          sidedeck,
+          extradeck,
         },
       });
     }

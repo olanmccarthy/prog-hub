@@ -10,12 +10,16 @@ export interface ShopSet {
   tcgDate: Date;
   setImage: string | null;
   numOfCards: number;
+  isPurchasable: boolean;
+  sessionNumber: number | null;
+  sessionName: string | null;
 }
 
 export interface GetShopSetsResult {
   success: boolean;
   sets?: ShopSet[];
   nextSessionNumber?: number;
+  nextSessionDate?: Date;
   error?: string;
 }
 
@@ -32,10 +36,10 @@ export interface GetWalletBalanceResult {
 }
 
 /**
- * Get all purchasable sets available up to and including the next session
- * Shows all purchasable sets from the beginning up to the next session's release date
+ * Get sets available for the shop
+ * @param showUnavailable - If true, shows all purchasable sets including future ones. If false, only shows currently available sets.
  */
-export async function getShopSets(): Promise<GetShopSetsResult> {
+export async function getShopSets(showUnavailable = false): Promise<GetShopSetsResult> {
   try {
     // Get the next session (first non-completed session)
     const nextSession = await prisma.session.findFirst({
@@ -57,17 +61,40 @@ export async function getShopSets(): Promise<GetShopSetsResult> {
       };
     }
 
-    // Get all purchasable sets up to and including the next session's set
-    // This includes all previous session sets and the next session's set
-    const sets = await prisma.set.findMany({
-      where: {
-        isPurchasable: true,
-        tcgDate: {
-          lte: nextSession.set.tcgDate,
+    // Build where clause
+    // Always require isPurchasable = true
+    // If showUnavailable is false, also filter by date
+    const whereClause: {
+      isPurchasable: boolean;
+      tcgDate?: { lte: Date };
+    } = {
+      isPurchasable: true,
+    };
+
+    if (!showUnavailable) {
+      whereClause.tcgDate = {
+        lte: nextSession.set.tcgDate,
+      };
+    }
+
+    // Get all sessions (sets marked as sessions) to determine grouping
+    const allSessions = await prisma.session.findMany({
+      orderBy: { number: 'asc' },
+      include: {
+        set: {
+          select: {
+            tcgDate: true,
+            setName: true,
+          },
         },
       },
+    });
+
+    // Get sets based on criteria
+    const sets = await prisma.set.findMany({
+      where: whereClause,
       orderBy: {
-        tcgDate: 'desc',
+        tcgDate: 'asc',
       },
       select: {
         id: true,
@@ -76,13 +103,54 @@ export async function getShopSets(): Promise<GetShopSetsResult> {
         tcgDate: true,
         setImage: true,
         numOfCards: true,
+        isPurchasable: true,
       },
+    });
+
+    // Assign each set to its corresponding session
+    // A set belongs to a session if it's released between that session's date and the next session's date
+    const setsWithSession = sets.map(set => {
+      let belongsToSession = null;
+
+      // Find which session this set belongs to
+      for (let i = 0; i < allSessions.length; i++) {
+        const currentSession = allSessions[i];
+        const nextSession = allSessions[i + 1];
+
+        if (!currentSession.set) continue;
+
+        const setDate = new Date(set.tcgDate);
+        const currentSessionDate = new Date(currentSession.set.tcgDate);
+
+        // Check if set is released on or after this session's date
+        if (setDate >= currentSessionDate) {
+          // If there's a next session, check if set is before next session
+          if (nextSession && nextSession.set) {
+            const nextSessionDate = new Date(nextSession.set.tcgDate);
+            if (setDate < nextSessionDate) {
+              belongsToSession = currentSession;
+              break;
+            }
+          } else {
+            // No next session, so this set belongs to the last session
+            belongsToSession = currentSession;
+            break;
+          }
+        }
+      }
+
+      return {
+        ...set,
+        sessionNumber: belongsToSession?.number || null,
+        sessionName: belongsToSession?.set?.setName || null,
+      };
     });
 
     return {
       success: true,
-      sets,
+      sets: setsWithSession,
       nextSessionNumber: nextSession.number,
+      nextSessionDate: nextSession.set.tcgDate,
     };
   } catch (error) {
     console.error("Error fetching shop sets:", error);
@@ -132,9 +200,11 @@ export async function getWalletBalance(): Promise<GetWalletBalanceResult> {
 
 /**
  * Purchase a set for a player
- * Deducts 4 points from wallet and creates a transaction record
+ * Deducts 4 points per box from wallet and creates a transaction record
+ * @param setId - The ID of the set to purchase
+ * @param quantity - Number of boxes to purchase (default: 1)
  */
-export async function purchaseSet(setId: number): Promise<PurchaseSetResult> {
+export async function purchaseSet(setId: number, quantity: number = 1): Promise<PurchaseSetResult> {
   try {
     const currentUser = await getCurrentUser();
     if (!currentUser) {
@@ -164,16 +234,32 @@ export async function purchaseSet(setId: number): Promise<PurchaseSetResult> {
       };
     }
 
-    // Check if player has enough balance
-    const purchaseCost = 4;
-    if (player.wallet.amount < purchaseCost) {
+    // Validate quantity
+    if (quantity < 1 || !Number.isInteger(quantity)) {
       return {
         success: false,
-        error: `Insufficient funds. You need ${purchaseCost} points but only have ${player.wallet.amount}.`,
+        error: "Invalid quantity. Must be a positive integer.",
       };
     }
 
-    // Verify set exists
+    if (quantity > 100) {
+      return {
+        success: false,
+        error: "Cannot purchase more than 100 boxes at once.",
+      };
+    }
+
+    // Check if player has enough balance
+    const purchaseCostPerBox = 4;
+    const totalCost = purchaseCostPerBox * quantity;
+    if (player.wallet.amount < totalCost) {
+      return {
+        success: false,
+        error: `Insufficient funds. You need ${totalCost} points but only have ${player.wallet.amount}.`,
+      };
+    }
+
+    // Verify set exists and is purchasable
     const set = await prisma.set.findUnique({
       where: { id: setId },
     });
@@ -185,26 +271,67 @@ export async function purchaseSet(setId: number): Promise<PurchaseSetResult> {
       };
     }
 
-    // Deduct from wallet and create transaction in a transaction
+    if (!set.isPurchasable) {
+      return {
+        success: false,
+        error: "This set is not available for purchase.",
+      };
+    }
+
+    // Check if set is available for the current session
+    const nextSession = await prisma.session.findFirst({
+      where: { complete: false },
+      orderBy: { number: 'asc' },
+      include: {
+        set: {
+          select: {
+            tcgDate: true,
+          },
+        },
+      },
+    });
+
+    if (!nextSession || !nextSession.set) {
+      return {
+        success: false,
+        error: "No upcoming session found.",
+      };
+    }
+
+    // Check if set's release date is after the next session
+    if (new Date(set.tcgDate) > new Date(nextSession.set.tcgDate)) {
+      return {
+        success: false,
+        error: "This set is not yet available for purchase.",
+      };
+    }
+
+    // Deduct from wallet and create transaction records in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Update wallet
       const updatedWallet = await tx.wallet.update({
         where: { playerId: currentUser.playerId },
         data: {
           amount: {
-            decrement: purchaseCost,
+            decrement: totalCost,
           },
         },
       });
 
-      // Create transaction record
-      await tx.transaction.create({
-        data: {
-          playerId: currentUser.playerId,
-          setId: setId,
-          amount: purchaseCost,
-        },
-      });
+      // Create transaction records (one per box purchased)
+      const transactionPromises = [];
+      for (let i = 0; i < quantity; i++) {
+        transactionPromises.push(
+          tx.transaction.create({
+            data: {
+              playerId: currentUser.playerId,
+              setId: setId,
+              amount: purchaseCostPerBox,
+            },
+          })
+        );
+      }
+      await Promise.all(transactionPromises);
 
       return updatedWallet;
     });
@@ -219,7 +346,7 @@ export async function purchaseSet(setId: number): Promise<PurchaseSetResult> {
     await notifyTransaction(
       currentUser.playerId,
       setId,
-      purchaseCost,
+      totalCost,
       activeSession?.id
     );
 
