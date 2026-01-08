@@ -31,6 +31,9 @@ RUN apk add --no-cache \
 # Copy package.json for metadata (optional)
 COPY package*.json ./
 
+# Copy next.config.ts for runtime image optimization
+COPY --from=builder /app/next.config.ts ./next.config.ts
+
 # Copy the built app and node_modules from builder
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public

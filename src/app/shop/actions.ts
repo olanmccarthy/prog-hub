@@ -13,6 +13,7 @@ export interface ShopSet {
   isPurchasable: boolean;
   sessionNumber: number | null;
   sessionName: string | null;
+  price: number;
 }
 
 export interface GetShopSetsResult {
@@ -104,6 +105,7 @@ export async function getShopSets(showUnavailable = false): Promise<GetShopSetsR
         setImage: true,
         numOfCards: true,
         isPurchasable: true,
+        price: true,
       },
     });
 

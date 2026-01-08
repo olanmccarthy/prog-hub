@@ -600,7 +600,7 @@ export default function ShopPage() {
                                 },
                               }}
                             >
-                              Purchase ({getQuantity(set.id) * 4} pts)
+                              Purchase ({getQuantity(set.id) * set.price} pts)
                             </Button>
                           </Box>
                         </Card>
@@ -787,7 +787,7 @@ export default function ShopPage() {
                     },
                   }}
                 >
-                  Not Purchasable (4 pts)
+                  Not Purchasable ({set.price} pts)
                 </Button>
               </Box>
             </Card>
