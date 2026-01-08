@@ -390,6 +390,10 @@ export default function ShopPage() {
                         >
                           {/* Set Image with Overlays - 100:183 ratio */}
                           <Box
+                            component="a"
+                            href={`https://ygoprodeck.com/pack/${encodeURIComponent(set.setName)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             sx={{
                               position: 'relative',
                               width: '100%',
@@ -399,6 +403,8 @@ export default function ShopPage() {
                               alignItems: 'center',
                               justifyContent: 'center',
                               overflow: 'hidden',
+                              cursor: 'pointer',
+                              textDecoration: 'none',
                             }}
                           >
                             {set.setImage ? (
@@ -649,6 +655,10 @@ export default function ShopPage() {
                         >
               {/* Set Image with Overlays - 100:183 ratio */}
               <Box
+                component="a"
+                href={`https://ygoprodeck.com/pack/${encodeURIComponent(set.setName)}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 sx={{
                   position: 'relative',
                   width: '100%',
@@ -658,6 +668,8 @@ export default function ShopPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
+                  cursor: 'pointer',
+                  textDecoration: 'none',
                 }}
               >
                 {set.setImage ? (
