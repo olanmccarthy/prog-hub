@@ -41,6 +41,19 @@ interface GetMostRecentBanlistResult {
 }
 
 /**
+ * Helper function to parse banlist field (handles both string and array)
+ */
+function parseBanlistField(field: unknown): number[] {
+  if (!field) return [];
+  if (typeof field === 'string') {
+    if (field.trim() === '') return [];
+    return JSON.parse(field) as number[];
+  }
+  if (Array.isArray(field)) return field;
+  return [];
+}
+
+/**
  * Gets the most recent banlist regardless of active status
  * Falls back to fetching by highest banlist ID if needed
  */
@@ -62,10 +75,10 @@ export async function getMostRecentBanlistBySession(): Promise<GetMostRecentBanl
     const banlist: Banlist = {
       id: mostRecentBanlist.id,
       sessionId: mostRecentBanlist.sessionId,
-      banned: mostRecentBanlist.banned as number[],
-      limited: mostRecentBanlist.limited as number[],
-      semilimited: mostRecentBanlist.semilimited as number[],
-      unlimited: mostRecentBanlist.unlimited as number[],
+      banned: parseBanlistField(mostRecentBanlist.banned),
+      limited: parseBanlistField(mostRecentBanlist.limited),
+      semilimited: parseBanlistField(mostRecentBanlist.semilimited),
+      unlimited: parseBanlistField(mostRecentBanlist.unlimited),
     };
     return {
       success: true,
@@ -111,10 +124,10 @@ export async function getPreviousBanlist(
     return {
       success: true,
       banlist: {
-        banned: previousBanlist.banned as number[],
-        limited: previousBanlist.limited as number[],
-        semilimited: previousBanlist.semilimited as number[],
-        unlimited: previousBanlist.unlimited as number[],
+        banned: parseBanlistField(previousBanlist.banned),
+        limited: parseBanlistField(previousBanlist.limited),
+        semilimited: parseBanlistField(previousBanlist.semilimited),
+        unlimited: parseBanlistField(previousBanlist.unlimited),
       },
     };
   } catch (error) {

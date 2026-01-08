@@ -3,6 +3,8 @@
 import { prisma } from '@lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@lib/auth';
+import { parseYdkFromFile } from '@lib/ydkParser';
+import { validateDeckAgainstBanlist } from '@lib/deckValidator';
 
 export interface RequirementStatus {
   met: boolean;
@@ -1388,6 +1390,201 @@ export async function resetEntireProg(): Promise<ResetEntireProgResult> {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to reset prog',
+    };
+  }
+}
+
+/**
+ * Upload a decklist for a player in the active session
+ */
+export async function uploadPlayerDecklist(playerId: number, formData: FormData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Get the file from formData
+    const file = formData.get('file') as File;
+    if (!file) {
+      return { success: false, error: 'No file provided' };
+    }
+
+    // Parse the YDK file
+    const parseResult = await parseYdkFromFile(file);
+    if (!parseResult.success || !parseResult.deck) {
+      return { success: false, error: parseResult.error || 'Failed to parse deck file' };
+    }
+
+    const { maindeck, sidedeck, extradeck } = parseResult.deck;
+
+    // Get the banlist for validation
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!banlist) {
+      return { success: false, error: 'No banlist found for this session' };
+    }
+
+    // Validate deck against banlist
+    const validation = validateDeckAgainstBanlist(
+      maindeck,
+      sidedeck,
+      extradeck,
+      {
+        banned: typeof banlist.banned === 'string' ? JSON.parse(banlist.banned) : banlist.banned,
+        limited: typeof banlist.limited === 'string' ? JSON.parse(banlist.limited) : banlist.limited,
+        semilimited: typeof banlist.semilimited === 'string' ? JSON.parse(banlist.semilimited) : banlist.semilimited,
+        unlimited: typeof banlist.unlimited === 'string' ? JSON.parse(banlist.unlimited) : banlist.unlimited,
+      }
+    );
+
+    if (!validation.isLegal) {
+      return {
+        success: false,
+        error: `Deck is illegal: ${validation.errors.join(', ')}`,
+      };
+    }
+
+    // Check if decklist already exists for this player and session
+    const existingDecklist = await prisma.decklist.findFirst({
+      where: {
+        playerId: playerId,
+        sessionId: activeSession.id,
+      },
+    });
+
+    let decklistId: number;
+
+    if (existingDecklist) {
+      // Update existing decklist
+      await prisma.decklist.update({
+        where: { id: existingDecklist.id },
+        data: {
+          maindeck: JSON.stringify(maindeck),
+          sidedeck: JSON.stringify(sidedeck),
+          extradeck: JSON.stringify(extradeck),
+          submittedAt: new Date(),
+        },
+      });
+      decklistId = existingDecklist.id;
+    } else {
+      // Create new decklist
+      const newDecklist = await prisma.decklist.create({
+        data: {
+          playerId: playerId,
+          sessionId: activeSession.id,
+          maindeck: JSON.stringify(maindeck),
+          sidedeck: JSON.stringify(sidedeck),
+          extradeck: JSON.stringify(extradeck),
+          submittedAt: new Date(),
+        },
+      });
+      decklistId = newDecklist.id;
+    }
+
+    // Check if standings have been finalized (any placement field is filled)
+    const standingsFinalized = activeSession.first !== null ||
+                               activeSession.second !== null ||
+                               activeSession.third !== null ||
+                               activeSession.fourth !== null ||
+                               activeSession.fifth !== null ||
+                               activeSession.sixth !== null;
+
+    // If standings are finalized, regenerate the decklist image
+    if (standingsFinalized) {
+      try {
+        console.log(`Regenerating decklist image for decklist ${decklistId} after admin upload`);
+
+        // Parse banlist for image generation
+        let banlistForImage = undefined;
+        if (banlist) {
+          try {
+            const parseBanlistField = (field: string | number[] | unknown): number[] => {
+              if (!field) return [];
+              if (typeof field === 'string') {
+                if (field.trim() === '') return [];
+                return JSON.parse(field) as number[];
+              }
+              if (Array.isArray(field)) return field;
+              return [];
+            };
+
+            banlistForImage = {
+              banned: parseBanlistField(banlist.banned),
+              limited: parseBanlistField(banlist.limited),
+              semilimited: parseBanlistField(banlist.semilimited),
+            };
+          } catch (parseError) {
+            console.warn(`Failed to parse banlist for image generation, generating without banlist indicators:`, parseError);
+            banlistForImage = undefined;
+          }
+        }
+
+        // Import and call saveDeckImage
+        const { saveDeckImage } = await import('@lib/deckImage');
+        await saveDeckImage(
+          decklistId,
+          { maindeck, extradeck, sidedeck },
+          banlistForImage
+        );
+
+        console.log(`Successfully regenerated decklist image for decklist ${decklistId}`);
+      } catch (imageError) {
+        console.error(`Failed to regenerate decklist image for decklist ${decklistId}:`, imageError);
+        // Don't fail the upload if image generation fails
+      }
+    }
+
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/play/decklists');
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error uploading player decklist:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to upload decklist',
+    };
+  }
+}
+
+/**
+ * Get all players for the decklist upload dropdown
+ */
+export async function getPlayersForUpload(): Promise<{ success: boolean; players?: { id: number; name: string }[]; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const players = await prisma.player.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    return { success: true, players };
+  } catch (error) {
+    console.error('Error fetching players:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch players',
     };
   }
 }

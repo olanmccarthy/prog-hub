@@ -7,12 +7,13 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { getSessionStatus, startSession, completeSession, generatePairings, autoVoteAllPlayers, autoCreateSuggestions, autoSubmitDecklists, autoModeratorVote, resetSession, resetEntireProg, SessionStatusResult } from './actions';
+import { getSessionStatus, startSession, completeSession, generatePairings, autoVoteAllPlayers, autoCreateSuggestions, autoSubmitDecklists, autoModeratorVote, resetSession, resetEntireProg, uploadPlayerDecklist, getPlayersForUpload, SessionStatusResult } from './actions';
 import { ActiveSessionSection } from './components/ActiveSessionSection';
 import { StartSessionSection } from './components/StartSessionSection';
 import { GeneratePairingsSection } from './components/GeneratePairingsSection';
 import { TestControlsSection } from './components/TestControlsSection';
 import { ResetSections } from './components/ResetSections';
+import { UploadDecklistSection } from './components/UploadDecklistSection';
 
 export default function ProgActionsPage() {
   const [status, setStatus] = useState<SessionStatusResult | null>(null);
@@ -28,9 +29,11 @@ export default function ProgActionsPage() {
   const [resettingEntireProg, setResettingEntireProg] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [players, setPlayers] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     loadStatus();
+    loadPlayers();
   }, []);
 
   const loadStatus = async () => {
@@ -46,6 +49,17 @@ export default function ProgActionsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load status');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPlayers = async () => {
+    try {
+      const result = await getPlayersForUpload();
+      if (result.success && result.players) {
+        setPlayers(result.players);
+      }
+    } catch (err) {
+      console.error('Failed to load players:', err);
     }
   };
 
@@ -250,6 +264,26 @@ export default function ProgActionsPage() {
     }
   };
 
+  const handleUploadDeck = async (playerId: number, file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const result = await uploadPlayerDecklist(playerId, formData);
+
+      if (result.success) {
+        await loadStatus(); // Refresh status to update decklist counts
+      }
+
+      return result;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to upload deck',
+      };
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -316,6 +350,14 @@ export default function ProgActionsPage() {
           pairingsGenerated={status.pairingsGenerated}
           generating={generatingPairings}
           onGenerate={handleGeneratePairings}
+        />
+      )}
+
+      {/* Upload Player Decklist Section */}
+      {status?.activeSession && (
+        <UploadDecklistSection
+          players={players}
+          onUpload={handleUploadDeck}
         />
       )}
 

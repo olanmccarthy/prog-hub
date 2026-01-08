@@ -146,9 +146,95 @@ export async function updateCurrentBanlist(
       });
     }
 
+    // Regenerate banlist image
+    try {
+      console.log(`Regenerating banlist image for session ${sessionNumber}`);
+      const { saveBanlistImage } = await import('@lib/banlistImage');
+      await saveBanlistImage({
+        sessionNumber,
+        banned,
+        limited,
+        semilimited,
+        unlimited,
+      });
+      console.log(`Successfully regenerated banlist image for session ${sessionNumber}`);
+    } catch (imageError) {
+      console.error(`Failed to regenerate banlist image for session ${sessionNumber}:`, imageError);
+      // Don't fail the update if image generation fails
+    }
+
+    // Check if we need to regenerate decklist images
+    // Get the session to check if standings are finalized
+    const session = await prisma.session.findFirst({
+      where: { number: sessionNumber },
+    });
+
+    if (session) {
+      const standingsFinalized = session.first !== null ||
+                                 session.second !== null ||
+                                 session.third !== null ||
+                                 session.fourth !== null ||
+                                 session.fifth !== null ||
+                                 session.sixth !== null;
+
+      if (standingsFinalized) {
+        // Get all decklists for this session
+        const decklists = await prisma.decklist.findMany({
+          where: { sessionId: session.id },
+          select: {
+            id: true,
+            maindeck: true,
+            extradeck: true,
+            sidedeck: true,
+          },
+        });
+
+        if (decklists.length > 0) {
+          console.log(`Regenerating ${decklists.length} decklist images for session ${sessionNumber} after banlist change`);
+
+          // Regenerate images for each decklist
+          const imagePromises = decklists.map(async (decklist) => {
+            try {
+              const parseDeckField = (field: string | number[] | unknown): number[] => {
+                if (!field) return [];
+                if (typeof field === 'string') return JSON.parse(field) as number[];
+                if (Array.isArray(field)) return field;
+                return [];
+              };
+
+              const maindeck = parseDeckField(decklist.maindeck);
+              const extradeck = parseDeckField(decklist.extradeck);
+              const sidedeck = parseDeckField(decklist.sidedeck);
+
+              const banlistForImage = {
+                banned,
+                limited,
+                semilimited,
+              };
+
+              const { saveDeckImage } = await import('@lib/deckImage');
+              await saveDeckImage(
+                decklist.id,
+                { maindeck, extradeck, sidedeck },
+                banlistForImage
+              );
+
+              console.log(`Regenerated decklist image for decklist ${decklist.id}`);
+            } catch (error) {
+              console.error(`Failed to regenerate decklist image for decklist ${decklist.id}:`, error);
+            }
+          });
+
+          await Promise.all(imagePromises);
+          console.log(`Finished regenerating all decklist images for session ${sessionNumber}`);
+        }
+      }
+    }
+
     revalidatePath("/admin/prog_actions");
     revalidatePath("/admin/prog_actions/current-banlist");
     revalidatePath("/banlist/current");
+    revalidatePath("/play/decklists");
     revalidatePath("/");
 
     return {
