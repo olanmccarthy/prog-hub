@@ -21,6 +21,11 @@ interface GetAllBanlistSuggestionsResult {
 
 export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestionsResult> {
   try {
+    // Get the active session to exclude its suggestions
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
     const suggestions = await prisma.banlistSuggestion.findMany({
       include: {
         player: { select: { name: true } },
@@ -29,9 +34,14 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
       orderBy: { id: 'desc' },
     });
 
+    // Filter out suggestions from the active session
+    const filteredSuggestions = activeSession
+      ? suggestions.filter(s => s.banlist.sessionId !== activeSession.number)
+      : suggestions;
+
     return {
       success: true,
-      suggestions: suggestions.map(s => ({
+      suggestions: filteredSuggestions.map(s => ({
         id: s.id,
         playerName: s.player.name,
         sessionNumber: s.banlist.sessionId, // sessionId stores the session number
