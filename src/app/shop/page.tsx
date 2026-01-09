@@ -31,10 +31,10 @@ import SearchIcon from '@mui/icons-material/Search';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import BlockIcon from '@mui/icons-material/Block';
-import ImageIcon from '@mui/icons-material/Image';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { getShopSets, purchaseSet, getWalletBalance, type ShopSet } from './actions';
+import cardbackImage from '../cardback.png';
 
 type SortOption = 'date-desc' | 'date-asc' | 'alpha-asc' | 'alpha-desc';
 
@@ -407,7 +407,7 @@ export default function ShopPage() {
                               textDecoration: 'none',
                             }}
                           >
-                            {set.setImage ? (
+                            { /* set.setImage ? (
                               <Image
                                 src={set.setImage}
                                 alt={set.setName}
@@ -423,6 +423,28 @@ export default function ShopPage() {
                                   fontSize: 64,
                                   color: 'var(--text-secondary)',
                                   opacity: 0.3,
+                                }}
+                              />
+                            ) */}
+
+                            {set.isPromo ? (
+                              <Image
+                                src={cardbackImage}
+                                alt={set.setName}
+                                fill
+                                sizes="220px"
+                                style={{
+                                  objectFit: 'cover',
+                                }}
+                              />
+                            ) : (
+                              <Image
+                                src={`https://images.ygoprog.com/pack/${set.setCode}.jpg`}
+                                alt={set.setName}
+                                fill
+                                sizes="220px"
+                                style={{
+                                  objectFit: 'cover',
                                 }}
                               />
                             )}
@@ -672,7 +694,7 @@ export default function ShopPage() {
                   textDecoration: 'none',
                 }}
               >
-                {set.setImage ? (
+                {/* set.setImage ? (
                   <Image
                     src={set.setImage}
                     alt={set.setName}
@@ -690,7 +712,29 @@ export default function ShopPage() {
                       opacity: 0.3,
                     }}
                   />
-                )}
+                ) */}
+
+                {set.isPromo ? (
+                              <Image
+                                src={cardbackImage}
+                                alt={set.setName}
+                                fill
+                                sizes="220px"
+                                style={{
+                                  objectFit: 'cover',
+                                }}
+                              />
+                            ) : (
+                              <Image
+                                src={`https://images.ygoprog.com/pack/${set.setCode}.jpg`}
+                                alt={set.setName}
+                                fill
+                                sizes="220px"
+                                style={{
+                                  objectFit: 'cover',
+                                }}
+                              />
+                            )}
 
                 {/* Set Name Overlay at Top */}
                 <Box

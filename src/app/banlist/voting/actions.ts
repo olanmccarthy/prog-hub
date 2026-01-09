@@ -15,6 +15,7 @@ export interface BanlistSuggestionForVoting {
   semilimited: number[];
   unlimited: number[];
   voteCount: number;
+  comment?: string;
 }
 
 interface GetSuggestionsForVotingResult {
@@ -119,6 +120,7 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
         semilimited: s.semilimited as number[],
         unlimited: s.unlimited as number[],
         voteCount: s.votes.length,
+        comment: s.comment || undefined,
       })),
       currentUserId: user.playerId,
       hasVoted,

@@ -11,6 +11,7 @@ export interface ShopSet {
   setImage: string | null;
   numOfCards: number;
   isPurchasable: boolean;
+  isPromo: boolean;
   sessionNumber: number | null;
   sessionName: string | null;
   price: number;
@@ -105,6 +106,7 @@ export async function getShopSets(showUnavailable = false): Promise<GetShopSetsR
         setImage: true,
         numOfCards: true,
         isPurchasable: true,
+        isPromo: true,
         price: true,
       },
     });

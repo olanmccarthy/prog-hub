@@ -108,6 +108,7 @@ model BanlistSuggestion {
   semilimited Json
   unlimited   Json
   chosen      Boolean @default(false)
+  comment     String? @db.Text
 
   // Relations
   banlist   Banlist                 @relation(fields: [banlistId], references: [id])

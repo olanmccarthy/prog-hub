@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/images/sets/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'images.ygoprog.com',
+        port: '',
+        pathname: '/pack/**',
+      },
     ],
     // Cache optimized images for 60 days
     minimumCacheTTL: 60 * 60 * 24 * 60, // 60 days in seconds

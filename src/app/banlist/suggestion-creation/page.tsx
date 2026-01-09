@@ -204,6 +204,7 @@ export default function BanlistSuggestionCreationPage() {
   const [existingSuggestionId, setExistingSuggestionId] = useState<number | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [canSubmit, setCanSubmit] = useState(true);
+  const [comment, setComment] = useState('');
 
   const banned = useSuggestionFields();
   const limited = useSuggestionFields();
@@ -250,6 +251,11 @@ export default function BanlistSuggestionCreationPage() {
           limited.setCards(limitedEntries);
           semilimited.setCards(semilimitedEntries);
           unlimited.setCards(unlimitedEntries);
+
+          // Set the comment if it exists
+          if (existingResult.suggestion.comment) {
+            setComment(existingResult.suggestion.comment);
+          }
         }
       } else {
         setError(banlistResult.error || 'Failed to fetch most recent banlist');
@@ -334,6 +340,7 @@ export default function BanlistSuggestionCreationPage() {
         limited: limited.getCardIds(),
         semilimited: semilimited.getCardIds(),
         unlimited: unlimited.getCardIds(),
+        comment: comment.trim() || undefined,
         existingSuggestionId: existingSuggestionId ?? undefined,
       };
 
@@ -447,6 +454,40 @@ export default function BanlistSuggestionCreationPage() {
             onUpdateCard={unlimited.updateCard}
             loading={loading || !canSubmit}
           />
+
+          <Box sx={{ mt: 3 }}>
+            <Typography
+              variant="h5"
+              component="h2"
+              sx={{ mb: 1, color: 'var(--text-bright)' }}
+            >
+              Comment (Optional)
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: 'var(--text-secondary)' }}>
+              Add an optional comment to explain your reasoning. Your name will remain hidden, but voters will see this comment.
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Explain your reasoning for these changes..."
+              disabled={loading || !canSubmit}
+              sx={{
+                '& .MuiInputBase-input': { color: 'var(--text-primary)' },
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: 'var(--input-bg)',
+                  '& fieldset': {
+                    borderColor: 'var(--border-color)'
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'var(--accent-primary)',
+                  },
+                },
+              }}
+            />
+          </Box>
 
           <Button
             type="submit"

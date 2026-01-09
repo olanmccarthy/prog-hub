@@ -10,6 +10,7 @@ export interface CreateSuggestionInput {
   limited: number[]; // Card IDs
   semilimited: number[]; // Card IDs
   unlimited: number[]; // Card IDs
+  comment?: string; // Optional comment from player
   existingSuggestionId?: number; // If updating an existing suggestion
 }
 
@@ -85,6 +86,7 @@ export interface ExistingSuggestion {
   limited: number[]; // Card IDs
   semilimited: number[]; // Card IDs
   unlimited: number[]; // Card IDs
+  comment?: string; // Optional comment from player
 }
 
 export interface GetExistingSuggestionResult {
@@ -116,6 +118,7 @@ export async function getExistingSuggestion(banlistId: number): Promise<GetExist
         limited: true,
         semilimited: true,
         unlimited: true,
+        comment: true,
       },
     });
 
@@ -131,6 +134,7 @@ export async function getExistingSuggestion(banlistId: number): Promise<GetExist
         limited: suggestion.limited as number[],
         semilimited: suggestion.semilimited as number[],
         unlimited: suggestion.unlimited as number[],
+        comment: suggestion.comment || undefined,
       },
     };
   } catch (error) {
@@ -246,6 +250,7 @@ export async function createBanlistSuggestion(input: CreateSuggestionInput): Pro
           limited: input.limited,
           semilimited: input.semilimited,
           unlimited: input.unlimited,
+          comment: input.comment || null,
         },
       });
 
@@ -261,6 +266,7 @@ export async function createBanlistSuggestion(input: CreateSuggestionInput): Pro
         limited: input.limited,
         semilimited: input.semilimited,
         unlimited: input.unlimited,
+        comment: input.comment || null,
         chosen: false,
       },
     });

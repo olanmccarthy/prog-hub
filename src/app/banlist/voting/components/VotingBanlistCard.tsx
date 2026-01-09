@@ -120,6 +120,35 @@ export function VotingBanlistCard({
       <CategoryCard title="Semi-Limited" cards={cardNames.semilimited} />
       <CategoryCard title="Unlimited" cards={cardNames.unlimited} />
 
+      {suggestion.comment && (
+        <Box
+          sx={{
+            mt: 2,
+            p: 2,
+            backgroundColor: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 1,
+          }}
+        >
+          <Typography
+            variant="subtitle2"
+            sx={{ color: 'var(--text-secondary)', mb: 1, fontWeight: 'bold' }}
+          >
+            Player&apos;s Comment:
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'var(--text-primary)',
+              fontStyle: 'italic',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            &quot;{suggestion.comment}&quot;
+          </Typography>
+        </Box>
+      )}
+
       {!isOwnSuggestion && !hasSubmitted && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
           <IconButton
