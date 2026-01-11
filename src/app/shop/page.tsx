@@ -42,6 +42,7 @@ export default function ShopPage() {
   const [sets, setSets] = useState<ShopSet[]>([]);
   const [nextSessionNumber, setNextSessionNumber] = useState<number | null>(null);
   const [nextSessionDate, setNextSessionDate] = useState<Date | null>(null);
+  const [availabilityCutoffDate, setAvailabilityCutoffDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +71,7 @@ export default function ShopPage() {
         setSets(result.sets);
         setNextSessionNumber(result.nextSessionNumber || null);
         setNextSessionDate(result.nextSessionDate || null);
+        setAvailabilityCutoffDate(result.availabilityCutoffDate || null);
       } else {
         setError(result.error || 'Failed to load shop sets');
       }
@@ -101,8 +103,10 @@ export default function ShopPage() {
 
   // Check if a set is currently available for purchase
   const isSetAvailable = (set: ShopSet): boolean => {
-    if (!nextSessionDate) return true;
-    return new Date(set.tcgDate) <= new Date(nextSessionDate);
+    // If no cutoff date, all sets are available
+    if (!availabilityCutoffDate) return true;
+    // Set is available if its release date is before the cutoff
+    return new Date(set.tcgDate) < new Date(availabilityCutoffDate);
   };
 
   // Filter and sort sets based on search query and sort option
@@ -656,7 +660,7 @@ export default function ShopPage() {
                             color: 'var(--text-secondary)',
                           }}
                         >
-                          Available after Session #{group.sessionNumber}
+                          Available at Session #{group.sessionNumber}
                         </Typography>
                       </Box>
                     )}

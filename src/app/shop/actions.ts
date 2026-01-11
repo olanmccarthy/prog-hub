@@ -22,6 +22,7 @@ export interface GetShopSetsResult {
   sets?: ShopSet[];
   nextSessionNumber?: number;
   nextSessionDate?: Date;
+  availabilityCutoffDate?: Date;
   error?: string;
 }
 
@@ -63,20 +64,41 @@ export async function getShopSets(showUnavailable = false): Promise<GetShopSetsR
       };
     }
 
+    // Get the session after next to determine availability cutoff
+    // This ensures sets grouped as "session X" are available when session X is active
+    const sessionAfterNext = await prisma.session.findFirst({
+      where: {
+        complete: false,
+        number: { gt: nextSession.number }
+      },
+      orderBy: { number: 'asc' },
+      include: {
+        set: {
+          select: {
+            tcgDate: true,
+          },
+        },
+      },
+    });
+
     // Build where clause
     // Always require isPurchasable = true
     // If showUnavailable is false, also filter by date
     const whereClause: {
       isPurchasable: boolean;
-      tcgDate?: { lte: Date };
+      tcgDate?: { lt: Date };
     } = {
       isPurchasable: true,
     };
 
     if (!showUnavailable) {
-      whereClause.tcgDate = {
-        lte: nextSession.set.tcgDate,
-      };
+      // Use the session after next as the cutoff (or no limit if it doesn't exist)
+      if (sessionAfterNext && sessionAfterNext.set) {
+        whereClause.tcgDate = {
+          lt: sessionAfterNext.set.tcgDate,
+        };
+      }
+      // If no session after next, show all purchasable sets
     }
 
     // Get all sessions (sets marked as sessions) to determine grouping
@@ -155,6 +177,7 @@ export async function getShopSets(showUnavailable = false): Promise<GetShopSetsR
       sets: setsWithSession,
       nextSessionNumber: nextSession.number,
       nextSessionDate: nextSession.set.tcgDate,
+      availabilityCutoffDate: sessionAfterNext?.set?.tcgDate,
     };
   } catch (error) {
     console.error("Error fetching shop sets:", error);
@@ -302,13 +325,33 @@ export async function purchaseSet(setId: number, quantity: number = 1): Promise<
       };
     }
 
-    // Check if set's release date is after the next session
-    if (new Date(set.tcgDate) > new Date(nextSession.set.tcgDate)) {
-      return {
-        success: false,
-        error: "This set is not yet available for purchase.",
-      };
+    // Get the session after next to determine availability cutoff
+    const sessionAfterNext = await prisma.session.findFirst({
+      where: {
+        complete: false,
+        number: { gt: nextSession.number }
+      },
+      orderBy: { number: 'asc' },
+      include: {
+        set: {
+          select: {
+            tcgDate: true,
+          },
+        },
+      },
+    });
+
+    // Check if set's release date is after the session after next
+    // Sets are available if they're released before the next session starts
+    if (sessionAfterNext && sessionAfterNext.set) {
+      if (new Date(set.tcgDate) >= new Date(sessionAfterNext.set.tcgDate)) {
+        return {
+          success: false,
+          error: "This set is not yet available for purchase.",
+        };
+      }
     }
+    // If no session after next, all sets before or at next session are available
 
     // Deduct from wallet and create transaction records in a transaction
     const result = await prisma.$transaction(async (tx) => {
