@@ -28,7 +28,10 @@ export async function getCardEntriesFromIds(
   // Validate ids are correctly typed as numbers
   const validatedIds = cardIds.map((id) =>
     typeof id === 'string' ? parseInt(id, 10) : id
-  );
+  ).filter((id) => !isNaN(id) && id > 0);
+
+  // Return early if no valid IDs after filtering
+  if (validatedIds.length === 0) return [];
 
   const cards = await prisma.card.findMany({
     where: {
