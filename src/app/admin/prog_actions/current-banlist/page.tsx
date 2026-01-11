@@ -5,23 +5,180 @@ import {
   Box,
   Typography,
   Paper,
-  TextField,
   Button,
   Alert,
   CircularProgress,
   Chip,
+  Autocomplete,
+  TextField,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { getCurrentBanlistData, updateCurrentBanlist, CurrentBanlistData } from './actions';
+import {
+  getCurrentBanlistData,
+  updateCurrentBanlist,
+  CurrentBanlistData,
+  searchCardNames,
+  getCardNames,
+  CardOption,
+  CardWithName,
+} from './actions';
+
+interface CardEntry {
+  id: number;
+  name: string;
+}
+
+interface CardListSectionProps {
+  title: string;
+  cards: CardEntry[];
+  category: 'banned' | 'limited' | 'semilimited' | 'unlimited';
+  color: string;
+  onAddCard: (category: 'banned' | 'limited' | 'semilimited' | 'unlimited', card: CardEntry) => void;
+  onRemoveCard: (category: 'banned' | 'limited' | 'semilimited' | 'unlimited', cardId: number) => void;
+}
+
+function CardListSection({ title, cards, category, color, onAddCard, onRemoveCard }: CardListSectionProps) {
+  const [cardOptions, setCardOptions] = useState<CardOption[]>([]);
+  const [searchValue, setSearchValue] = useState('');
+  const [loadingOptions, setLoadingOptions] = useState(false);
+
+  const handleSearch = async (query: string) => {
+    setSearchValue(query);
+
+    if (query.length >= 3) {
+      setLoadingOptions(true);
+      try {
+        const result = await searchCardNames(query);
+        if (result.success && result.cards) {
+          setCardOptions(result.cards);
+        }
+      } finally {
+        setLoadingOptions(false);
+      }
+    } else {
+      setCardOptions([]);
+    }
+  };
+
+  const handleSelect = (option: CardOption | null) => {
+    if (option) {
+      onAddCard(category, { id: option.id, name: option.name });
+      setSearchValue('');
+      setCardOptions([]);
+    }
+  };
+
+  return (
+    <Paper
+      sx={{
+        p: 2,
+        mb: 2,
+        backgroundColor: 'var(--bg-tertiary)',
+        border: '1px solid var(--border-color)',
+      }}
+    >
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" sx={{ color: 'var(--text-bright)' }}>
+          {title} ({cards.length})
+        </Typography>
+      </Box>
+
+      <Autocomplete
+        freeSolo
+        options={cardOptions}
+        loading={loadingOptions}
+        inputValue={searchValue}
+        onInputChange={(event, newValue) => {
+          handleSearch(newValue);
+        }}
+        onChange={(event, newValue) => {
+          if (typeof newValue !== 'string' && newValue) {
+            handleSelect(newValue);
+          }
+        }}
+        getOptionLabel={(option) => {
+          if (typeof option === 'string') return option;
+          return option.name;
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            placeholder={`Search card names (min 3 characters)...`}
+            size="small"
+            sx={{
+              mb: 2,
+              '& input': {
+                color: 'var(--text-primary)',
+              },
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'var(--input-bg)',
+                '& fieldset': {
+                  borderColor: 'var(--input-border)',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'var(--text-secondary)',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: color,
+                },
+              },
+            }}
+          />
+        )}
+        sx={{
+          '& .MuiAutocomplete-option': {
+            color: 'var(--text-primary)',
+            backgroundColor: 'var(--bg-secondary)',
+            '&:hover': {
+              backgroundColor: 'var(--bg-tertiary)',
+            },
+          },
+          '& .MuiAutocomplete-listbox': {
+            backgroundColor: 'var(--bg-secondary)',
+          },
+          '& .MuiAutocomplete-paper': {
+            backgroundColor: 'var(--bg-secondary)',
+          },
+        }}
+      />
+
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+        {cards.length === 0 ? (
+          <Typography sx={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+            No cards in this category
+          </Typography>
+        ) : (
+          cards.map((card) => (
+            <Chip
+              key={card.id}
+              label={card.name}
+              onDelete={() => onRemoveCard(category, card.id)}
+              deleteIcon={<DeleteIcon />}
+              sx={{
+                backgroundColor: color,
+                color: 'white',
+                '& .MuiChip-deleteIcon': {
+                  color: 'white',
+                  '&:hover': {
+                    color: 'rgba(255, 255, 255, 0.7)',
+                  },
+                },
+              }}
+            />
+          ))
+        )}
+      </Box>
+    </Paper>
+  );
+}
 
 export default function CurrentBanlistEditorPage() {
   const [data, setData] = useState<CurrentBanlistData | null>(null);
-  const [banned, setBanned] = useState<number[]>([]);
-  const [limited, setLimited] = useState<number[]>([]);
-  const [semilimited, setSemilimited] = useState<number[]>([]);
-  const [unlimited, setUnlimited] = useState<number[]>([]);
-  const [newCardId, setNewCardId] = useState<string>('');
+  const [banned, setBanned] = useState<CardEntry[]>([]);
+  const [limited, setLimited] = useState<CardEntry[]>([]);
+  const [semilimited, setSemilimited] = useState<CardEntry[]>([]);
+  const [unlimited, setUnlimited] = useState<CardEntry[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +196,38 @@ export default function CurrentBanlistEditorPage() {
 
       if (result.success && result.data) {
         setData(result.data);
-        setBanned(result.data.banned);
-        setLimited(result.data.limited);
-        setSemilimited(result.data.semilimited);
-        setUnlimited(result.data.unlimited);
+
+        // Fetch card names for all IDs
+        const allIds = [
+          ...result.data.banned,
+          ...result.data.limited,
+          ...result.data.semilimited,
+          ...result.data.unlimited,
+        ];
+
+        if (allIds.length > 0) {
+          const namesResult = await getCardNames(allIds);
+          if (namesResult.success && namesResult.cards) {
+            const cardMap = new Map(namesResult.cards.map(c => [c.id, c.name]));
+
+            setBanned(result.data.banned.map(id => ({
+              id,
+              name: cardMap.get(id) || `Unknown Card (${id})`
+            })));
+            setLimited(result.data.limited.map(id => ({
+              id,
+              name: cardMap.get(id) || `Unknown Card (${id})`
+            })));
+            setSemilimited(result.data.semilimited.map(id => ({
+              id,
+              name: cardMap.get(id) || `Unknown Card (${id})`
+            })));
+            setUnlimited(result.data.unlimited.map(id => ({
+              id,
+              name: cardMap.get(id) || `Unknown Card (${id})`
+            })));
+          }
+        }
       } else {
         setError(result.error || 'Failed to load data');
       }
@@ -53,33 +238,25 @@ export default function CurrentBanlistEditorPage() {
     }
   };
 
-  const addCard = (category: 'banned' | 'limited' | 'semilimited' | 'unlimited') => {
-    const cardId = parseInt(newCardId);
-    if (isNaN(cardId)) {
-      setError('Please enter a valid card ID');
-      return;
-    }
-
+  const addCard = (category: 'banned' | 'limited' | 'semilimited' | 'unlimited', card: CardEntry) => {
     // Remove from all other categories
-    setBanned((prev) => prev.filter((id) => id !== cardId));
-    setLimited((prev) => prev.filter((id) => id !== cardId));
-    setSemilimited((prev) => prev.filter((id) => id !== cardId));
-    setUnlimited((prev) => prev.filter((id) => id !== cardId));
+    setBanned((prev) => prev.filter((c) => c.id !== card.id));
+    setLimited((prev) => prev.filter((c) => c.id !== card.id));
+    setSemilimited((prev) => prev.filter((c) => c.id !== card.id));
+    setUnlimited((prev) => prev.filter((c) => c.id !== card.id));
 
     // Add to selected category
-    if (category === 'banned') setBanned((prev) => [...prev, cardId]);
-    else if (category === 'limited') setLimited((prev) => [...prev, cardId]);
-    else if (category === 'semilimited') setSemilimited((prev) => [...prev, cardId]);
-    else if (category === 'unlimited') setUnlimited((prev) => [...prev, cardId]);
-
-    setNewCardId('');
+    if (category === 'banned') setBanned((prev) => [...prev, card]);
+    else if (category === 'limited') setLimited((prev) => [...prev, card]);
+    else if (category === 'semilimited') setSemilimited((prev) => [...prev, card]);
+    else if (category === 'unlimited') setUnlimited((prev) => [...prev, card]);
   };
 
   const removeCard = (category: 'banned' | 'limited' | 'semilimited' | 'unlimited', cardId: number) => {
-    if (category === 'banned') setBanned((prev) => prev.filter((id) => id !== cardId));
-    else if (category === 'limited') setLimited((prev) => prev.filter((id) => id !== cardId));
-    else if (category === 'semilimited') setSemilimited((prev) => prev.filter((id) => id !== cardId));
-    else if (category === 'unlimited') setUnlimited((prev) => prev.filter((id) => id !== cardId));
+    if (category === 'banned') setBanned((prev) => prev.filter((c) => c.id !== cardId));
+    else if (category === 'limited') setLimited((prev) => prev.filter((c) => c.id !== cardId));
+    else if (category === 'semilimited') setSemilimited((prev) => prev.filter((c) => c.id !== cardId));
+    else if (category === 'unlimited') setUnlimited((prev) => prev.filter((c) => c.id !== cardId));
   };
 
   const handleSave = async () => {
@@ -92,10 +269,10 @@ export default function CurrentBanlistEditorPage() {
 
       const result = await updateCurrentBanlist(
         data.activeSessionNumber,
-        banned,
-        limited,
-        semilimited,
-        unlimited
+        banned.map(c => c.id),
+        limited.map(c => c.id),
+        semilimited.map(c => c.id),
+        unlimited.map(c => c.id)
       );
 
       if (result.success) {
@@ -132,95 +309,6 @@ export default function CurrentBanlistEditorPage() {
     );
   }
 
-  const renderCardList = (
-    title: string,
-    cards: number[],
-    category: 'banned' | 'limited' | 'semilimited' | 'unlimited',
-    color: string
-  ) => (
-    <Paper
-      sx={{
-        p: 2,
-        mb: 2,
-        backgroundColor: 'var(--bg-tertiary)',
-        border: '1px solid var(--border-color)',
-      }}
-    >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" sx={{ color: 'var(--text-bright)' }}>
-          {title} ({cards.length})
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            size="small"
-            type="number"
-            placeholder="Card ID"
-            value={newCardId}
-            onChange={(e) => setNewCardId(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                addCard(category);
-              }
-            }}
-            sx={{
-              width: '120px',
-              '& input': {
-                color: 'var(--text-primary)',
-              },
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: 'var(--input-bg)',
-                '& fieldset': {
-                  borderColor: 'var(--input-border)',
-                },
-              },
-            }}
-          />
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => addCard(category)}
-            startIcon={<AddIcon />}
-            sx={{
-              backgroundColor: color,
-              '&:hover': {
-                backgroundColor: color,
-                filter: 'brightness(1.2)',
-              },
-            }}
-          >
-            Add
-          </Button>
-        </Box>
-      </Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-        {cards.length === 0 ? (
-          <Typography sx={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-            No cards in this category
-          </Typography>
-        ) : (
-          cards.map((cardId) => (
-            <Chip
-              key={cardId}
-              label={`ID: ${cardId}`}
-              onDelete={() => removeCard(category, cardId)}
-              deleteIcon={<DeleteIcon />}
-              sx={{
-                backgroundColor: color,
-                color: 'white',
-                '& .MuiChip-deleteIcon': {
-                  color: 'white',
-                  '&:hover': {
-                    color: 'rgba(255, 255, 255, 0.7)',
-                  },
-                },
-              }}
-            />
-          ))
-        )}
-      </Box>
-    </Paper>
-  );
-
   return (
     <Box>
       <Typography variant="h4" sx={{ mb: 3, color: 'var(--text-bright)' }}>
@@ -251,10 +339,38 @@ export default function CurrentBanlistEditorPage() {
           Session {data.activeSessionNumber}
         </Typography>
 
-        {renderCardList('Banned', banned, 'banned', '#f44336')}
-        {renderCardList('Limited', limited, 'limited', '#ff9800')}
-        {renderCardList('Semi-Limited', semilimited, 'semilimited', '#ffeb3b')}
-        {renderCardList('Unlimited', unlimited, 'unlimited', '#4caf50')}
+        <CardListSection
+          title="Banned"
+          cards={banned}
+          category="banned"
+          color="#f44336"
+          onAddCard={addCard}
+          onRemoveCard={removeCard}
+        />
+        <CardListSection
+          title="Limited"
+          cards={limited}
+          category="limited"
+          color="#ff9800"
+          onAddCard={addCard}
+          onRemoveCard={removeCard}
+        />
+        <CardListSection
+          title="Semi-Limited"
+          cards={semilimited}
+          category="semilimited"
+          color="#ffeb3b"
+          onAddCard={addCard}
+          onRemoveCard={removeCard}
+        />
+        <CardListSection
+          title="Unlimited"
+          cards={unlimited}
+          category="unlimited"
+          color="#4caf50"
+          onAddCard={addCard}
+          onRemoveCard={removeCard}
+        />
 
         <Button
           variant="contained"

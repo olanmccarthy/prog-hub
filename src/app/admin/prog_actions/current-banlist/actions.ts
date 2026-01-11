@@ -24,6 +24,98 @@ export interface UpdateBanlistResult {
   error?: string;
 }
 
+export interface CardOption {
+  id: number;
+  name: string;
+}
+
+export interface SearchCardsResult {
+  success: boolean;
+  cards?: CardOption[];
+  error?: string;
+}
+
+export interface CardWithName {
+  id: number;
+  name: string;
+}
+
+export interface GetCardNamesResult {
+  success: boolean;
+  cards?: CardWithName[];
+  error?: string;
+}
+
+/**
+ * Search for card names that match the given query
+ * Only returns results if query is 3+ characters
+ */
+export async function searchCardNames(query: string): Promise<SearchCardsResult> {
+  try {
+    // Only search if query is 3+ characters
+    if (query.length < 3) {
+      return { success: true, cards: [] };
+    }
+
+    const cards = await prisma.card.findMany({
+      where: {
+        cardName: {
+          contains: query,
+        },
+      },
+      select: {
+        id: true,
+        cardName: true,
+      },
+      orderBy: {
+        cardName: 'asc',
+      },
+      take: 20, // Limit to 20 results
+    });
+
+    return {
+      success: true,
+      cards: cards.map(c => ({ id: c.id, name: c.cardName }))
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search cards',
+    };
+  }
+}
+
+/**
+ * Get card names for a list of card IDs
+ */
+export async function getCardNames(cardIds: number[]): Promise<GetCardNamesResult> {
+  try {
+    if (cardIds.length === 0) {
+      return { success: true, cards: [] };
+    }
+
+    const cards = await prisma.card.findMany({
+      where: {
+        id: { in: cardIds },
+      },
+      select: {
+        id: true,
+        cardName: true,
+      },
+    });
+
+    return {
+      success: true,
+      cards: cards.map(c => ({ id: c.id, name: c.cardName })),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch card names',
+    };
+  }
+}
+
 export async function getCurrentBanlistData(): Promise<CurrentBanlistResult> {
   try {
     const currentUser = await getCurrentUser();
@@ -124,24 +216,26 @@ export async function updateCurrentBanlist(
 
     if (existingBanlist) {
       // Update existing banlist
+      // DO NOT use JSON.stringify - Prisma handles JSON serialization automatically
       await prisma.banlist.update({
         where: { id: existingBanlist.id },
         data: {
-          banned: JSON.stringify(banned),
-          limited: JSON.stringify(limited),
-          semilimited: JSON.stringify(semilimited),
-          unlimited: JSON.stringify(unlimited),
+          banned: banned,
+          limited: limited,
+          semilimited: semilimited,
+          unlimited: unlimited,
         },
       });
     } else {
       // Create new banlist
+      // DO NOT use JSON.stringify - Prisma handles JSON serialization automatically
       await prisma.banlist.create({
         data: {
           sessionId: sessionNumber,
-          banned: JSON.stringify(banned),
-          limited: JSON.stringify(limited),
-          semilimited: JSON.stringify(semilimited),
-          unlimited: JSON.stringify(unlimited),
+          banned: banned,
+          limited: limited,
+          semilimited: semilimited,
+          unlimited: unlimited,
         },
       });
     }

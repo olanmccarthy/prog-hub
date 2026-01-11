@@ -2,6 +2,23 @@
 
 import { prisma } from "@lib/prisma";
 
+/**
+ * Helper function to parse banlist field (handles both string and array)
+ */
+function parseBanlistField(field: unknown): number[] {
+  if (!field) return [];
+  if (typeof field === 'string') {
+    if (field.trim() === '') return [];
+    try {
+      return JSON.parse(field) as number[];
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(field)) return field;
+  return [];
+}
+
 export interface BanlistSuggestionHistory {
   id: number;
   playerName: string;
@@ -45,10 +62,10 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
         id: s.id,
         playerName: s.player.name,
         sessionNumber: s.banlist.sessionId, // sessionId stores the session number
-        banned: s.banned as number[],
-        limited: s.limited as number[],
-        semilimited: s.semilimited as number[],
-        unlimited: s.unlimited as number[],
+        banned: parseBanlistField(s.banned),
+        limited: parseBanlistField(s.limited),
+        semilimited: parseBanlistField(s.semilimited),
+        unlimited: parseBanlistField(s.unlimited),
         chosen: s.chosen,
       })),
     };

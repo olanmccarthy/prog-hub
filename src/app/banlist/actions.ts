@@ -3,6 +3,23 @@
 import { prisma } from "@lib/prisma";
 import { Banlist } from '@/src/types';
 
+/**
+ * Helper function to parse banlist field (handles both string and array)
+ */
+function parseBanlistField(field: unknown): number[] {
+  if (!field) return [];
+  if (typeof field === 'string') {
+    if (field.trim() === '') return [];
+    try {
+      return JSON.parse(field) as number[];
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(field)) return field;
+  return [];
+}
+
 interface GetMostRecentBanlistResult {
   success: boolean;
   banlist: Banlist | null;
@@ -41,10 +58,10 @@ export async function getMostRecentBanlist(): Promise<GetMostRecentBanlistResult
     const banlist: Banlist = {
       id: banlistEntity.id,
       sessionId: banlistEntity.sessionId,
-      banned: banlistEntity.banned as number[],
-      limited: banlistEntity.limited as number[],
-      semilimited: banlistEntity.semilimited as number[],
-      unlimited: banlistEntity.unlimited as number[],
+      banned: parseBanlistField(banlistEntity.banned),
+      limited: parseBanlistField(banlistEntity.limited),
+      semilimited: parseBanlistField(banlistEntity.semilimited),
+      unlimited: parseBanlistField(banlistEntity.unlimited),
     };
 
     return {
