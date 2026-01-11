@@ -5,6 +5,23 @@ import { getCurrentUser } from '@lib/auth';
 import { getMostRecentBanlist } from '../actions';
 import { revalidatePath } from 'next/cache';
 
+/**
+ * Helper function to parse banlist field (handles both string and array)
+ */
+function parseBanlistField(field: unknown): number[] {
+  if (!field) return [];
+  if (typeof field === 'string') {
+    if (field.trim() === '') return [];
+    try {
+      return JSON.parse(field) as number[];
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(field)) return field;
+  return [];
+}
+
 export interface BanlistSuggestionForVoting {
   id: number;
   playerId: number;
@@ -115,10 +132,10 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
         playerId: s.playerId,
         playerName: s.player.name,
         sessionNumber: banlist.sessionId,
-        banned: s.banned as number[],
-        limited: s.limited as number[],
-        semilimited: s.semilimited as number[],
-        unlimited: s.unlimited as number[],
+        banned: parseBanlistField(s.banned),
+        limited: parseBanlistField(s.limited),
+        semilimited: parseBanlistField(s.semilimited),
+        unlimited: parseBanlistField(s.unlimited),
         voteCount: s.votes.length,
         comment: s.comment || undefined,
       })),
@@ -180,25 +197,54 @@ async function createBanlistFromWinningSuggestion(
     }
 
     // Parse current lists and create Sets for lookup
-    const currentBanned = new Set(currentBanlist.banned as number[]);
-    const currentLimited = new Set(currentBanlist.limited as number[]);
-    const currentSemilimited = new Set(currentBanlist.semilimited as number[]);
-    const currentUnlimited = new Set(currentBanlist.unlimited as number[]);
+    // Ensure we're working with arrays of numbers, not strings
+    const currentBannedArray = parseBanlistField(currentBanlist.banned);
+    const currentLimitedArray = parseBanlistField(currentBanlist.limited);
+    const currentSemilimitedArray = parseBanlistField(currentBanlist.semilimited);
+    const currentUnlimitedArray = parseBanlistField(currentBanlist.unlimited);
+
+    // Double-check these are arrays (defensive programming)
+    if (!Array.isArray(currentBannedArray) || !Array.isArray(currentLimitedArray) ||
+        !Array.isArray(currentSemilimitedArray) || !Array.isArray(currentUnlimitedArray)) {
+      console.error('Current banlist fields are not arrays after parsing:', {
+        banned: currentBanlist.banned,
+        limited: currentBanlist.limited,
+        semilimited: currentBanlist.semilimited,
+        unlimited: currentBanlist.unlimited,
+      });
+      return { success: false, error: 'Current banlist data is corrupted' };
+    }
+
+    const currentBanned = new Set(currentBannedArray.filter(id => typeof id === 'number'));
+    const currentLimited = new Set(currentLimitedArray.filter(id => typeof id === 'number'));
+    const currentSemilimited = new Set(currentSemilimitedArray.filter(id => typeof id === 'number'));
+    const currentUnlimited = new Set(currentUnlimitedArray.filter(id => typeof id === 'number'));
 
     // Build map of card locations from winning suggestion
+    // Ensure winning suggestion fields are arrays of numbers
     const cardLocations = new Map<
       number,
       'banned' | 'limited' | 'semilimited' | 'unlimited'
     >();
 
-    winningSuggestion.banned.forEach((id) => cardLocations.set(id, 'banned'));
-    winningSuggestion.limited.forEach((id) => cardLocations.set(id, 'limited'));
-    winningSuggestion.semilimited.forEach((id) =>
-      cardLocations.set(id, 'semilimited'),
-    );
-    winningSuggestion.unlimited.forEach((id) =>
-      cardLocations.set(id, 'unlimited'),
-    );
+    // Filter out non-number values from suggestions (defensive)
+    const suggestionBanned = Array.isArray(winningSuggestion.banned)
+      ? winningSuggestion.banned.filter(id => typeof id === 'number')
+      : [];
+    const suggestionLimited = Array.isArray(winningSuggestion.limited)
+      ? winningSuggestion.limited.filter(id => typeof id === 'number')
+      : [];
+    const suggestionSemilimited = Array.isArray(winningSuggestion.semilimited)
+      ? winningSuggestion.semilimited.filter(id => typeof id === 'number')
+      : [];
+    const suggestionUnlimited = Array.isArray(winningSuggestion.unlimited)
+      ? winningSuggestion.unlimited.filter(id => typeof id === 'number')
+      : [];
+
+    suggestionBanned.forEach((id) => cardLocations.set(id, 'banned'));
+    suggestionLimited.forEach((id) => cardLocations.set(id, 'limited'));
+    suggestionSemilimited.forEach((id) => cardLocations.set(id, 'semilimited'));
+    suggestionUnlimited.forEach((id) => cardLocations.set(id, 'unlimited'));
 
     // Create new lists by merging
     const newBanned: number[] = [];
@@ -208,6 +254,12 @@ async function createBanlistFromWinningSuggestion(
 
     // Helper to add card to appropriate list
     const addToList = (cardId: number, category: string) => {
+      // Extra safety: only add if it's actually a number
+      if (typeof cardId !== 'number' || isNaN(cardId)) {
+        console.warn(`Skipping invalid cardId: ${cardId} (type: ${typeof cardId})`);
+        return;
+      }
+
       switch (category) {
         case 'banned':
           newBanned.push(cardId);
@@ -252,6 +304,34 @@ async function createBanlistFromWinningSuggestion(
       if (!allCurrentCards.has(cardId)) {
         addToList(cardId, category);
       }
+    });
+
+    // Final validation: ensure all arrays contain only numbers
+    const validateArray = (arr: unknown, name: string): boolean => {
+      if (!Array.isArray(arr)) {
+        console.error(`${name} is not an array:`, arr);
+        return false;
+      }
+      const nonNumbers = arr.filter(item => typeof item !== 'number' || isNaN(item));
+      if (nonNumbers.length > 0) {
+        console.error(`${name} contains non-number values:`, nonNumbers);
+        return false;
+      }
+      return true;
+    };
+
+    if (!validateArray(newBanned, 'newBanned') ||
+        !validateArray(newLimited, 'newLimited') ||
+        !validateArray(newSemilimited, 'newSemilimited') ||
+        !validateArray(newUnlimited, 'newUnlimited')) {
+      return { success: false, error: 'Generated banlist contains invalid data' };
+    }
+
+    console.log('Creating new banlist for session', currentBanlist.sessionId + 1, {
+      banned: newBanned.length,
+      limited: newLimited.length,
+      semilimited: newSemilimited.length,
+      unlimited: newUnlimited.length,
     });
 
     // Create new banlist for next session
@@ -357,10 +437,10 @@ export async function selectWinningSuggestion(
     const banlistResult = await createBanlistFromWinningSuggestion(
       suggestion.banlistId,
       {
-        banned: suggestion.banned as number[],
-        limited: suggestion.limited as number[],
-        semilimited: suggestion.semilimited as number[],
-        unlimited: suggestion.unlimited as number[],
+        banned: parseBanlistField(suggestion.banned),
+        limited: parseBanlistField(suggestion.limited),
+        semilimited: parseBanlistField(suggestion.semilimited),
+        unlimited: parseBanlistField(suggestion.unlimited),
       },
     );
 
@@ -379,10 +459,10 @@ export async function selectWinningSuggestion(
         const { saveBanlistImage } = await import('@lib/banlistImage');
         await saveBanlistImage({
           sessionNumber: newBanlist.sessionId,
-          banned: newBanlist.banned as number[],
-          limited: newBanlist.limited as number[],
-          semilimited: newBanlist.semilimited as number[],
-          unlimited: newBanlist.unlimited as number[],
+          banned: parseBanlistField(newBanlist.banned),
+          limited: parseBanlistField(newBanlist.limited),
+          semilimited: parseBanlistField(newBanlist.semilimited),
+          unlimited: parseBanlistField(newBanlist.unlimited),
         });
         console.log(`Banlist image generated for session ${newBanlist.sessionId}`);
       } catch (imageError) {
