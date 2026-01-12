@@ -476,8 +476,13 @@ export async function selectWinningSuggestion(
     revalidatePath('/banlist/current');
     revalidatePath('/');
 
-    // Send Discord notification for the new banlist
-    const { notifyBanlistChosen } = await import('@lib/discordClient');
+    // Send Discord notifications
+    const { notifyBanlistSuggestions, notifyBanlistChosen } = await import('@lib/discordClient');
+
+    // First, post all the suggestions that were voted on
+    await notifyBanlistSuggestions(activeSession.id);
+
+    // Then, post the chosen banlist with changes
     await notifyBanlistChosen(currentBanlist.sessionId + 1);
 
     return { success: true };
