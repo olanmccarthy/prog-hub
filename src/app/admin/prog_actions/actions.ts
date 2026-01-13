@@ -6,9 +6,16 @@ import { getCurrentUser } from '@lib/auth';
 import { parseYdkFromFile } from '@lib/ydkParser';
 import { validateDeckAgainstBanlist } from '@lib/deckValidator';
 
+export interface PlayerStatus {
+  id: number;
+  name: string;
+  completed: boolean;
+}
+
 export interface RequirementStatus {
   met: boolean;
   message: string;
+  playerStatuses?: PlayerStatus[];
 }
 
 export interface SessionStatusResult {
@@ -108,7 +115,7 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
     const startReasons: string[] = [];
     const completeReasons: string[] = [];
 
-    const requirements = {
+    const requirements: SessionStatusResult['requirements'] = {
       placementsFilled: { met: false, message: '' },
       decklistsSubmitted: { met: false, message: '' },
       suggestionsSubmitted: { met: false, message: '' },
@@ -158,11 +165,32 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
       });
 
       const decklistsComplete = decklistCount >= playerCount;
+
+      // Get all players with decklist completion status
+      const allPlayers = await prisma.player.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+
+      const playersWithDecklists = await prisma.decklist.findMany({
+        where: { sessionId: activeSession.id },
+        select: { playerId: true },
+      });
+
+      const decklistPlayerIds = new Set(playersWithDecklists.map(d => d.playerId));
+
+      const decklistPlayerStatuses: PlayerStatus[] = allPlayers.map(player => ({
+        id: player.id,
+        name: player.name,
+        completed: decklistPlayerIds.has(player.id),
+      }));
+
       requirements.decklistsSubmitted = {
         met: decklistsComplete,
         message: decklistsComplete
           ? `All ${playerCount} decklists submitted`
           : `Not all players have submitted decklists (${decklistCount}/${playerCount})`,
+        playerStatuses: decklistPlayerStatuses,
       };
       if (!decklistsComplete) {
         completeReasons.push(requirements.decklistsSubmitted.message);
@@ -241,11 +269,27 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         });
 
         const suggestionsComplete = suggestionCount >= playerCount;
+
+        // Get players with suggestion completion status
+        const playersWithSuggestions = await prisma.banlistSuggestion.findMany({
+          where: { banlistId: activeBanlist.id },
+          select: { playerId: true },
+        });
+
+        const suggestionPlayerIds = new Set(playersWithSuggestions.map(s => s.playerId));
+
+        const suggestionPlayerStatuses: PlayerStatus[] = allPlayers.map(player => ({
+          id: player.id,
+          name: player.name,
+          completed: suggestionPlayerIds.has(player.id),
+        }));
+
         requirements.suggestionsSubmitted = {
           met: suggestionsComplete,
           message: suggestionsComplete
             ? `All ${playerCount} suggestions submitted`
             : `Not all players have submitted suggestions (${suggestionCount}/${playerCount})`,
+          playerStatuses: suggestionPlayerStatuses,
         };
         if (!suggestionsComplete) {
           completeReasons.push(requirements.suggestionsSubmitted.message);
@@ -260,13 +304,10 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
 
       // Step 12: Check if all players have voted at least twice on banlist suggestions
       if (activeBanlist) {
-        // Get all players
-        const allPlayers = await prisma.player.findMany({
-          select: { id: true },
-        });
-
         // For each player, count how many votes they have submitted
         let playersWithInsufficientVotes = 0;
+        const votePlayerStatuses: PlayerStatus[] = [];
+
         for (const player of allPlayers) {
           const voteCount = await prisma.banlistSuggestionVote.count({
             where: {
@@ -276,9 +317,15 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
               },
             },
           });
-          if (voteCount < 2) {
+          const hasVoted = voteCount >= 2;
+          if (!hasVoted) {
             playersWithInsufficientVotes++;
           }
+          votePlayerStatuses.push({
+            id: player.id,
+            name: player.name,
+            completed: hasVoted,
+          });
         }
 
         const votesComplete = playersWithInsufficientVotes === 0;
@@ -287,6 +334,7 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
           message: votesComplete
             ? 'All players have voted at least twice'
             : `${playersWithInsufficientVotes} player(s) need to vote more (minimum 2 votes each)`,
+          playerStatuses: votePlayerStatuses,
         };
         if (!votesComplete) {
           completeReasons.push(requirements.votesSubmitted.message);

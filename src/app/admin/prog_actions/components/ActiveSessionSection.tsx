@@ -11,22 +11,57 @@ import StopCircleIcon from '@mui/icons-material/StopCircle';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { RequirementItem } from '@components/RequirementItem';
 
-interface Requirement {
-  met: boolean;
-  message: string;
-}
-
 interface Requirements {
-  decklistsSubmitted: Requirement;
-  eventWheelSpun: Requirement;
-  pairingsGenerated: Requirement;
-  placementsFilled: Requirement;
-  victoryPointsAssigned: Requirement;
-  walletPointsAssigned: Requirement;
-  suggestionsSubmitted: Requirement;
-  votesSubmitted: Requirement;
-  moderatorSelected: Requirement;
-  moderatorVoted: Requirement;
+  decklistsSubmitted: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  eventWheelSpun: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  pairingsGenerated: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  placementsFilled: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  victoryPointsAssigned: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  walletPointsAssigned: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  suggestionsSubmitted: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  votesSubmitted: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  moderatorSelected: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  moderatorVoted: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
 }
 
 interface ActiveSessionData {

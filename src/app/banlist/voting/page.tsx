@@ -102,11 +102,10 @@ export default function BanlistVotingPage() {
   };
 
   const handleSelectWinner = (suggestionId: number) => {
-    if (selectedWinner === suggestionId) {
-      setSelectedWinner(null);
-    } else {
-      setSelectedWinner(suggestionId);
-    }
+    setSelectedWinner(prev => {
+      // Toggle: if clicking the same suggestion, deselect it; otherwise select it
+      return prev === suggestionId ? null : suggestionId;
+    });
   };
 
   const handleConfirmWinner = async () => {

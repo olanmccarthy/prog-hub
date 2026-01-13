@@ -104,123 +104,128 @@ export function PairingsView({
               <Table>
                 <TableHead>
                   <TableRow>
-                    {groupBy === 'round' && (
-                      <TableCell sx={{ color: 'var(--text-bright)' }}>
-                        Player 1
-                      </TableCell>
-                    )}
-                    {groupBy === 'player' && (
-                      <TableCell sx={{ color: 'var(--text-bright)' }}>
-                        Opponent
-                      </TableCell>
-                    )}
-                    <TableCell
-                      align="center"
-                      sx={{ color: 'var(--text-bright)' }}
-                    >
-                      Wins
-                    </TableCell>
-                    <TableCell
-                      align="center"
-                      sx={{ color: 'var(--text-bright)' }}
-                    >
-                      Wins
-                    </TableCell>
-                    {groupBy === 'round' && (
-                      <TableCell sx={{ color: 'var(--text-bright)' }}>
-                        Player 2
-                      </TableCell>
-                    )}
                     {groupBy === 'player' && (
                       <TableCell sx={{ color: 'var(--text-bright)' }}>
                         Round
                       </TableCell>
                     )}
+                    <TableCell sx={{ color: 'var(--text-bright)' }}>
+                      {groupBy === 'round' ? 'Player 1' : 'Player'}
+                    </TableCell>
+                    <TableCell
+                      align="center"
+                      sx={{ color: 'var(--text-bright)' }}
+                    >
+                      Wins
+                    </TableCell>
+                    <TableCell
+                      align="center"
+                      sx={{ color: 'var(--text-bright)' }}
+                    >
+                      Wins
+                    </TableCell>
+                    <TableCell sx={{ color: 'var(--text-bright)' }}>
+                      {groupBy === 'round' ? 'Player 2' : 'Opponent'}
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {items.map((pairing) => (
-                    <TableRow key={pairing.id}>
-                      {groupBy === 'round' && (
-                        <TableCell sx={{ color: 'var(--text-primary)' }}>
-                          {pairing.player1.name}
-                        </TableCell>
-                      )}
-                      {groupBy === 'player' && (
-                        <TableCell sx={{ color: 'var(--text-primary)' }}>
-                          {pairing.player1.name === key
-                            ? pairing.player2.name
-                            : pairing.player1.name}
-                        </TableCell>
-                      )}
-                      <TableCell align="center">
-                        <TextField
-                          type="number"
-                          value={pairing.player1wins}
-                          onChange={(e) =>
-                            onUpdateWins(
-                              pairing.id,
-                              'player1',
-                              parseInt(e.target.value) || 0
-                            )
-                          }
-                          inputProps={{ min: 0, max: 2 }}
-                          size="small"
-                          sx={{
-                            width: '60px',
-                            '& input': {
-                              textAlign: 'center',
-                              color: 'var(--text-primary)',
-                            },
-                            '& .MuiOutlinedInput-root': {
-                              backgroundColor: 'var(--input-bg)',
-                              '& fieldset': {
-                                borderColor: 'var(--input-border)',
+                  {items.map((pairing) => {
+                    // When grouping by player, determine if current player is player1 or player2
+                    const isCurrentPlayerPlayer1 = groupBy === 'player' && pairing.player1.name === key;
+                    const currentPlayerWins = isCurrentPlayerPlayer1 ? pairing.player1wins : pairing.player2wins;
+                    const opponentWins = isCurrentPlayerPlayer1 ? pairing.player2wins : pairing.player1wins;
+                    const currentPlayerRole = isCurrentPlayerPlayer1 ? 'player1' : 'player2';
+                    const opponentRole = isCurrentPlayerPlayer1 ? 'player2' : 'player1';
+
+                    return (
+                      <TableRow key={pairing.id}>
+                        {groupBy === 'player' && (
+                          <TableCell sx={{ color: 'var(--text-primary)' }}>
+                            Round {pairing.round}
+                          </TableCell>
+                        )}
+                        {groupBy === 'round' && (
+                          <TableCell sx={{ color: 'var(--text-primary)' }}>
+                            {pairing.player1.name}
+                          </TableCell>
+                        )}
+                        {groupBy === 'player' && (
+                          <TableCell sx={{ color: 'var(--text-primary)' }}>
+                            {key}
+                          </TableCell>
+                        )}
+                        <TableCell align="center">
+                          <TextField
+                            type="number"
+                            value={groupBy === 'player' ? currentPlayerWins : pairing.player1wins}
+                            onChange={(e) =>
+                              onUpdateWins(
+                                pairing.id,
+                                groupBy === 'player' ? currentPlayerRole : 'player1',
+                                parseInt(e.target.value) || 0
+                              )
+                            }
+                            inputProps={{ min: 0, max: 2 }}
+                            size="small"
+                            sx={{
+                              width: '60px',
+                              '& input': {
+                                textAlign: 'center',
+                                color: 'var(--text-primary)',
                               },
-                            },
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <TextField
-                          type="number"
-                          value={pairing.player2wins}
-                          onChange={(e) =>
-                            onUpdateWins(
-                              pairing.id,
-                              'player2',
-                              parseInt(e.target.value) || 0
-                            )
-                          }
-                          inputProps={{ min: 0, max: 2 }}
-                          size="small"
-                          sx={{
-                            width: '60px',
-                            '& input': {
-                              textAlign: 'center',
-                              color: 'var(--text-primary)',
-                            },
-                            '& .MuiOutlinedInput-root': {
-                              backgroundColor: 'var(--input-bg)',
-                              '& fieldset': {
-                                borderColor: 'var(--input-border)',
+                              '& .MuiOutlinedInput-root': {
+                                backgroundColor: 'var(--input-bg)',
+                                '& fieldset': {
+                                  borderColor: 'var(--input-border)',
+                                },
                               },
-                            },
-                          }}
-                        />
-                      </TableCell>
-                      {groupBy === 'round' && (
-                        <TableCell sx={{ color: 'var(--text-primary)' }}>
-                          {pairing.player2.name}
+                            }}
+                          />
                         </TableCell>
-                      )}
-                      {groupBy === 'player' && (
-                        <TableCell sx={{ color: 'var(--text-primary)' }}>
-                          Round {pairing.round}
+                        <TableCell align="center">
+                          <TextField
+                            type="number"
+                            value={groupBy === 'player' ? opponentWins : pairing.player2wins}
+                            onChange={(e) =>
+                              onUpdateWins(
+                                pairing.id,
+                                groupBy === 'player' ? opponentRole : 'player2',
+                                parseInt(e.target.value) || 0
+                              )
+                            }
+                            inputProps={{ min: 0, max: 2 }}
+                            size="small"
+                            sx={{
+                              width: '60px',
+                              '& input': {
+                                textAlign: 'center',
+                                color: 'var(--text-primary)',
+                              },
+                              '& .MuiOutlinedInput-root': {
+                                backgroundColor: 'var(--input-bg)',
+                                '& fieldset': {
+                                  borderColor: 'var(--input-border)',
+                                },
+                              },
+                            }}
+                          />
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+                        {groupBy === 'round' && (
+                          <TableCell sx={{ color: 'var(--text-primary)' }}>
+                            {pairing.player2.name}
+                          </TableCell>
+                        )}
+                        {groupBy === 'player' && (
+                          <TableCell sx={{ color: 'var(--text-primary)' }}>
+                            {pairing.player1.name === key
+                              ? pairing.player2.name
+                              : pairing.player1.name}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

@@ -7,9 +7,9 @@ import {
   IconButton,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import { CategoryCard } from '@components/CategoryCard';
 import { getCardEntriesFromIds } from '@lib/cardLookup';
 import type { BanlistSuggestionForVoting } from '../actions';
@@ -177,14 +177,20 @@ export function VotingBanlistCard({
           <IconButton
             onClick={() => onSelectWinner(suggestion.id)}
             sx={{
-              color: isChosen ? '#FFD700' : 'var(--text-secondary)',
+              color: isChosen
+                ? '#4caf50'
+                : 'var(--text-secondary)',
               '&:hover': {
-                color: '#FFD700',
+                color: '#4caf50',
                 backgroundColor: 'var(--hover-light-grey)',
               },
             }}
           >
-            <EmojiEventsIcon sx={{ fontSize: 40 }} />
+            {isChosen ? (
+              <CheckCircleIcon sx={{ fontSize: 40 }} />
+            ) : (
+              <CheckCircleOutlineIcon sx={{ fontSize: 40 }} />
+            )}
           </IconButton>
         </Box>
       )}
