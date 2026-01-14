@@ -15,7 +15,8 @@ import {
   notifyLeaderboard,
   notifyWalletUpdate,
   notifyTransaction,
-  notifyDecklists
+  notifyDecklists,
+  notifyError
 } from './notifications';
 
 const sqsClient = new SQSClient({
@@ -30,7 +31,7 @@ const QUEUE_URL = process.env.DISCORD_SQS_QUEUE_URL || '';
 const POLL_INTERVAL = parseInt(process.env.SQS_POLL_INTERVAL || '60000', 10); // Default 1 minute
 
 interface NotificationMessage {
-  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists';
+  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists' | 'error';
   payload: Record<string, unknown>;
 }
 
@@ -82,6 +83,20 @@ function validateTransactionPayload(payload: Record<string, unknown>): { playerI
     throw new Error(`Invalid sessionId: expected number or undefined, got ${typeof sessionId}`);
   }
   return { playerId, setId, amount, sessionId: sessionId as number | undefined };
+}
+
+function validateErrorPayload(payload: Record<string, unknown>): { functionName: string; errorMessage: string; parameters?: Record<string, unknown> } {
+  const { functionName, errorMessage, parameters } = payload;
+  if (typeof functionName !== 'string') {
+    throw new Error(`Invalid functionName: expected string, got ${typeof functionName}`);
+  }
+  if (typeof errorMessage !== 'string') {
+    throw new Error(`Invalid errorMessage: expected string, got ${typeof errorMessage}`);
+  }
+  if (parameters !== undefined && typeof parameters !== 'object') {
+    throw new Error(`Invalid parameters: expected object or undefined, got ${typeof parameters}`);
+  }
+  return { functionName, errorMessage, parameters: parameters as Record<string, unknown> | undefined };
 }
 
 /**
@@ -141,6 +156,12 @@ async function processMessage(message: Message): Promise<void> {
       case 'decklists':
         await notifyDecklists(validateSessionId(notification.payload));
         break;
+
+      case 'error': {
+        const { functionName, errorMessage, parameters } = validateErrorPayload(notification.payload);
+        await notifyError(functionName, errorMessage, parameters);
+        break;
+      }
 
       default:
         console.warn(`[QueueConsumer] Unknown message type: ${notification.type}`);

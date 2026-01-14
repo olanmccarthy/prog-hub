@@ -126,6 +126,7 @@ export async function getVictoryPointStatus(): Promise<VictoryPointStatusResult>
 
 /**
  * Helper function to get ranked players for a session
+ * Uses the saved placement fields from the session (populated when standings are finalized)
  */
 async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlayer[]> {
   const session = await prisma.session.findUnique({
@@ -158,6 +159,24 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
       ]
     : [0, 0, 0, 0, 0, 0];
 
+  // Use saved placement fields from finalized standings
+  const placementPlayerIds = [
+    session.first,
+    session.second,
+    session.third,
+    session.fourth,
+    session.fifth,
+    session.sixth,
+  ].filter((id): id is number => id !== null);
+
+  if (placementPlayerIds.length === 0) {
+    // Fallback: if placements not saved, return empty array
+    return [];
+  }
+
+  // Calculate match stats for display purposes only (ranking already determined)
+  const playerStatsMap = new Map<number, { matchWins: number; gameWins: number; opponentMatchWinRate: number }>();
+
   // Get all unique players in the session
   const playerIds = new Set<number>();
   session.pairings.forEach(pairing => {
@@ -166,15 +185,13 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
   });
 
   // Calculate stats for each player
-  const playerStats = Array.from(playerIds).map(playerId => {
+  Array.from(playerIds).forEach(playerId => {
     const playerPairings = session.pairings.filter(
       p => p.player1Id === playerId || p.player2Id === playerId
     );
 
     let matchWins = 0;
-    let matchLosses = 0;
     let gameWins = 0;
-    let gameLosses = 0;
     const opponentIds: number[] = [];
 
     playerPairings.forEach(pairing => {
@@ -184,12 +201,9 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
       const opponentId = isPlayer1 ? pairing.player2Id : pairing.player1Id;
 
       gameWins += playerWins;
-      gameLosses += opponentWins;
 
-      if (playerWins > opponentWins) {
+      if (playerWins === 2) {
         matchWins++;
-      } else if (opponentWins > playerWins) {
-        matchLosses++;
       }
 
       opponentIds.push(opponentId);
@@ -207,9 +221,8 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
       opponentPairings.forEach(pairing => {
         const isOppPlayer1 = pairing.player1Id === opponentId;
         const oppWins = isOppPlayer1 ? pairing.player1wins : pairing.player2wins;
-        const oppLosses = isOppPlayer1 ? pairing.player2wins : pairing.player1wins;
 
-        if (oppWins > oppLosses) {
+        if (oppWins === 2) {
           totalOpponentMatchWins++;
         }
         totalOpponentMatches++;
@@ -220,29 +233,21 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
       ? totalOpponentMatchWins / totalOpponentMatches
       : 0;
 
-    return {
-      playerId,
+    playerStatsMap.set(playerId, {
       matchWins,
-      matchLosses,
       gameWins,
-      gameLosses,
       opponentMatchWinRate,
-    };
+    });
   });
 
-  // Sort by tiebreakers
-  playerStats.sort((a, b) => {
-    if (b.matchWins !== a.matchWins) return b.matchWins - a.matchWins;
-    if (b.opponentMatchWinRate !== a.opponentMatchWinRate) return b.opponentMatchWinRate - a.opponentMatchWinRate;
-    return b.gameWins - a.gameWins;
-  });
-
-  // Get player names and create ranked list
+  // Build ranked list using saved placement order
   const rankedPlayers: RankedPlayer[] = [];
-  for (let i = 0; i < playerStats.length; i++) {
-    const stats = playerStats[i];
+  for (let i = 0; i < placementPlayerIds.length; i++) {
+    const playerId = placementPlayerIds[i];
+    const stats = playerStatsMap.get(playerId) || { matchWins: 0, gameWins: 0, opponentMatchWinRate: 0 };
+
     const player = await prisma.player.findUnique({
-      where: { id: stats.playerId },
+      where: { id: playerId },
       include: {
         wallet: true,
       },
@@ -251,15 +256,15 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
     if (player) {
       // Get current victory points
       const victoryPointCount = await prisma.victoryPoint.count({
-        where: { playerId: stats.playerId },
+        where: { playerId: playerId },
       });
 
       // Wallet points this session based on rank (0 for last place)
       const rank = i + 1;
-      const walletPointsThisSession = rank === playerStats.length ? 0 : walletPoints[rank - 1] || 0;
+      const walletPointsThisSession = rank === placementPlayerIds.length ? 0 : walletPoints[rank - 1] || 0;
 
       rankedPlayers.push({
-        playerId: stats.playerId,
+        playerId: playerId,
         playerName: player.name,
         rank,
         matchWins: stats.matchWins,

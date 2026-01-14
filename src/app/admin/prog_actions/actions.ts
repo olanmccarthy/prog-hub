@@ -1338,6 +1338,127 @@ export async function autoModeratorVote(): Promise<AutoModeratorVoteResult> {
   }
 }
 
+export interface SimulateEventWheelResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * TEST FUNCTION: Simulate event wheel being spun by setting eventWheelSpun=true
+ */
+export async function simulateEventWheelSpin(): Promise<SimulateEventWheelResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can use this test function' };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Check if already spun
+    if (activeSession.eventWheelSpun) {
+      return { success: false, error: 'Event wheel has already been spun for this session' };
+    }
+
+    // Update session to mark event wheel as spun
+    await prisma.session.update({
+      where: { id: activeSession.id },
+      data: { eventWheelSpun: true },
+    });
+
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/admin/event-wheel');
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error simulating event wheel spin:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to simulate event wheel spin',
+    };
+  }
+}
+
+export interface SimulateMatchScoresResult {
+  success: boolean;
+  error?: string;
+  pairingsUpdated?: number;
+}
+
+/**
+ * TEST FUNCTION: Fill in random match scores for all pairings in the active session
+ */
+export async function simulateMatchScores(): Promise<SimulateMatchScoresResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) {
+      return { success: false, error: 'Only admins can use this test function' };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Get all pairings for this session
+    const pairings = await prisma.pairing.findMany({
+      where: { sessionId: activeSession.id },
+    });
+
+    if (pairings.length === 0) {
+      return { success: false, error: 'No pairings found. Generate pairings first.' };
+    }
+
+    // Update each pairing with random scores
+    // Match format is best of 3, first to 2 wins
+    for (const pairing of pairings) {
+      // Generate random match result
+      const results = [
+        { p1: 2, p2: 0 },  // 2-0
+        { p1: 2, p2: 1 },  // 2-1
+        { p1: 1, p2: 2 },  // 1-2
+        { p1: 0, p2: 2 },  // 0-2
+      ];
+
+      const randomResult = results[Math.floor(Math.random() * results.length)];
+
+      await prisma.pairing.update({
+        where: { id: pairing.id },
+        data: {
+          player1wins: randomResult.p1,
+          player2wins: randomResult.p2,
+        },
+      });
+    }
+
+    revalidatePath('/admin/prog_actions');
+    revalidatePath('/play/pairings');
+    revalidatePath('/play/standings');
+
+    return {
+      success: true,
+      pairingsUpdated: pairings.length,
+    };
+  } catch (error) {
+    console.error('Error simulating match scores:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to simulate match scores',
+    };
+  }
+}
+
 export interface ResetEntireProgResult {
   success: boolean;
   error?: string;

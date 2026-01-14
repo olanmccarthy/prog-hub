@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { generateDeckImage } from './generator';
 import { BanlistForImage, DeckForImage } from './types';
+import { notifyError } from '@lib/discordClient';
 
 /**
  * Generate and save a deck image to the public/deck-images directory
@@ -42,6 +43,22 @@ export async function saveDeckImage(
     return `/deck-images/${filename}`;
   } catch (error) {
     console.error(`[saveDeckImage] Failed to save deck image for decklist ${decklistId}:`, error);
+
+    // Send error notification to Discord
+    await notifyError(
+      'saveDeckImage',
+      error instanceof Error ? error.message : String(error),
+      {
+        decklistId,
+        deckSize: {
+          maindeck: deck.maindeck.length,
+          extradeck: deck.extradeck.length,
+          sidedeck: deck.sidedeck.length,
+        },
+        hasBanlist: !!banlist,
+      }
+    );
+
     throw error;
   }
 }

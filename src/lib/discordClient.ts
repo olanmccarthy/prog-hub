@@ -18,7 +18,7 @@ const sqsClient = new SQSClient({
 const QUEUE_URL = process.env.DISCORD_SQS_QUEUE_URL || '';
 
 interface NotificationMessage {
-  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists';
+  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists' | 'error';
   payload: Record<string, unknown>;
 }
 
@@ -163,5 +163,24 @@ export async function notifyDecklists(sessionId: number): Promise<boolean> {
   return sendToQueue({
     type: 'decklists',
     payload: { sessionId },
+  });
+}
+
+/**
+ * Send error notification to Discord errors channel
+ */
+export async function notifyError(
+  functionName: string,
+  errorMessage: string,
+  parameters?: Record<string, unknown>
+): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing error notification for ${functionName}`);
+  return sendToQueue({
+    type: 'error',
+    payload: {
+      functionName,
+      errorMessage,
+      parameters,
+    },
   });
 }

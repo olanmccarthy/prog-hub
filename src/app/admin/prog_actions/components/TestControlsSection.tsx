@@ -9,16 +9,22 @@ import {
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import CasinoIcon from '@mui/icons-material/Casino';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 
 interface TestControlsSectionProps {
   autoSubmitingDecklists: boolean;
   autoCreating: boolean;
   autoVoting: boolean;
   autoModeratorVoting: boolean;
+  simulatingEventWheel: boolean;
+  simulatingMatchScores: boolean;
   onAutoSubmitDecklists: () => Promise<void>;
   onAutoCreateSuggestions: () => Promise<void>;
   onAutoVote: () => Promise<void>;
   onAutoModeratorVote: () => Promise<void>;
+  onSimulateEventWheel: () => Promise<void>;
+  onSimulateMatchScores: () => Promise<void>;
 }
 
 export function TestControlsSection({
@@ -26,10 +32,14 @@ export function TestControlsSection({
   autoCreating,
   autoVoting,
   autoModeratorVoting,
+  simulatingEventWheel,
+  simulatingMatchScores,
   onAutoSubmitDecklists,
   onAutoCreateSuggestions,
   onAutoVote,
   onAutoModeratorVote,
+  onSimulateEventWheel,
+  onSimulateMatchScores,
 }: TestControlsSectionProps) {
   return (
     <Paper
@@ -157,6 +167,54 @@ export function TestControlsSection({
           </Button>
           <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
             Automatically makes the moderator choose a random banlist suggestion
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={
+              simulatingEventWheel ? <CircularProgress size={20} /> : <CasinoIcon />
+            }
+            onClick={onSimulateEventWheel}
+            disabled={simulatingEventWheel}
+            sx={{
+              borderColor: '#ff9800',
+              color: '#ff9800',
+              '&:hover': {
+                borderColor: '#f57c00',
+                backgroundColor: 'rgba(255, 152, 0, 0.08)',
+              },
+            }}
+          >
+            {simulatingEventWheel ? 'Simulating...' : 'Simulate Event Wheel Spin'}
+          </Button>
+          <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+            Marks event wheel as spun without actually spinning it
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={
+              simulatingMatchScores ? <CircularProgress size={20} /> : <SportsEsportsIcon />
+            }
+            onClick={onSimulateMatchScores}
+            disabled={simulatingMatchScores}
+            sx={{
+              borderColor: '#ff9800',
+              color: '#ff9800',
+              '&:hover': {
+                borderColor: '#f57c00',
+                backgroundColor: 'rgba(255, 152, 0, 0.08)',
+              },
+            }}
+          >
+            {simulatingMatchScores ? 'Simulating...' : 'Simulate Match Scores'}
+          </Button>
+          <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+            Fills in random match scores for all pairings
           </Typography>
         </Box>
       </Box>

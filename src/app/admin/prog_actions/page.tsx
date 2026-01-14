@@ -7,7 +7,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { getSessionStatus, startSession, completeSession, generatePairings, autoVoteAllPlayers, autoCreateSuggestions, autoSubmitDecklists, autoModeratorVote, resetSession, resetEntireProg, uploadPlayerDecklist, getPlayersForUpload, SessionStatusResult } from './actions';
+import { getSessionStatus, startSession, completeSession, generatePairings, autoVoteAllPlayers, autoCreateSuggestions, autoSubmitDecklists, autoModeratorVote, resetSession, resetEntireProg, uploadPlayerDecklist, getPlayersForUpload, simulateEventWheelSpin, simulateMatchScores, SessionStatusResult } from './actions';
 import { ActiveSessionSection } from './components/ActiveSessionSection';
 import { StartSessionSection } from './components/StartSessionSection';
 import { GeneratePairingsSection } from './components/GeneratePairingsSection';
@@ -25,6 +25,8 @@ export default function ProgActionsPage() {
   const [autoCreating, setAutoCreating] = useState(false);
   const [autoSubmitingDecklists, setAutoSubmitingDecklists] = useState(false);
   const [autoModeratorVoting, setAutoModeratorVoting] = useState(false);
+  const [simulatingEventWheel, setSimulatingEventWheel] = useState(false);
+  const [simulatingMatchScores, setSimulatingMatchScores] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resettingEntireProg, setResettingEntireProg] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -208,6 +210,48 @@ export default function ProgActionsPage() {
     }
   };
 
+  const handleSimulateEventWheel = async () => {
+    try {
+      setSimulatingEventWheel(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await simulateEventWheelSpin();
+
+      if (result.success) {
+        setSuccess('Event wheel has been marked as spun!');
+        await loadStatus();
+      } else {
+        setError(result.error || 'Failed to simulate event wheel spin');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to simulate event wheel spin');
+    } finally {
+      setSimulatingEventWheel(false);
+    }
+  };
+
+  const handleSimulateMatchScores = async () => {
+    try {
+      setSimulatingMatchScores(true);
+      setError(null);
+      setSuccess(null);
+
+      const result = await simulateMatchScores();
+
+      if (result.success) {
+        setSuccess(`Successfully filled in scores for ${result.pairingsUpdated} pairings!`);
+        await loadStatus();
+      } else {
+        setError(result.error || 'Failed to simulate match scores');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to simulate match scores');
+    } finally {
+      setSimulatingMatchScores(false);
+    }
+  };
+
   const handleResetSession = async () => {
     if (!confirm('Are you sure you want to reset the current session? This will delete ALL session data including pairings, decklists, victory points, and standings. This action cannot be undone!')) {
       return;
@@ -367,10 +411,14 @@ export default function ProgActionsPage() {
         autoCreating={autoCreating}
         autoVoting={autoVoting}
         autoModeratorVoting={autoModeratorVoting}
+        simulatingEventWheel={simulatingEventWheel}
+        simulatingMatchScores={simulatingMatchScores}
         onAutoSubmitDecklists={handleAutoSubmitDecklists}
         onAutoCreateSuggestions={handleAutoCreateSuggestions}
         onAutoVote={handleAutoVote}
         onAutoModeratorVote={handleAutoModeratorVote}
+        onSimulateEventWheel={handleSimulateEventWheel}
+        onSimulateMatchScores={handleSimulateMatchScores}
       />
 
       {/* Reset Sections */}

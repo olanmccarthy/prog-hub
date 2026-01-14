@@ -12,6 +12,7 @@ export const discordConfig = {
     leaderboard: process.env.DISCORD_LEADERBOARD_CHANNEL ||  '',
     wallet: process.env.DISCORD_WALLET_CHANNEL || '',
     spending: process.env.DISCORD_SPENDING_CHANNEL || '',
+    errors: process.env.DISCORD_ERRORS_CHANNEL || '',
   },
   enabled: process.env.DISCORD_ENABLED === 'true',
 };

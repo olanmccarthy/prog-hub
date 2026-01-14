@@ -73,6 +73,7 @@ export async function notifyPairings(sessionId: number, round: number): Promise<
 
 /**
  * Send notification when standings are finalized
+ * Uses the saved placement fields from the session (populated when standings are finalized)
  */
 export async function notifyStandings(sessionId: number): Promise<boolean> {
   console.log(`[Discord] Preparing standings notification for session ${sessionId}`);
@@ -103,7 +104,22 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
       return false;
     }
 
-    // Calculate player stats
+    // Use saved placement fields from finalized standings
+    const placementPlayerIds = [
+      session.first,
+      session.second,
+      session.third,
+      session.fourth,
+      session.fifth,
+      session.sixth,
+    ].filter((id): id is number => id !== null);
+
+    if (placementPlayerIds.length === 0) {
+      console.error('[Discord] No placements saved - standings not finalized');
+      return false;
+    }
+
+    // Calculate player stats for display purposes
     interface PlayerStats {
       playerId: number;
       playerName: string;
@@ -112,8 +128,6 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
       matchDraws: number;
       gameWins: number;
       gameLosses: number;
-      gameWinsInLosses: number;
-      gameLossesInWins: number;
     }
 
     const playerStatsMap = new Map<number, PlayerStats>();
@@ -134,8 +148,6 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
           matchDraws: 0,
           gameWins: 0,
           gameLosses: 0,
-          gameWinsInLosses: 0,
-          gameLossesInWins: 0,
         });
       }
 
@@ -149,8 +161,6 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
           matchDraws: 0,
           gameWins: 0,
           gameLosses: 0,
-          gameWinsInLosses: 0,
-          gameLossesInWins: 0,
         });
       }
 
@@ -168,14 +178,10 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
         // Player 1 won the match
         p1Stats.matchWins++;
         p2Stats.matchLosses++;
-        p1Stats.gameLossesInWins += p2Wins;
-        p2Stats.gameWinsInLosses += p2Wins;
       } else if (p2Wins === 2) {
         // Player 2 won the match
         p2Stats.matchWins++;
         p1Stats.matchLosses++;
-        p2Stats.gameLossesInWins += p1Wins;
-        p1Stats.gameWinsInLosses += p1Wins;
       } else if (p1Wins === 1 && p2Wins === 1) {
         // Draw
         p1Stats.matchDraws++;
@@ -183,26 +189,14 @@ export async function notifyStandings(sessionId: number): Promise<boolean> {
       }
     });
 
-    // Sort standings with tiebreakers (same as app logic)
-    const playerStats = Array.from(playerStatsMap.values());
-    const standings = playerStats.sort((a, b) => {
-      // Primary: Most match wins
-      if (a.matchWins !== b.matchWins) {
-        return b.matchWins - a.matchWins;
+    // Build standings array using saved placement order (already has correct tiebreakers applied)
+    const standings: PlayerStats[] = [];
+    for (const playerId of placementPlayerIds) {
+      const stats = playerStatsMap.get(playerId);
+      if (stats) {
+        standings.push(stats);
       }
-
-      // Tiebreaker 1: Most game wins in lost matches
-      if (a.gameWinsInLosses !== b.gameWinsInLosses) {
-        return b.gameWinsInLosses - a.gameWinsInLosses;
-      }
-
-      // Tiebreaker 2: Least game losses in won matches
-      if (a.gameLossesInWins !== b.gameLossesInWins) {
-        return a.gameLossesInWins - b.gameLossesInWins;
-      }
-
-      return 0;
-    });
+    }
 
     // Build embed message
     const embed = new EmbedBuilder()
@@ -510,7 +504,14 @@ export async function notifyBanlistSuggestions(sessionId: number): Promise<boole
 
     const suggestions = await prisma.banlistSuggestion.findMany({
       where: { banlistId: banlist.id },
-      include: { player: true },
+      include: {
+        player: true,
+        votes: {
+          include: {
+            player: true,
+          },
+        },
+      },
       orderBy: { id: 'asc' },
     });
 
@@ -542,10 +543,14 @@ export async function notifyBanlistSuggestions(sessionId: number): Promise<boole
           .join('\n') || 'None';
       };
 
+      // Build title with chosen indicator
+      const titlePrefix = suggestion.chosen ? '👑 **CHOSEN** 👑 ' : '💡 ';
+      const title = `${titlePrefix}Banlist Suggestion - Session ${session.number} (${stripLanguageCode(session.set?.setCode)})`;
+
       const embed = new EmbedBuilder()
-        .setTitle(`💡 Banlist Suggestion - Session ${session.number} (${stripLanguageCode(session.set?.setCode)})`)
+        .setTitle(title)
         .setDescription(`**Suggested by:** ${suggestion.player.name}`)
-        .setColor('#3498db')
+        .setColor(suggestion.chosen ? '#ffd700' : '#3498db') // Gold if chosen, blue otherwise
         .setTimestamp();
 
       embed.addFields(
@@ -554,6 +559,27 @@ export async function notifyBanlistSuggestions(sessionId: number): Promise<boole
         { name: '2️⃣ Semi-Limited', value: formatCards(suggestion.semilimited as number[]), inline: false },
         { name: '♾️ Unlimited', value: formatCards(suggestion.unlimited as number[]), inline: false }
       );
+
+      // Add player's comments if present
+      if (suggestion.comment && suggestion.comment.trim()) {
+        embed.addFields({
+          name: '💬 Comments',
+          value: suggestion.comment.trim(),
+          inline: false,
+        });
+      }
+
+      // Add voters if any
+      if (suggestion.votes.length > 0) {
+        const voterNames = suggestion.votes
+          .map(vote => vote.player.name)
+          .join(', ');
+        embed.addFields({
+          name: `🗳️ Voted by (${suggestion.votes.length})`,
+          value: voterNames,
+          inline: false,
+        });
+      }
 
       await channel.send({ embeds: [embed] });
     }
@@ -800,5 +826,62 @@ export async function notifyDecklists(sessionId: number): Promise<boolean> {
   } catch (error) {
     console.error('[Discord] Error preparing decklists notification:', error);
     return false;
+  }
+}
+
+/**
+ * Send error notification to errors channel
+ * @param functionName - Name of the function that errored
+ * @param errorMessage - The error message
+ * @param parameters - The parameters passed to the function
+ */
+export async function notifyError(
+  functionName: string,
+  errorMessage: string,
+  parameters?: Record<string, unknown>
+): Promise<void> {
+  try {
+    if (!isBotReady()) {
+      console.log('[Discord] Bot not ready, skipping error notification');
+      return;
+    }
+
+    const channel = await getChannel('errors');
+    if (!channel) {
+      console.log('[Discord] Errors channel not configured, skipping error notification');
+      return;
+    }
+
+    // Create embed with error details
+    const embed = new EmbedBuilder()
+      .setTitle('🚨 NextJS Error')
+      .setDescription(`**Function:** \`${functionName}\``)
+      .setColor('#ff0000')
+      .setTimestamp();
+
+    // Add error message field
+    embed.addFields({
+      name: '❌ Error Message',
+      value: errorMessage.length > 1024 ? errorMessage.substring(0, 1021) + '...' : errorMessage,
+      inline: false,
+    });
+
+    // Add parameters if provided
+    if (parameters && Object.keys(parameters).length > 0) {
+      const paramsString = JSON.stringify(parameters, null, 2);
+      embed.addFields({
+        name: '📋 Parameters',
+        value: paramsString.length > 1024
+          ? '```json\n' + paramsString.substring(0, 1015) + '...```'
+          : '```json\n' + paramsString + '```',
+        inline: false,
+      });
+    }
+
+    await channel.send({ embeds: [embed] });
+    console.log(`[Discord] Error notification sent for ${functionName}`);
+  } catch (error) {
+    // If Discord fails, just log it - don't throw
+    console.error('[Discord] Failed to send error notification:', error);
   }
 }
