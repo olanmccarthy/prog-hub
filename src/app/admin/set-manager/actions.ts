@@ -14,6 +14,7 @@ export interface SetData {
   isASession: boolean;
   isPurchasable: boolean;
   isPromo: boolean;
+  useDBImage: boolean;
   price: number;
 }
 
@@ -22,6 +23,7 @@ export interface UpdateSetBooleansInput {
   isASession: boolean;
   isPurchasable: boolean;
   isPromo: boolean;
+  useDBImage: boolean;
 }
 
 export async function getAllSets(): Promise<SetData[]> {
@@ -45,6 +47,7 @@ export async function getAllSets(): Promise<SetData[]> {
         isASession: true,
         isPurchasable: true,
         isPromo: true,
+        useDBImage: true,
         price: true,
       },
     });
@@ -63,7 +66,7 @@ export async function updateSetBooleans(input: UpdateSetBooleansInput): Promise<
       throw new Error('Unauthorized: Admin access required');
     }
 
-    const { id, isASession, isPurchasable, isPromo } = input;
+    const { id, isASession, isPurchasable, isPromo, useDBImage } = input;
 
     if (!id) {
       throw new Error('Set ID is required');
@@ -81,6 +84,7 @@ export async function updateSetBooleans(input: UpdateSetBooleansInput): Promise<
         isASession,
         isPurchasable,
         isPromo,
+        useDBImage,
       },
       select: {
         id: true,
@@ -92,6 +96,7 @@ export async function updateSetBooleans(input: UpdateSetBooleansInput): Promise<
         isASession: true,
         isPurchasable: true,
         isPromo: true,
+        useDBImage: true,
         price: true,
       },
     });
@@ -147,6 +152,7 @@ export async function updateSetPrice(input: UpdateSetPriceInput): Promise<SetDat
         isASession: true,
         isPurchasable: true,
         isPromo: true,
+        useDBImage: true,
         price: true,
       },
     });
@@ -170,6 +176,7 @@ export interface CreateSetInput {
   isASession?: boolean;
   isPurchasable?: boolean;
   isPromo?: boolean;
+  useDBImage?: boolean;
   price?: number;
 }
 
@@ -180,7 +187,7 @@ export async function createSet(input: CreateSetInput): Promise<SetData> {
       throw new Error('Unauthorized: Admin access required');
     }
 
-    const { setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo, price } = input;
+    const { setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo, useDBImage, price } = input;
 
     // Validate required fields
     if (!setName || !setCode || !numOfCards || !tcgDate) {
@@ -210,6 +217,7 @@ export async function createSet(input: CreateSetInput): Promise<SetData> {
         isASession: isASession ?? false,
         isPurchasable: isPurchasable ?? true,
         isPromo: isPromo ?? false,
+        useDBImage: useDBImage ?? false,
         price: price ?? 4,
       },
       select: {
@@ -222,6 +230,7 @@ export async function createSet(input: CreateSetInput): Promise<SetData> {
         isASession: true,
         isPurchasable: true,
         isPromo: true,
+        useDBImage: true,
         price: true,
       },
     });
@@ -246,6 +255,7 @@ export interface UpdateSetInput {
   isASession: boolean;
   isPurchasable: boolean;
   isPromo: boolean;
+  useDBImage: boolean;
   price: number;
 }
 
@@ -256,7 +266,7 @@ export async function updateSet(input: UpdateSetInput): Promise<SetData> {
       throw new Error('Unauthorized: Admin access required');
     }
 
-    const { id, setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo, price } = input;
+    const { id, setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo, useDBImage, price } = input;
 
     // Validate required fields
     if (!id) {
@@ -307,6 +317,7 @@ export async function updateSet(input: UpdateSetInput): Promise<SetData> {
         isASession,
         isPurchasable,
         isPromo,
+        useDBImage,
         price,
       },
       select: {
@@ -319,6 +330,7 @@ export async function updateSet(input: UpdateSetInput): Promise<SetData> {
         isASession: true,
         isPurchasable: true,
         isPromo: true,
+        useDBImage: true,
         price: true,
       },
     });

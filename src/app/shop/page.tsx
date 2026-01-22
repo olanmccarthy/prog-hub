@@ -411,7 +411,7 @@ export default function ShopPage() {
                               textDecoration: 'none',
                             }}
                           >
-                            { /* set.setImage ? (
+                            {set.useDBImage && set.setImage ? (
                               <Image
                                 src={set.setImage}
                                 alt={set.setName}
@@ -421,17 +421,7 @@ export default function ShopPage() {
                                   objectFit: 'cover',
                                 }}
                               />
-                            ) : (
-                              <ImageIcon
-                                sx={{
-                                  fontSize: 64,
-                                  color: 'var(--text-secondary)',
-                                  opacity: 0.3,
-                                }}
-                              />
-                            ) */}
-
-                            {set.isPromo ? (
+                            ) : set.isPromo ? (
                               <Image
                                 src={cardbackImage}
                                 alt={set.setName}
@@ -698,7 +688,7 @@ export default function ShopPage() {
                   textDecoration: 'none',
                 }}
               >
-                {/* set.setImage ? (
+                {set.useDBImage && set.setImage ? (
                   <Image
                     src={set.setImage}
                     alt={set.setName}
@@ -708,37 +698,27 @@ export default function ShopPage() {
                       objectFit: 'cover',
                     }}
                   />
-                ) : (
-                  <ImageIcon
-                    sx={{
-                      fontSize: 64,
-                      color: 'var(--text-secondary)',
-                      opacity: 0.3,
+                ) : set.isPromo ? (
+                  <Image
+                    src={cardbackImage}
+                    alt={set.setName}
+                    fill
+                    sizes="220px"
+                    style={{
+                      objectFit: 'cover',
                     }}
                   />
-                ) */}
-
-                {set.isPromo ? (
-                              <Image
-                                src={cardbackImage}
-                                alt={set.setName}
-                                fill
-                                sizes="220px"
-                                style={{
-                                  objectFit: 'cover',
-                                }}
-                              />
-                            ) : (
-                              <Image
-                                src={`https://images.ygoprog.com/pack/${set.setCode}.jpg`}
-                                alt={set.setName}
-                                fill
-                                sizes="220px"
-                                style={{
-                                  objectFit: 'cover',
-                                }}
-                              />
-                            )}
+                ) : (
+                  <Image
+                    src={`https://images.ygoprog.com/pack/${set.setCode}.jpg`}
+                    alt={set.setName}
+                    fill
+                    sizes="220px"
+                    style={{
+                      objectFit: 'cover',
+                    }}
+                  />
+                )}
 
                 {/* Set Name Overlay at Top */}
                 <Box

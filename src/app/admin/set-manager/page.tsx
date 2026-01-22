@@ -44,6 +44,7 @@ export default function SetManagerPage() {
     isASession: false,
     isPurchasable: true,
     isPromo: false,
+    useDBImage: false,
     price: 4,
   });
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -82,7 +83,7 @@ export default function SetManagerPage() {
 
   const handleBooleanUpdate = async (
     setId: number,
-    field: 'isASession' | 'isPurchasable' | 'isPromo',
+    field: 'isASession' | 'isPurchasable' | 'isPromo' | 'useDBImage',
     value: boolean
   ) => {
     try {
@@ -97,6 +98,7 @@ export default function SetManagerPage() {
         isASession: field === 'isASession' ? value : set.isASession,
         isPurchasable: field === 'isPurchasable' ? value : set.isPurchasable,
         isPromo: field === 'isPromo' ? value : set.isPromo,
+        useDBImage: field === 'useDBImage' ? value : set.useDBImage,
       });
 
       // Update local state
@@ -174,6 +176,7 @@ export default function SetManagerPage() {
         isASession: newSet.isASession,
         isPurchasable: newSet.isPurchasable,
         isPromo: newSet.isPromo,
+        useDBImage: newSet.useDBImage,
         price: newSet.price,
       });
 
@@ -192,6 +195,7 @@ export default function SetManagerPage() {
         isASession: false,
         isPurchasable: true,
         isPromo: false,
+        useDBImage: false,
         price: 4,
       });
       setCreateDialogOpen(false);
@@ -246,6 +250,7 @@ export default function SetManagerPage() {
         isASession: editingSet.isASession,
         isPurchasable: editingSet.isPurchasable,
         isPromo: editingSet.isPromo,
+        useDBImage: editingSet.useDBImage,
         price: editingSet.price,
       });
 
@@ -385,6 +390,9 @@ export default function SetManagerPage() {
                 Is a Promo
               </TableCell>
               <TableCell align="center" sx={{ color: 'var(--text-bright)', fontWeight: 'bold', backgroundColor: 'var(--bg-secondary)' }}>
+                Use DB Image
+              </TableCell>
+              <TableCell align="center" sx={{ color: 'var(--text-bright)', fontWeight: 'bold', backgroundColor: 'var(--bg-secondary)' }}>
                 Actions
               </TableCell>
             </TableRow>
@@ -392,7 +400,7 @@ export default function SetManagerPage() {
           <TableBody>
             {filteredSets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ color: 'var(--text-secondary)' }}>
+                <TableCell colSpan={9} align="center" sx={{ color: 'var(--text-secondary)' }}>
                   {searchQuery ? 'No sets found matching your search.' : 'No sets found.'}
                 </TableCell>
               </TableRow>
@@ -465,6 +473,19 @@ export default function SetManagerPage() {
                       checked={set.isPromo}
                       onChange={(e) =>
                         handleBooleanUpdate(set.id, 'isPromo', e.target.checked)
+                      }
+                      disabled={updatingSetId === set.id}
+                      sx={{
+                        color: 'var(--text-secondary)',
+                        '&.Mui-checked': { color: 'var(--accent-primary)' },
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell align="center">
+                    <Checkbox
+                      checked={set.useDBImage}
+                      onChange={(e) =>
+                        handleBooleanUpdate(set.id, 'useDBImage', e.target.checked)
                       }
                       disabled={updatingSetId === set.id}
                       sx={{
@@ -646,6 +667,17 @@ export default function SetManagerPage() {
                   }}
                 />
                 <Typography sx={{ color: 'var(--text-primary)' }}>Is a Promo</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Checkbox
+                  checked={newSet.useDBImage}
+                  onChange={(e) => setNewSet({ ...newSet, useDBImage: e.target.checked })}
+                  sx={{
+                    color: 'var(--text-secondary)',
+                    '&.Mui-checked': { color: 'var(--accent-primary)' },
+                  }}
+                />
+                <Typography sx={{ color: 'var(--text-primary)' }}>Use DB Image</Typography>
               </Box>
             </Box>
           </Box>
@@ -831,6 +863,17 @@ export default function SetManagerPage() {
                     }}
                   />
                   <Typography sx={{ color: 'var(--text-primary)' }}>Is a Promo</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Checkbox
+                    checked={editingSet.useDBImage}
+                    onChange={(e) => setEditingSet({ ...editingSet, useDBImage: e.target.checked })}
+                    sx={{
+                      color: 'var(--text-secondary)',
+                      '&.Mui-checked': { color: 'var(--accent-primary)' },
+                    }}
+                  />
+                  <Typography sx={{ color: 'var(--text-primary)' }}>Use DB Image</Typography>
                 </Box>
               </Box>
             </Box>

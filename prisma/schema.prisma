@@ -244,6 +244,7 @@ model Set {
   isPurchasable Boolean  @default(true) @map("is_purchasable")
   isPromo       Boolean  @default(false) @map("is_promo")
   price         Int      @default(4)
+  useDBImage    Boolean  @default(false) @map("use_db_image")
 
   // Relations
   sessions     Session[]

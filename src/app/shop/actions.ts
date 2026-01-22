@@ -12,6 +12,7 @@ export interface ShopSet {
   numOfCards: number;
   isPurchasable: boolean;
   isPromo: boolean;
+  useDBImage: boolean;
   sessionNumber: number | null;
   sessionName: string | null;
   price: number;
@@ -129,6 +130,7 @@ export async function getShopSets(showUnavailable = false): Promise<GetShopSetsR
         numOfCards: true,
         isPurchasable: true,
         isPromo: true,
+        useDBImage: true,
         price: true,
       },
     });
