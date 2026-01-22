@@ -27,6 +27,7 @@ export async function saveBanlistImage(banlist: BanlistForImage): Promise<string
     const imagePath = path.join(banlistImagesDir, `${banlist.sessionNumber}.png`);
     console.log(`[saveBanlistImage] Writing image to: ${imagePath}`);
     await fs.writeFile(imagePath, imageBuffer);
+    await fs.chmod(imagePath, 0o755); // Set executable permissions
     console.log(`[saveBanlistImage] Successfully saved image for session ${banlist.sessionNumber}`);
 
     return imagePath;

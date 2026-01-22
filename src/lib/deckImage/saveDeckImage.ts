@@ -37,6 +37,7 @@ export async function saveDeckImage(
     const filePath = path.join(deckImagesDir, filename);
     console.log(`[saveDeckImage] Writing image to: ${filePath}`);
     await fs.writeFile(filePath, imageBuffer);
+    await fs.chmod(filePath, 0o755); // Set executable permissions
     console.log(`[saveDeckImage] Successfully saved image for decklist ${decklistId}`);
 
     // Return the public URL path
