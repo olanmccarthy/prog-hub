@@ -57,9 +57,9 @@ jobs:
             git fetch origin
             git reset --hard origin/main
 
-            # Clean up docker waste
+            # Clean up docker waste (but NOT volumes to preserve staging data)
             echo "Cleaning up unused Docker data..."
-            docker system prune -af --volumes || true
+            docker system prune -af || true
 
             # Check if .env.production exists
             if [ ! -f .env.production ]; then
@@ -84,9 +84,10 @@ jobs:
 
             echo "Credentials updated successfully"
 
-            # Stop running containers
-            echo "Stopping containers..."
-            npm run docker:down || true
+            # Stop running production containers ONLY (don't affect staging)
+            echo "Stopping production containers..."
+            docker stop next_app_prod mysql_db_prod discord_bot_prod 2>/dev/null || true
+            docker rm next_app_prod mysql_db_prod discord_bot_prod 2>/dev/null || true
 
             # Rebuild and start containers
             echo "Building and starting containers..."

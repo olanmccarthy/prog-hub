@@ -19,17 +19,20 @@ echo "Pulling latest code from main branch..."
 git fetch origin
 git reset --hard origin/main
 
-# Stop running staging containers
+# Stop running staging containers ONLY
 echo "Stopping staging containers..."
-docker-compose -f docker-compose.staging.yml down || true
+docker stop next_app_staging mysql_db_staging 2>/dev/null || true
+docker rm next_app_staging mysql_db_staging 2>/dev/null || true
 
 # Clean up old images (optional, uncomment if needed)
 # echo "Cleaning up old Docker images..."
 # docker image prune -f
 
-# Rebuild staging containers
+# Rebuild staging containers with Docker Buildkit disabled
 echo "Building staging containers..."
-docker-compose -f docker-compose.staging.yml build
+export DOCKER_BUILDKIT=0
+export COMPOSE_DOCKER_CLI_BUILD=0
+docker-compose -f docker-compose.staging.yml build --no-cache
 
 # Start staging containers
 echo "Starting staging containers..."
