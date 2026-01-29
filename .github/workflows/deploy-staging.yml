@@ -24,6 +24,10 @@ jobs:
             sed -i 's|DB_PASSWORD=REPLACE_WITH_SECRET|DB_PASSWORD=${{ secrets.DB_PASSWORD_STAGING }}|g' .env.staging
             sed -i 's|MYSQL_ROOT_PASSWORD=REPLACE_WITH_SECRET|MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD_STAGING }}|g' .env.staging
 
+            # Set Docker build flags to avoid BuildKit issues
+            export DOCKER_BUILDKIT=0
+            export COMPOSE_DOCKER_CLI_BUILD=0
+
             # Run staging deployment script
             chmod +x deploy-staging.sh
             ./deploy-staging.sh

@@ -19,9 +19,10 @@ echo "Pulling latest code from main branch..."
 git fetch origin
 git reset --hard origin/main
 
-# Stop running containers
-echo "Stopping containers..."
-npm run docker:down || true
+# Stop running production containers ONLY
+echo "Stopping production containers..."
+docker stop next_app_prod mysql_db_prod discord_bot_prod 2>/dev/null || true
+docker rm next_app_prod mysql_db_prod discord_bot_prod 2>/dev/null || true
 
 # Clean up old images (optional, uncomment if needed)
 # echo "Cleaning up old Docker images..."
