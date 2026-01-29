@@ -355,10 +355,12 @@ export async function assignVictoryPoint(
       activeBreakdown.sixth,
     ];
 
-    // Create adjusted rankings excluding the VP winner
+    // Get the player who finished in last place (highest rank number)
+    const lastPlacePlayer = rankedPlayers[rankedPlayers.length - 1];
+
+    // Exclude VP winner AND originally-last-place player from wallet points
     const playersForWalletPoints = rankedPlayers
-      .filter(p => p.playerId !== selectedPlayerId)
-      .filter((_, index, array) => index < array.length - 1); // Exclude last place
+      .filter(p => p.playerId !== selectedPlayerId && p.playerId !== lastPlacePlayer.playerId);
 
     // Award wallet points based on original ranking position
     for (let i = 0; i < playersForWalletPoints.length; i++) {

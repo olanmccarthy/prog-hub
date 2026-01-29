@@ -229,7 +229,7 @@ export async function getWalletBalance(): Promise<GetWalletBalanceResult> {
 
 /**
  * Purchase a set for a player
- * Deducts 4 points per box from wallet and creates a transaction record
+ * Deducts points from wallet based on the set's price and creates a transaction record
  * @param setId - The ID of the set to purchase
  * @param quantity - Number of boxes to purchase (default: 1)
  */
@@ -278,16 +278,6 @@ export async function purchaseSet(setId: number, quantity: number = 1): Promise<
       };
     }
 
-    // Check if player has enough balance
-    const purchaseCostPerBox = 4;
-    const totalCost = purchaseCostPerBox * quantity;
-    if (player.wallet.amount < totalCost) {
-      return {
-        success: false,
-        error: `Insufficient funds. You need ${totalCost} points but only have ${player.wallet.amount}.`,
-      };
-    }
-
     // Verify set exists and is purchasable
     const set = await prisma.set.findUnique({
       where: { id: setId },
@@ -304,6 +294,16 @@ export async function purchaseSet(setId: number, quantity: number = 1): Promise<
       return {
         success: false,
         error: "This set is not available for purchase.",
+      };
+    }
+
+    // Check if player has enough balance
+    const purchaseCostPerBox = set.price;
+    const totalCost = purchaseCostPerBox * quantity;
+    if (player.wallet.amount < totalCost) {
+      return {
+        success: false,
+        error: `Insufficient funds. You need ${totalCost} points but only have ${player.wallet.amount}.`,
       };
     }
 
