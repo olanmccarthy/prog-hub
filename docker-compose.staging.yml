@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: mysql_db_staging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3307:3306"  # Different port to avoid conflict with prod
+    env_file:
+      - .env.staging
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data_staging:/var/lib/mysql
+      - ./data/00_schema.sql:/docker-entrypoint-initdb.d/00_schema.sql
+      - ./data/yugioh_cards.sql:/docker-entrypoint-initdb.d/01_yugioh_cards.sql
+      - ./data/yugioh_sets.sql:/docker-entrypoint-initdb.d/02_yugioh_sets.sql
+      - ./data/yugioh_sessions.sql:/docker-entrypoint-initdb.d/03_yugioh_sessions.sql
+      - ./data/wallet_point_breakdowns.sql:/docker-entrypoint-initdb.d/04_wallet_point_breakdowns.sql
+      - ./data/testdata.sql:/docker-entrypoint-initdb.d/05_testdata.sql
+    networks:
+      - staging-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: next_app_staging
+    restart: unless-stopped
+    ports:
+      - "3001:3000"  # Expose on port 3001 externally, 3000 internally
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.staging
+    volumes:
+      - ./public/deck-images-staging:/app/public/deck-images  # separate staging images
+      - ./public/banlist-images-staging:/app/public/banlist-images  # separate staging images
+    networks:
+      - staging-network
+
+volumes:
+  mysql_data_staging:
+
+networks:
+  staging-network:
+    driver: bridge

@@ -1,0 +1,29 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging  # Deploy when pushing to 'staging' branch
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2 Staging
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/prog-hub
+
+            # Update .env.staging with secrets
+            sed -i 's|DB_PASSWORD=REPLACE_WITH_SECRET|DB_PASSWORD=${{ secrets.DB_PASSWORD_STAGING }}|g' .env.staging
+            sed -i 's|MYSQL_ROOT_PASSWORD=REPLACE_WITH_SECRET|MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD_STAGING }}|g' .env.staging
+
+            # Run staging deployment script
+            chmod +x deploy-staging.sh
+            ./deploy-staging.sh

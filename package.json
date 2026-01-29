@@ -17,7 +17,15 @@
     "docker:dev:build": "docker compose -f docker-compose.dev.yml build",
     "docker:dev:up": "docker compose -f docker-compose.dev.yml up",
     "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
-    "docker:dev:clean": "docker compose -f docker-compose.dev.yml down -v --rmi all --remove-orphans"
+    "docker:dev:clean": "docker compose -f docker-compose.dev.yml down -v --rmi all --remove-orphans",
+    "docker:staging:build": "DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose -f docker-compose.staging.yml build",
+    "docker:staging:up": "DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose -f docker-compose.staging.yml up -d",
+    "docker:staging:down": "docker-compose -f docker-compose.staging.yml down",
+    "docker:staging:clean": "docker-compose -f docker-compose.staging.yml down -v --rmi all --remove-orphans",
+    "mapdb": "ssh -i ~/Downloads/prog-hub-key.pem -L 3307:localhost:3306 ec2-user@34.202.230.165 -N",
+    "copy-db": "docker exec next_app_dev node /app/copy-db.js",
+    "logs": "docker logs --tail 50 next_app_prod",
+    "logs:staging": "docker logs --tail 50 next_app_staging"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.913.0",
