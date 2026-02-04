@@ -133,6 +133,7 @@ export class DeckImageGenerator {
 
   /**
    * Render a single deck section (main/extra/side)
+   * Loads all cards in parallel for optimal performance with local filesystem
    */
   private async renderDeckSection(
     cards: number[],
@@ -141,8 +142,6 @@ export class DeckImageGenerator {
     banlist: BanlistForImage | undefined,
     deckType: 'main' | 'extra' | 'side'
   ): Promise<sharp.OverlayOptions[]> {
-    const compositeOps: sharp.OverlayOptions[] = [];
-
     // Calculate positions based on deck type
     let positions;
     if (deckType === 'main') {
@@ -153,9 +152,8 @@ export class DeckImageGenerator {
       positions = this.layoutEngine.calculateSideDeckPositions(cards, startX, startY);
     }
 
-    // Load and position each card
-    for (let i = 0; i < cards.length; i++) {
-      const cardId = cards[i];
+    // Load all cards in parallel
+    const cardPromises = cards.map(async (cardId, i) => {
       const position = positions[i];
 
       try {
@@ -172,17 +170,21 @@ export class DeckImageGenerator {
           finalImage = await this.addBanlistIndicator(cardImage, cardId, banlist, position.width);
         }
 
-        compositeOps.push({
+        return {
           input: finalImage,
           top: position.y,
           left: position.x,
-        });
+        };
       } catch (error) {
         console.error(`Failed to load card ${cardId}:`, error);
+        return null;
       }
-    }
+    });
 
-    return compositeOps;
+    const results = await Promise.all(cardPromises);
+
+    // Filter out failed cards and return composite operations
+    return results.filter((op): op is sharp.OverlayOptions => op !== null);
   }
 
   /**

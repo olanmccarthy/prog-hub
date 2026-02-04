@@ -19,6 +19,13 @@ function parseBanlistField(field: unknown): number[] {
   return [];
 }
 
+/**
+ * Decode HTML apostrophe entities in card names
+ */
+function decodeCardName(text: string): string {
+  return text.replace(/&#039;/g, "'");
+}
+
 export interface BanlistHistoryItem {
   id: number;
   sessionId: number;
@@ -26,6 +33,10 @@ export interface BanlistHistoryItem {
   limited: number[];
   semilimited: number[];
   unlimited: number[];
+  bannedNames: string[];
+  limitedNames: string[];
+  semilimitedNames: string[];
+  unlimitedNames: string[];
 }
 
 interface GetBanlistHistoryResult {
@@ -40,14 +51,53 @@ export async function getBanlistHistory(): Promise<GetBanlistHistoryResult> {
       orderBy: { sessionId: 'desc' },
     });
 
-    const formattedBanlists: BanlistHistoryItem[] = banlists.map((b) => ({
-      id: b.id,
-      sessionId: b.sessionId,
-      banned: parseBanlistField(b.banned),
-      limited: parseBanlistField(b.limited),
-      semilimited: parseBanlistField(b.semilimited),
-      unlimited: parseBanlistField(b.unlimited),
-    }));
+    // Collect all unique card IDs from all banlists
+    const allCardIds = new Set<number>();
+    banlists.forEach(b => {
+      parseBanlistField(b.banned).forEach(id => allCardIds.add(id));
+      parseBanlistField(b.limited).forEach(id => allCardIds.add(id));
+      parseBanlistField(b.semilimited).forEach(id => allCardIds.add(id));
+      parseBanlistField(b.unlimited).forEach(id => allCardIds.add(id));
+    });
+
+    // Batch fetch all cards in one query
+    const cards = await prisma.card.findMany({
+      where: {
+        id: { in: Array.from(allCardIds) },
+      },
+      select: {
+        id: true,
+        cardName: true,
+      },
+    });
+
+    // Create a map for quick lookup
+    const cardMap = new Map(cards.map((c) => [c.id, decodeCardName(c.cardName)]));
+
+    // Helper to convert IDs to names
+    const getCardNames = (ids: number[]): string[] => {
+      return ids.map(id => cardMap.get(id) || `[Unknown Card ${id}]`);
+    };
+
+    const formattedBanlists: BanlistHistoryItem[] = banlists.map((b) => {
+      const banned = parseBanlistField(b.banned);
+      const limited = parseBanlistField(b.limited);
+      const semilimited = parseBanlistField(b.semilimited);
+      const unlimited = parseBanlistField(b.unlimited);
+
+      return {
+        id: b.id,
+        sessionId: b.sessionId,
+        banned,
+        limited,
+        semilimited,
+        unlimited,
+        bannedNames: getCardNames(banned),
+        limitedNames: getCardNames(limited),
+        semilimitedNames: getCardNames(semilimited),
+        unlimitedNames: getCardNames(unlimited),
+      };
+    });
 
     return {
       success: true,

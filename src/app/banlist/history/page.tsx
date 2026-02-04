@@ -19,20 +19,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageIcon from '@mui/icons-material/Image';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import { getBanlistHistory, type BanlistHistoryItem } from './actions';
-import { getCardEntriesFromIds } from '@lib/cardLookup';
-
-interface BanlistWithNames {
-  banned: Array<{ id: number; name: string }>;
-  limited: Array<{ id: number; name: string }>;
-  semilimited: Array<{ id: number; name: string }>;
-  unlimited: Array<{ id: number; name: string }>;
-}
 
 function BanlistCardList({
   cards,
   emptyMessage,
 }: {
-  cards: Array<{ id: number; name: string }>;
+  cards: string[];
   emptyMessage: string;
 }) {
   if (cards.length === 0) {
@@ -45,13 +37,13 @@ function BanlistCardList({
 
   return (
     <Box sx={{ pl: 2 }}>
-      {cards.map((card) => (
+      {cards.map((cardName, index) => (
         <Typography
-          key={card.id}
+          key={index}
           variant="body2"
           sx={{ mb: 0.5, color: 'var(--text-primary)' }}
         >
-          {card.name}
+          {cardName}
         </Typography>
       ))}
     </Box>
@@ -60,14 +52,11 @@ function BanlistCardList({
 
 function BanlistHistoryCard({
   banlist,
-  banlistWithNames,
   viewMode,
 }: {
   banlist: BanlistHistoryItem;
-  banlistWithNames: BanlistWithNames | null;
   viewMode: 'image' | 'text';
 }) {
-  const isLoading = !banlistWithNames;
 
   return (
     <Accordion
@@ -105,11 +94,7 @@ function BanlistHistoryCard({
       </AccordionSummary>
 
       <AccordionDetails sx={{ backgroundColor: 'var(--bg-secondary)', pt: 3 }}>
-        {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-            <CircularProgress size={24} />
-          </Box>
-        ) : viewMode === 'image' ? (
+        {viewMode === 'image' ? (
           <Box
             sx={{
               display: 'flex',
@@ -137,16 +122,16 @@ function BanlistHistoryCard({
               }}
             />
           </Box>
-        ) : banlistWithNames ? (
+        ) : (
           <>
             <Typography
               variant="h6"
               sx={{ color: 'var(--text-bright)', mb: 2, fontWeight: 'bold' }}
             >
-              Banned ({banlistWithNames.banned.length})
+              Banned ({banlist.bannedNames.length})
             </Typography>
             <BanlistCardList
-              cards={banlistWithNames.banned}
+              cards={banlist.bannedNames}
               emptyMessage="No banned cards"
             />
 
@@ -156,10 +141,10 @@ function BanlistHistoryCard({
               variant="h6"
               sx={{ color: 'var(--text-bright)', mb: 2, fontWeight: 'bold' }}
             >
-              Limited ({banlistWithNames.limited.length})
+              Limited ({banlist.limitedNames.length})
             </Typography>
             <BanlistCardList
-              cards={banlistWithNames.limited}
+              cards={banlist.limitedNames}
               emptyMessage="No limited cards"
             />
 
@@ -169,10 +154,10 @@ function BanlistHistoryCard({
               variant="h6"
               sx={{ color: 'var(--text-bright)', mb: 2, fontWeight: 'bold' }}
             >
-              Semi-Limited ({banlistWithNames.semilimited.length})
+              Semi-Limited ({banlist.semilimitedNames.length})
             </Typography>
             <BanlistCardList
-              cards={banlistWithNames.semilimited}
+              cards={banlist.semilimitedNames}
               emptyMessage="No semi-limited cards"
             />
 
@@ -182,14 +167,14 @@ function BanlistHistoryCard({
               variant="h6"
               sx={{ color: 'var(--text-bright)', mb: 2, fontWeight: 'bold' }}
             >
-              Unlimited ({banlistWithNames.unlimited.length})
+              Unlimited ({banlist.unlimitedNames.length})
             </Typography>
             <BanlistCardList
-              cards={banlistWithNames.unlimited}
+              cards={banlist.unlimitedNames}
               emptyMessage="No cards moved to unlimited"
             />
           </>
-        ) : null}
+        )}
       </AccordionDetails>
     </Accordion>
   );
@@ -197,9 +182,6 @@ function BanlistHistoryCard({
 
 export default function BanlistHistoryPage() {
   const [banlists, setBanlists] = useState<BanlistHistoryItem[]>([]);
-  const [banlistsWithNames, setBanlistsWithNames] = useState<
-    Map<number, BanlistWithNames>
-  >(new Map());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'image' | 'text'>('image');
@@ -216,22 +198,6 @@ export default function BanlistHistoryPage() {
 
     if (result.success) {
       setBanlists(result.banlists);
-
-      // Preload card names for all banlists
-      const namesMap = new Map<number, BanlistWithNames>();
-
-      for (const banlist of result.banlists) {
-        const [banned, limited, semilimited, unlimited] = await Promise.all([
-          getCardEntriesFromIds(banlist.banned),
-          getCardEntriesFromIds(banlist.limited),
-          getCardEntriesFromIds(banlist.semilimited),
-          getCardEntriesFromIds(banlist.unlimited),
-        ]);
-
-        namesMap.set(banlist.id, { banned, limited, semilimited, unlimited });
-      }
-
-      setBanlistsWithNames(namesMap);
     } else {
       setError(result.error || 'Failed to load banlist history');
     }
@@ -322,7 +288,6 @@ export default function BanlistHistoryPage() {
             <BanlistHistoryCard
               key={banlist.id}
               banlist={banlist}
-              banlistWithNames={banlistsWithNames.get(banlist.id) || null}
               viewMode={viewMode}
             />
           ))}

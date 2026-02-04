@@ -22,6 +22,13 @@ function parseBanlistField(field: unknown): number[] {
   return [];
 }
 
+/**
+ * Decode HTML apostrophe entities in card names
+ */
+function decodeCardName(text: string): string {
+  return text.replace(/&#039;/g, "'");
+}
+
 export interface BanlistSuggestionForVoting {
   id: number;
   playerId: number;
@@ -31,6 +38,10 @@ export interface BanlistSuggestionForVoting {
   limited: number[];
   semilimited: number[];
   unlimited: number[];
+  bannedNames: string[];
+  limitedNames: string[];
+  semilimitedNames: string[];
+  unlimitedNames: string[];
   voteCount: number;
   comment?: string;
 }
@@ -125,20 +136,59 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
     // Check if a suggestion has already been chosen
     const chosenSuggestion = suggestions.find((s) => s.chosen);
 
+    // Collect all unique card IDs from all suggestions
+    const allCardIds = new Set<number>();
+    suggestions.forEach(s => {
+      parseBanlistField(s.banned).forEach(id => allCardIds.add(id));
+      parseBanlistField(s.limited).forEach(id => allCardIds.add(id));
+      parseBanlistField(s.semilimited).forEach(id => allCardIds.add(id));
+      parseBanlistField(s.unlimited).forEach(id => allCardIds.add(id));
+    });
+
+    // Batch fetch all cards in one query
+    const cards = await prisma.card.findMany({
+      where: {
+        id: { in: Array.from(allCardIds) },
+      },
+      select: {
+        id: true,
+        cardName: true,
+      },
+    });
+
+    // Create a map for quick lookup
+    const cardMap = new Map(cards.map((c) => [c.id, decodeCardName(c.cardName)]));
+
+    // Helper to convert IDs to names
+    const getCardNames = (ids: number[]): string[] => {
+      return ids.map(id => cardMap.get(id) || `[Unknown Card ${id}]`);
+    };
+
     return {
       success: true,
-      suggestions: suggestions.map((s) => ({
-        id: s.id,
-        playerId: s.playerId,
-        playerName: s.player.name,
-        sessionNumber: banlist.sessionId,
-        banned: parseBanlistField(s.banned),
-        limited: parseBanlistField(s.limited),
-        semilimited: parseBanlistField(s.semilimited),
-        unlimited: parseBanlistField(s.unlimited),
-        voteCount: s.votes.length,
-        comment: s.comment || undefined,
-      })),
+      suggestions: suggestions.map((s) => {
+        const banned = parseBanlistField(s.banned);
+        const limited = parseBanlistField(s.limited);
+        const semilimited = parseBanlistField(s.semilimited);
+        const unlimited = parseBanlistField(s.unlimited);
+
+        return {
+          id: s.id,
+          playerId: s.playerId,
+          playerName: s.player.name,
+          sessionNumber: banlist.sessionId,
+          banned,
+          limited,
+          semilimited,
+          unlimited,
+          bannedNames: getCardNames(banned),
+          limitedNames: getCardNames(limited),
+          semilimitedNames: getCardNames(semilimited),
+          unlimitedNames: getCardNames(unlimited),
+          voteCount: s.votes.length,
+          comment: s.comment || undefined,
+        };
+      }),
       currentUserId: user.playerId,
       hasVoted,
       userVotedIds,

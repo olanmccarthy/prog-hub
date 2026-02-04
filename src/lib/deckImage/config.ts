@@ -16,6 +16,10 @@ export const DEFAULT_CONFIG: DeckImageConfig = {
   overlapFactor: 0.15, // 15% overlap for dense layouts
 };
 
+// Local card images path (mounted in Docker container)
+export const CARD_IMAGE_LOCAL_PATH = '/app/card-images';
+
+// Fallback to remote URLs if local images not available
 export const CARD_IMAGE_BASE_URL = 'https://images.ygoprodeck.com/images/cards/';
 export const CARD_IMAGE_SMALL_URL = 'https://images.ygoprodeck.com/images/cards_small/';
 export const PLACEHOLDER_IMAGE_URL = 'https://images.ygoprodeck.com/images/cards/0.jpg';
