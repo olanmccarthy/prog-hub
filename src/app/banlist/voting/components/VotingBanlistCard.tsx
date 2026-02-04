@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
 import {
   Box,
   Typography,
   Chip,
-  CircularProgress,
   IconButton,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -11,7 +9,6 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
 import { CategoryCard } from '@components/CategoryCard';
-import { getCardEntriesFromIds } from '@lib/cardLookup';
 import type { BanlistSuggestionForVoting } from '../actions';
 
 interface VotingBanlistCardProps {
@@ -30,7 +27,7 @@ interface VotingBanlistCardProps {
  * Reusable card component displaying a single banlist suggestion with card names.
  * Adapts UI based on context: shows thumbs-up icon for voting, crown icon for
  * moderator selection, and chips for status (Your Suggestion, Voted).
- * Fetches and displays card names from IDs on mount.
+ * Card names are provided directly from the suggestion data (pre-fetched server-side).
  */
 export function VotingBanlistCard({
   suggestion,
@@ -43,49 +40,6 @@ export function VotingBanlistCard({
   isChosen,
   onSelectWinner,
 }: VotingBanlistCardProps) {
-  const [cardNames, setCardNames] = useState<{
-    banned: string[];
-    limited: string[];
-    semilimited: string[];
-    unlimited: string[];
-  }>({
-    banned: [],
-    limited: [],
-    semilimited: [],
-    unlimited: [],
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchCardNames = async () => {
-      setLoading(true);
-      const [bannedCards, limitedCards, semilimitedCards, unlimitedCards] =
-        await Promise.all([
-          getCardEntriesFromIds(suggestion.banned),
-          getCardEntriesFromIds(suggestion.limited),
-          getCardEntriesFromIds(suggestion.semilimited),
-          getCardEntriesFromIds(suggestion.unlimited),
-        ]);
-
-      setCardNames({
-        banned: bannedCards.map((c) => c.name),
-        limited: limitedCards.map((c) => c.name),
-        semilimited: semilimitedCards.map((c) => c.name),
-        unlimited: unlimitedCards.map((c) => c.name),
-      });
-      setLoading(false);
-    };
-
-    fetchCardNames();
-  }, [suggestion]);
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
     <>
@@ -115,10 +69,10 @@ export function VotingBanlistCard({
         </Box>
       </Box>
 
-      <CategoryCard title="Banned" cards={cardNames.banned} />
-      <CategoryCard title="Limited" cards={cardNames.limited} />
-      <CategoryCard title="Semi-Limited" cards={cardNames.semilimited} />
-      <CategoryCard title="Unlimited" cards={cardNames.unlimited} />
+      <CategoryCard title="Banned" cards={suggestion.bannedNames} />
+      <CategoryCard title="Limited" cards={suggestion.limitedNames} />
+      <CategoryCard title="Semi-Limited" cards={suggestion.semilimitedNames} />
+      <CategoryCard title="Unlimited" cards={suggestion.unlimitedNames} />
 
       {suggestion.comment && (
         <Box

@@ -20,19 +20,11 @@ import {
   type BanlistSuggestionHistory,
 } from './actions';
 import { CategoryCard } from '@components/CategoryCard';
-import { getCardEntriesFromIds } from '@lib/cardLookup';
-
-interface SuggestionWithNames extends BanlistSuggestionHistory {
-  bannedNames: string[];
-  limitedNames: string[];
-  semilimitedNames: string[];
-  unlimitedNames: string[];
-}
 
 function SuggestedBanlistCard({
   suggestion,
 }: {
-  suggestion: SuggestionWithNames;
+  suggestion: BanlistSuggestionHistory;
 }) {
   return (
     <>
@@ -56,6 +48,30 @@ function SuggestedBanlistCard({
           />
         )}
       </Box>
+      {suggestion.chosen && suggestion.moderatorName && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+            <strong>Chosen by:</strong> {suggestion.moderatorName}
+          </Typography>
+        </Box>
+      )}
+      {suggestion.voters.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+            <strong>Voted by:</strong> {suggestion.voters.join(', ')}
+          </Typography>
+        </Box>
+      )}
+      {suggestion.comment && (
+        <Box sx={{ mb: 3, p: 2, backgroundColor: 'var(--bg-tertiary)', borderRadius: 1 }}>
+          <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 0.5 }}>
+            <strong>Reasoning:</strong>
+          </Typography>
+          <Typography variant="body1" sx={{ color: 'var(--text-primary)' }}>
+            {suggestion.comment}
+          </Typography>
+        </Box>
+      )}
       <CategoryCard title="Banned" cards={suggestion.bannedNames} />
       <CategoryCard title="Limited" cards={suggestion.limitedNames} />
       <CategoryCard title="Semi-Limited" cards={suggestion.semilimitedNames} />
@@ -65,10 +81,11 @@ function SuggestedBanlistCard({
 }
 
 export default function BanlistSuggestionHistoryPage() {
-  const [suggestions, setSuggestions] = useState<SuggestionWithNames[]>([]);
+  const [suggestions, setSuggestions] = useState<BanlistSuggestionHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSession, setSelectedSession] = useState<number | 'all'>('all');
+  const [selectedSession, setSelectedSession] = useState<number | 'all' | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<string | 'all'>('all');
 
   useEffect(() => {
     fetchSuggestions();
@@ -79,28 +96,12 @@ export default function BanlistSuggestionHistoryPage() {
     setError(null);
     const result = await getAllBanlistSuggestions();
     if (result.success && result.suggestions) {
-      // Convert card IDs to names for all suggestions
-      const suggestionsWithNames: SuggestionWithNames[] = await Promise.all(
-        result.suggestions.map(async (suggestion) => {
-          const [bannedCards, limitedCards, semilimitedCards, unlimitedCards] =
-            await Promise.all([
-              getCardEntriesFromIds(suggestion.banned),
-              getCardEntriesFromIds(suggestion.limited),
-              getCardEntriesFromIds(suggestion.semilimited),
-              getCardEntriesFromIds(suggestion.unlimited),
-            ]);
-
-          return {
-            ...suggestion,
-            bannedNames: bannedCards.map((c) => c.name),
-            limitedNames: limitedCards.map((c) => c.name),
-            semilimitedNames: semilimitedCards.map((c) => c.name),
-            unlimitedNames: unlimitedCards.map((c) => c.name),
-          };
-        })
-      );
-
-      setSuggestions(suggestionsWithNames);
+      setSuggestions(result.suggestions);
+      // Set default session to the most recent (highest session number)
+      if (selectedSession === null && result.suggestions.length > 0) {
+        const mostRecentSession = Math.max(...result.suggestions.map(s => s.sessionNumber));
+        setSelectedSession(mostRecentSession);
+      }
     } else {
       setError(result.error || 'Failed to load suggestions');
     }
@@ -112,10 +113,26 @@ export default function BanlistSuggestionHistoryPage() {
     return sessions.sort((a, b) => b - a);
   }, [suggestions]);
 
+  const playerList = useMemo(() => {
+    const players = [...new Set(suggestions.map((s) => s.playerName))];
+    return players.sort();
+  }, [suggestions]);
+
   const filteredSuggestions = useMemo(() => {
-    if (selectedSession === 'all') return suggestions;
-    return suggestions.filter((s) => s.sessionNumber === selectedSession);
-  }, [suggestions, selectedSession]);
+    let filtered = suggestions;
+
+    // Filter by session
+    if (selectedSession !== 'all' && selectedSession !== null) {
+      filtered = filtered.filter((s) => s.sessionNumber === selectedSession);
+    }
+
+    // Filter by player
+    if (selectedPlayer !== 'all') {
+      filtered = filtered.filter((s) => s.playerName === selectedPlayer);
+    }
+
+    return filtered;
+  }, [suggestions, selectedSession, selectedPlayer]);
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -143,7 +160,7 @@ export default function BanlistSuggestionHistoryPage() {
       )}
 
       {!loading && suggestions.length > 0 && (
-        <Box sx={{ mb: 3 }}>
+        <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <FormControl sx={{ minWidth: 200 }}>
             <InputLabel
               sx={{
@@ -154,7 +171,7 @@ export default function BanlistSuggestionHistoryPage() {
               Filter by Session
             </InputLabel>
             <Select
-              value={selectedSession}
+              value={selectedSession ?? 'all'}
               label="Filter by Session"
               onChange={(e) =>
                 setSelectedSession(e.target.value as number | 'all')
@@ -176,6 +193,42 @@ export default function BanlistSuggestionHistoryPage() {
               {sessionList.map((session) => (
                 <MenuItem key={session} value={session}>
                   Session {session}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel
+              sx={{
+                color: 'var(--text-secondary)',
+                '&.Mui-focused': { color: 'var(--accent-primary)' },
+              }}
+            >
+              Filter by Player
+            </InputLabel>
+            <Select
+              value={selectedPlayer}
+              label="Filter by Player"
+              onChange={(e) =>
+                setSelectedPlayer(e.target.value as string)
+              }
+              sx={{
+                color: 'var(--text-primary)',
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'var(--border-color)',
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'var(--accent-primary)',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'var(--accent-primary)',
+                },
+              }}
+            >
+              <MenuItem value="all">All Players</MenuItem>
+              {playerList.map((player) => (
+                <MenuItem key={player} value={player}>
+                  {player}
                 </MenuItem>
               ))}
             </Select>
@@ -204,9 +257,13 @@ export default function BanlistSuggestionHistoryPage() {
           }}
         >
           <Typography sx={{ color: 'var(--text-secondary)' }}>
-            {selectedSession === 'all'
+            {selectedSession === 'all' && selectedPlayer === 'all'
               ? 'No banlist suggestions found'
-              : `No banlist suggestions found for Session ${selectedSession}`}
+              : selectedSession !== 'all' && selectedPlayer === 'all'
+              ? `No banlist suggestions found for Session ${selectedSession}`
+              : selectedSession === 'all' && selectedPlayer !== 'all'
+              ? `No banlist suggestions found for ${selectedPlayer}`
+              : `No banlist suggestions found for ${selectedPlayer} in Session ${selectedSession}`}
           </Typography>
         </Paper>
       ) : (

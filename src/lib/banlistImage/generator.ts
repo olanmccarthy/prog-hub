@@ -115,6 +115,7 @@ export class BanlistImageGenerator {
 
   /**
    * Render a section of cards (banned, limited, etc.)
+   * Loads all cards in parallel for optimal performance with local filesystem
    */
   private async renderCardSection(
     cards: number[],
@@ -122,11 +123,10 @@ export class BanlistImageGenerator {
     startY: number,
     borderColor: string
   ): Promise<sharp.OverlayOptions[]> {
-    const compositeOps: sharp.OverlayOptions[] = [];
     const { cardWidth, cardHeight, cardSpacing, cardsPerRow } = this.config;
 
-    for (let i = 0; i < cards.length; i++) {
-      const cardId = cards[i];
+    // Load all cards in parallel
+    const cardPromises = cards.map(async (cardId, i) => {
       const row = Math.floor(i / cardsPerRow);
       const col = i % cardsPerRow;
 
@@ -149,17 +149,21 @@ export class BanlistImageGenerator {
           cardHeight
         );
 
-        compositeOps.push({
+        return {
           input: borderedCard,
           top: y,
           left: x,
-        });
+        };
       } catch (error) {
         console.error(`Failed to load card ${cardId}:`, error);
+        return null;
       }
-    }
+    });
 
-    return compositeOps;
+    const results = await Promise.all(cardPromises);
+
+    // Filter out failed cards and return composite operations
+    return results.filter((op): op is sharp.OverlayOptions => op !== null);
   }
 
   /**

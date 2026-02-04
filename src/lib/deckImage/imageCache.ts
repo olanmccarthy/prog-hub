@@ -1,66 +1,50 @@
 /**
  * Image cache for card images
- * Implements a two-tier caching system (memory + disk)
+ * Optimized for local filesystem access with memory cache for frequently used cards
  */
 
 import sharp from 'sharp';
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
-import { CARD_IMAGE_SMALL_URL, PLACEHOLDER_IMAGE_URL } from './config';
+import { CARD_IMAGE_SMALL_URL, PLACEHOLDER_IMAGE_URL, CARD_IMAGE_LOCAL_PATH } from './config';
 
 export class ImageCache {
   private memoryCache: Map<number, Buffer> = new Map();
-  private diskCacheDir: string;
-
-  constructor(diskCacheDir: string = '/tmp/card-image-cache') {
-    this.diskCacheDir = diskCacheDir;
-  }
 
   /**
-   * Initialize the cache directory
+   * Initialize the cache (no-op now, kept for compatibility)
    */
   async init(): Promise<void> {
-    try {
-      await fs.mkdir(this.diskCacheDir, { recursive: true });
-    } catch (error) {
-      console.error('Failed to create cache directory:', error);
-    }
+    // No initialization needed for local filesystem
   }
 
   /**
    * Get a card image buffer
-   * Checks memory cache -> disk cache -> downloads from URL
+   * Checks memory cache -> local filesystem -> downloads from URL as fallback
    */
   async getCardImage(cardId: number, width: number, height: number): Promise<Buffer> {
     const cacheKey = cardId;
 
-    // Check memory cache first
+    // Check memory cache first (fastest)
     if (this.memoryCache.has(cacheKey)) {
       const cached = this.memoryCache.get(cacheKey)!;
       return this.resizeImage(cached, width, height);
     }
 
-    // Check disk cache
-    const diskPath = this.getDiskCachePath(cardId);
+    // Try local filesystem (mounted card images)
     try {
-      const diskCached = await fs.readFile(diskPath);
-      this.memoryCache.set(cacheKey, diskCached);
-      return this.resizeImage(diskCached, width, height);
+      const localPath = path.join(CARD_IMAGE_LOCAL_PATH, `${cardId}.jpg`);
+      const localImage = await fs.readFile(localPath);
+      this.memoryCache.set(cacheKey, localImage);
+      return this.resizeImage(localImage, width, height);
     } catch {
-      // Not in disk cache, download
+      // Not in local filesystem, fall back to API
     }
 
-    // Download from URL
+    // Download from URL as last resort
     try {
       const imageBuffer = await this.downloadCardImage(cardId);
-
-      // Store in both caches
       this.memoryCache.set(cacheKey, imageBuffer);
-      await fs.writeFile(diskPath, imageBuffer).catch(() => {
-        // Ignore disk write errors
-      });
-
       return this.resizeImage(imageBuffer, width, height);
     } catch (error) {
       console.error(`Failed to load card ${cardId}:`, error);
@@ -150,23 +134,6 @@ export class ImageCache {
     }
   }
 
-  /**
-   * Get the disk cache path for a card ID
-   */
-  private getDiskCachePath(cardId: number): string {
-    const idStr = cardId.toString();
-    const subfolder = idStr.substring(0, 2).padStart(2, '0');
-    const subfolderPath = path.join(this.diskCacheDir, subfolder);
-
-    // Create subfolder if needed (sync for simplicity)
-    try {
-      fsSync.mkdirSync(subfolderPath, { recursive: true });
-    } catch {
-      // Ignore errors
-    }
-
-    return path.join(subfolderPath, `${cardId}.jpg`);
-  }
 
   /**
    * Clear the memory cache
@@ -181,7 +148,6 @@ export class ImageCache {
   getStats() {
     return {
       memoryCacheSize: this.memoryCache.size,
-      diskCacheDir: this.diskCacheDir,
     };
   }
 }
