@@ -184,7 +184,7 @@ export class DeckImageGenerator {
     const results = await Promise.all(cardPromises);
 
     // Filter out failed cards and return composite operations
-    return results.filter((op): op is sharp.OverlayOptions => op !== null);
+    return results.filter((op): op is NonNullable<typeof op> => op !== null) as sharp.OverlayOptions[];
   }
 
   /**
