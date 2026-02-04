@@ -2,6 +2,7 @@
 
 import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
+import { saveDeckImage } from "@lib/deckImage/saveDeckImage";
 
 export interface DecklistWithDetails {
   id: number;
@@ -376,5 +377,105 @@ export async function updateDecklistName(decklistId: number, name: string): Prom
   } catch (error) {
     console.error("Error updating decklist name:", error);
     return { success: false, error: "Failed to update decklist name" };
+  }
+}
+
+function parseDeckField(field: unknown): number[] {
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(field)) {
+    return field;
+  }
+  return [];
+}
+
+function parseBanlistField(field: unknown): number[] {
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(field)) {
+    return field;
+  }
+  return [];
+}
+
+interface RegenerateDeckImageResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Regenerate the image for a specific decklist (admin only)
+ */
+export async function regenerateDeckImage(
+  decklistId: number
+): Promise<RegenerateDeckImageResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Fetch the decklist with player and session info
+    const decklist = await prisma.decklist.findUnique({
+      where: { id: decklistId },
+      include: {
+        player: {
+          select: { name: true },
+        },
+        session: {
+          select: { number: true },
+        },
+      },
+    });
+
+    if (!decklist) {
+      return { success: false, error: `Decklist ${decklistId} not found` };
+    }
+
+    // Fetch the banlist for this session
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: decklist.session.number },
+    });
+
+    const deckData = {
+      playerName: decklist.player.name,
+      sessionNumber: decklist.session.number,
+      maindeck: parseDeckField(decklist.maindeck),
+      extradeck: parseDeckField(decklist.extradeck),
+      sidedeck: parseDeckField(decklist.sidedeck),
+    };
+
+    const banlistData = banlist
+      ? {
+          sessionNumber: decklist.session.number,
+          banned: parseBanlistField(banlist.banned),
+          limited: parseBanlistField(banlist.limited),
+          semilimited: parseBanlistField(banlist.semilimited),
+          unlimited: parseBanlistField(banlist.unlimited),
+        }
+      : undefined;
+
+    // Generate and save image
+    await saveDeckImage(decklistId, deckData, banlistData);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error regenerating deck image:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to regenerate image',
+    };
   }
 }

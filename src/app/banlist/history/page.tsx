@@ -18,7 +18,9 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageIcon from '@mui/icons-material/Image';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
-import { getBanlistHistory, type BanlistHistoryItem } from './actions';
+import { getBanlistHistory, regenerateBanlistImage, type BanlistHistoryItem } from './actions';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { Button } from '@mui/material';
 
 function BanlistCardList({
   cards,
@@ -53,10 +55,25 @@ function BanlistCardList({
 function BanlistHistoryCard({
   banlist,
   viewMode,
+  isAdmin,
+  onRegenerate,
 }: {
   banlist: BanlistHistoryItem;
   viewMode: 'image' | 'text';
+  isAdmin?: boolean;
+  onRegenerate?: (sessionNumber: number) => Promise<void>;
 }) {
+  const [regenerating, setRegenerating] = useState(false);
+
+  const handleRegenerate = async () => {
+    if (!onRegenerate) return;
+    setRegenerating(true);
+    try {
+      await onRegenerate(banlist.sessionId);
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   return (
     <Accordion
@@ -95,33 +112,55 @@ function BanlistHistoryCard({
 
       <AccordionDetails sx={{ backgroundColor: 'var(--bg-secondary)', pt: 3 }}>
         {viewMode === 'image' ? (
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              minHeight: '400px',
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/banlist-images/${banlist.sessionId}.png`}
-              alt={`Banlist for Session ${banlist.sessionId}`}
-              style={{
-                maxWidth: '100%',
-                height: 'auto',
-                display: 'block',
+          <>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: '400px',
               }}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const parent = target.parentElement;
-                if (parent) {
-                  parent.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 2rem;">Banlist image not yet generated. Please view in text mode.</div>`;
-                }
-              }}
-            />
-          </Box>
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/banlist-images/session-${banlist.sessionId}.png?t=${Date.now()}`}
+                alt={`Banlist for Session ${banlist.sessionId}`}
+                style={{
+                  maxWidth: '100%',
+                  height: 'auto',
+                  display: 'block',
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 2rem;">Banlist image not yet generated. Please view in text mode.</div>`;
+                  }
+                }}
+              />
+            </Box>
+            {isAdmin && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<RefreshIcon />}
+                  onClick={handleRegenerate}
+                  disabled={regenerating}
+                  sx={{
+                    color: 'var(--accent-primary)',
+                    borderColor: 'var(--accent-primary)',
+                    '&:hover': {
+                      borderColor: 'var(--accent-secondary)',
+                      backgroundColor: 'var(--hover-light-grey)',
+                    },
+                  }}
+                >
+                  {regenerating ? 'Regenerating...' : 'Regenerate Image'}
+                </Button>
+              </Box>
+            )}
+          </>
         ) : (
           <>
             <Typography
@@ -185,8 +224,20 @@ export default function BanlistHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'image' | 'text'>('image');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    // Check if user is admin from cookie/auth
+    const checkAdmin = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        const data = await response.json();
+        setIsAdmin(data.isAdmin || false);
+      } catch {
+        setIsAdmin(false);
+      }
+    };
+    checkAdmin();
     fetchBanlistHistory();
   }, []);
 
@@ -203,6 +254,16 @@ export default function BanlistHistoryPage() {
     }
 
     setLoading(false);
+  };
+
+  const handleRegenerateBanlist = async (sessionNumber: number) => {
+    const result = await regenerateBanlistImage(sessionNumber);
+    if (result.success) {
+      // Force reload the image by updating the timestamp
+      window.location.reload();
+    } else {
+      setError(result.error || 'Failed to regenerate image');
+    }
   };
 
   return (
@@ -289,6 +350,8 @@ export default function BanlistHistoryPage() {
               key={banlist.id}
               banlist={banlist}
               viewMode={viewMode}
+              isAdmin={isAdmin}
+              onRegenerate={handleRegenerateBanlist}
             />
           ))}
         </Box>
