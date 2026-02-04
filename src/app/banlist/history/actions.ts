@@ -1,6 +1,8 @@
 'use server';
 
 import { prisma } from '@lib/prisma';
+import { getCurrentUser } from '@lib/auth';
+import { saveBanlistImage } from '@lib/banlistImage/saveBanlistImage';
 
 /**
  * Helper function to parse banlist field (handles both string and array)
@@ -109,6 +111,53 @@ export async function getBanlistHistory(): Promise<GetBanlistHistoryResult> {
       success: false,
       banlists: [],
       error: error instanceof Error ? error.message : 'Failed to fetch banlist history',
+    };
+  }
+}
+
+interface RegenerateBanlistImageResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Regenerate the image for a specific banlist (admin only)
+ */
+export async function regenerateBanlistImage(
+  sessionNumber: number
+): Promise<RegenerateBanlistImageResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Fetch the banlist
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: sessionNumber },
+    });
+
+    if (!banlist) {
+      return { success: false, error: `Banlist for Session ${sessionNumber} not found` };
+    }
+
+    const banlistData = {
+      sessionNumber,
+      banned: parseBanlistField(banlist.banned),
+      limited: parseBanlistField(banlist.limited),
+      semilimited: parseBanlistField(banlist.semilimited),
+      unlimited: parseBanlistField(banlist.unlimited),
+    };
+
+    // Generate and save image
+    await saveBanlistImage(banlistData);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error regenerating banlist image:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to regenerate image',
     };
   }
 }

@@ -29,6 +29,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Cancel";
 import ImageIcon from "@mui/icons-material/Image";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import { Button } from "@mui/material";
 import {
   getDecklists,
   getSessions,
@@ -36,6 +38,7 @@ import {
   getCardNames,
   updateDecklistName,
   getCurrentUserInfo,
+  regenerateDeckImage,
   DecklistWithDetails,
   SessionOption,
   PlayerOption,
@@ -68,6 +71,7 @@ export default function DecklistsPage() {
   const [editingName, setEditingName] = useState<string>("");
   const [mostRecentSessionNumber, setMostRecentSessionNumber] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"image" | "text">("image");
+  const [regeneratingDeckId, setRegeneratingDeckId] = useState<number | null>(null);
 
   // Load sessions and players on mount
   useEffect(() => {
@@ -195,6 +199,21 @@ export default function DecklistsPage() {
       setEditingName("");
     } else {
       setError(result.error || "Failed to update deck name");
+    }
+  };
+
+  const handleRegenerateDeck = async (decklistId: number) => {
+    setRegeneratingDeckId(decklistId);
+    try {
+      const result = await regenerateDeckImage(decklistId);
+      if (result.success) {
+        // Force reload the image by updating the timestamp
+        window.location.reload();
+      } else {
+        setError(result.error || "Failed to regenerate image");
+      }
+    } finally {
+      setRegeneratingDeckId(null);
     }
   };
 
@@ -437,38 +456,60 @@ export default function DecklistsPage() {
 
                           {/* Image View */}
                           {viewMode === "image" && (
-                            <Box
-                              sx={{
-                                width: "100%",
-                                display: "flex",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                minHeight: "400px",
-                                backgroundColor: "var(--bg-tertiary)",
-                                borderRadius: 1,
-                                overflow: "hidden",
-                              }}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={`/deck-images/${decklist.id}.png`}
-                                alt={`Decklist for ${decklist.playerName}`}
-                                style={{
+                            <>
+                              <Box
+                                sx={{
                                   width: "100%",
-                                  height: "auto",
-                                  display: "block",
+                                  display: "flex",
+                                  justifyContent: "center",
+                                  alignItems: "center",
+                                  minHeight: "400px",
+                                  backgroundColor: "var(--bg-tertiary)",
+                                  borderRadius: 1,
+                                  overflow: "hidden",
                                 }}
-                                onError={(e) => {
-                                  // If image fails to load, show error message
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = "none";
-                                  const parent = target.parentElement;
-                                  if (parent) {
-                                    parent.innerHTML = `<Typography variant="body2" sx={{ color: "var(--text-secondary)", textAlign: "center", p: 2 }}>Image not yet generated. Please finalize standings to generate images.${JSON.stringify(e)}</Typography>`;
-                                  }
-                                }}
-                              />
-                            </Box>
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={`/deck-images/${decklist.id}.png?t=${Date.now()}`}
+                                  alt={`Decklist for ${decklist.playerName}`}
+                                  style={{
+                                    width: "100%",
+                                    height: "auto",
+                                    display: "block",
+                                  }}
+                                  onError={(e) => {
+                                    // If image fails to load, show error message
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = "none";
+                                    const parent = target.parentElement;
+                                    if (parent) {
+                                      parent.innerHTML = `<Typography variant="body2" sx={{ color: "var(--text-secondary)", textAlign: "center", p: 2 }}>Image not yet generated. Please finalize standings to generate images.${JSON.stringify(e)}</Typography>`;
+                                    }
+                                  }}
+                                />
+                              </Box>
+                              {currentUser?.isAdmin && (
+                                <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+                                  <Button
+                                    variant="outlined"
+                                    startIcon={<RefreshIcon />}
+                                    onClick={() => handleRegenerateDeck(decklist.id)}
+                                    disabled={regeneratingDeckId === decklist.id}
+                                    sx={{
+                                      color: "var(--accent-primary)",
+                                      borderColor: "var(--accent-primary)",
+                                      "&:hover": {
+                                        borderColor: "var(--accent-secondary)",
+                                        backgroundColor: "var(--hover-light-grey)",
+                                      },
+                                    }}
+                                  >
+                                    {regeneratingDeckId === decklist.id ? "Regenerating..." : "Regenerate Image"}
+                                  </Button>
+                                </Box>
+                              )}
+                            </>
                           )}
 
                           {/* Text View */}
