@@ -43,12 +43,14 @@ export interface BanlistVotingStats {
   averageVotesPerSuggestion: number | null;
   averageSuggestionsWithThreshold: number | null;
   averageChosenPerSession: number | null;
+  timesChoseOwnSuggestion: number;
 }
 
 export interface CardUsage {
   cardId: number;
   cardName: string;
   timesPlayed: number;
+  decklistPercentage: number;
   averageCopies: number;
 }
 
@@ -104,6 +106,8 @@ type VictoryPointWithSession = {
 };
 
 type BanlistSuggestionWithVotes = {
+  playerId: number;
+  moderatorId: number | null;
   chosen: boolean;
   votes: unknown[];
 };
@@ -134,6 +138,44 @@ export async function getCurrentPlayerId(): Promise<{
   }
 }
 
+// Get list of completed sessions
+export async function getCompletedSessions(): Promise<{
+  success: boolean;
+  sessions?: Array<{ id: number; number: number; setCode: string }>;
+  error?: string;
+}> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    const sessions = await prisma.session.findMany({
+      where: { complete: true },
+      select: {
+        id: true,
+        number: true,
+        set: {
+          select: { setCode: true }
+        }
+      },
+      orderBy: { number: 'asc' }
+    });
+
+    // Transform to include setCode at the top level
+    const formattedSessions = sessions.map(s => ({
+      id: s.id,
+      number: s.number,
+      setCode: s.set?.setCode || 'Unknown'
+    }));
+
+    return { success: true, sessions: formattedSessions };
+  } catch (error) {
+    console.error("Error fetching completed sessions:", error);
+    return { success: false, error: "Failed to load sessions" };
+  }
+}
+
 // Get list of all players for dropdown
 export async function getPlayerList(): Promise<{
   success: boolean;
@@ -159,11 +201,23 @@ export async function getPlayerList(): Promise<{
 }
 
 // Get comprehensive stats for a player
-export async function getPlayerStats(playerId: number): Promise<PlayerStatsResult> {
+export async function getPlayerStats(
+  playerId: number,
+  cardStartSession?: number,
+  cardEndSession?: number
+): Promise<PlayerStatsResult> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, error: "Not authenticated" };
+    }
+
+    // Build where clause for decklist session filtering
+    const decklistWhere: { playerId: number; sessionId?: { gte?: number; lte?: number } } = { playerId };
+    if (cardStartSession !== undefined || cardEndSession !== undefined) {
+      decklistWhere.sessionId = {};
+      if (cardStartSession !== undefined) decklistWhere.sessionId.gte = cardStartSession;
+      if (cardEndSession !== undefined) decklistWhere.sessionId.lte = cardEndSession;
     }
 
     // Fetch all data in parallel
@@ -209,7 +263,7 @@ export async function getPlayerStats(playerId: number): Promise<PlayerStatsResul
         where: { playerId }
       }),
       prisma.decklist.findMany({
-        where: { playerId },
+        where: decklistWhere,
         select: { maindeck: true, sidedeck: true, extradeck: true, sessionId: true }
       }),
       prisma.banlistSuggestion.findMany({
@@ -249,7 +303,7 @@ export async function getPlayerStats(playerId: number): Promise<PlayerStatsResul
     );
 
     // Calculate Banlist Voting Stats
-    const banlistVoting = calculateBanlistVotingStats(suggestions, participatedSessions);
+    const banlistVoting = calculateBanlistVotingStats(playerId, suggestions, participatedSessions);
 
     // Calculate Card Usage Stats
     const mostPlayedCards = await calculateCardUsageStats(decklists);
@@ -449,6 +503,7 @@ function calculateParticipationStats(
 }
 
 function calculateBanlistVotingStats(
+  playerId: number,
   suggestions: BanlistSuggestionWithVotes[],
   participatedSessions: number
 ): BanlistVotingStats {
@@ -456,7 +511,8 @@ function calculateBanlistVotingStats(
     return {
       averageVotesPerSuggestion: null,
       averageSuggestionsWithThreshold: null,
-      averageChosenPerSession: null
+      averageChosenPerSession: null,
+      timesChoseOwnSuggestion: 0
     };
   }
 
@@ -464,27 +520,31 @@ function calculateBanlistVotingStats(
   const totalVotes = suggestions.reduce((sum, s) => sum + (s.votes?.length || 0), 0);
   const averageVotesPerSuggestion = Math.round((totalVotes / suggestions.length) * 10) / 10;
 
-  // Count suggestions with 2+ votes
+  // Percentage of suggestions with 2+ votes
   const suggestionsWithThreshold = suggestions.filter(s => (s.votes?.length || 0) >= 2).length;
-  const averageSuggestionsWithThreshold = participatedSessions > 0
-    ? Math.round((suggestionsWithThreshold / participatedSessions) * 10) / 10
-    : null;
+  const averageSuggestionsWithThreshold = Math.round((suggestionsWithThreshold / suggestions.length) * 1000) / 10;
 
-  // Count chosen suggestions
+  // Percentage of suggestions that were chosen
   const timesChosen = suggestions.filter(s => s.chosen).length;
-  const averageChosenPerSession = participatedSessions > 0
-    ? Math.round((timesChosen / participatedSessions) * 10) / 10
-    : null;
+  const averageChosenPerSession = Math.round((timesChosen / suggestions.length) * 1000) / 10;
+
+  // Count times player was moderator and chose their own suggestion
+  const timesChoseOwnSuggestion = suggestions.filter(
+    s => s.chosen && s.moderatorId === playerId
+  ).length;
 
   return {
     averageVotesPerSuggestion,
     averageSuggestionsWithThreshold,
-    averageChosenPerSession
+    averageChosenPerSession,
+    timesChoseOwnSuggestion
   };
 }
 
 async function calculateCardUsageStats(decklists: DecklistData[]): Promise<CardUsage[]> {
   if (decklists.length === 0) return [];
+
+  const totalDecklists = decklists.length;
 
   // Combine ALL cards from ALL decklists into one big array
   const allCardsAcrossAllDecks: number[] = [];
@@ -527,10 +587,12 @@ async function calculateCardUsageStats(decklists: DecklistData[]): Promise<CardU
   const result: CardUsage[] = [];
   cardFrequency.forEach((totalCount, cardId) => {
     const decksContainingCard = cardInDeckCount.get(cardId) || 1;
+    const decklistPercentage = Math.round((decksContainingCard / totalDecklists) * 1000) / 10;
     result.push({
       cardId,
       cardName: cardNameMap.get(cardId) || `Unknown Card ${cardId}`,
       timesPlayed: decksContainingCard, // Number of decklists containing this card
+      decklistPercentage,
       averageCopies: Math.round((totalCount / decksContainingCard) * 10) / 10
     });
   });
@@ -633,8 +695,60 @@ export interface ComparativeStatsResult {
   rankings?: ComparativePlayerStat[];
 }
 
+// All Players All Stats Types
+export interface PlayerAllStats {
+  playerId: number;
+  playerName: string;
+  sessionsPlayed: number;
+
+  // Performance stats (13)
+  totalWins: number;
+  runnerUps: number;
+  thirdPlace: number;
+  totalLosses: number;
+  averagePlacement: number | null;
+  matchWins: number;
+  matchWinRate: number;
+  gameWins: number;
+  gameWinRate: number;
+  twoOhsGiven: number;
+  twoOhsReceived: number;
+  longestWinStreak: number;
+  longestLossStreak: number;
+
+  // Economy stats (6)
+  totalPointsEarned: number;
+  totalPointsSpent: number;
+  currentBalance: number;
+  averagePointsPerSession: number;
+  timesVPTaken: number;
+  timesVPPassed: number;
+
+  // Participation stats (4)
+  totalSessions: number;
+  sessionsSinceLastVP: number;
+  timesAsModerator: number;
+  banlistSuggestionsChosen: number;
+
+  // Banlist voting stats (4)
+  averageVotesPerSuggestion: number | null;
+  averageSuggestionsWithThreshold: number | null;
+  averageChosenPerSession: number | null;
+  timesChoseOwnSuggestion: number;
+}
+
+export interface AllPlayersStatsResult {
+  success: boolean;
+  error?: string;
+  players?: PlayerAllStats[];
+}
+
 // Get card usage across all players
-export async function getAllPlayersCardUsage(limit: number = 50): Promise<{
+export async function getAllPlayersCardUsage(
+  limit: number = 50,
+  startSession?: number,
+  endSession?: number
+): Promise<{
   success: boolean;
   error?: string;
   cards?: CardUsage[];
@@ -645,14 +759,25 @@ export async function getAllPlayersCardUsage(limit: number = 50): Promise<{
       return { success: false, error: "Not authenticated" };
     }
 
-    // Fetch all decklists from all players
+    // Build where clause for session filtering
+    const whereClause: { sessionId?: { gte?: number; lte?: number } } = {};
+    if (startSession !== undefined || endSession !== undefined) {
+      whereClause.sessionId = {};
+      if (startSession !== undefined) whereClause.sessionId.gte = startSession;
+      if (endSession !== undefined) whereClause.sessionId.lte = endSession;
+    }
+
+    // Fetch all decklists from all players (with optional session filter)
     const allDecklists = await prisma.decklist.findMany({
+      where: whereClause,
       select: { maindeck: true, sidedeck: true, extradeck: true }
     });
 
     if (allDecklists.length === 0) {
       return { success: true, cards: [] };
     }
+
+    const totalDecklists = allDecklists.length;
 
     // Combine ALL cards from ALL decklists into one big array
     const allCardsAcrossAllDecks: number[] = [];
@@ -692,10 +817,12 @@ export async function getAllPlayersCardUsage(limit: number = 50): Promise<{
     const result: CardUsage[] = [];
     cardFrequency.forEach((totalCount, cardId) => {
       const decksContainingCard = cardInDeckCount.get(cardId) || 1;
+      const decklistPercentage = Math.round((decksContainingCard / totalDecklists) * 1000) / 10;
       result.push({
         cardId,
         cardName: cardNameMap.get(cardId) || `Unknown Card ${cardId}`,
         timesPlayed: decksContainingCard,
+        decklistPercentage,
         averageCopies: Math.round((totalCount / decksContainingCard) * 10) / 10
       });
     });
@@ -775,11 +902,13 @@ export async function getComparativeStats(
         case 'economy':
           value = stats.economy?.[statKey as keyof EconomyStats] ?? null;
           break;
-        case 'participation':
-          value = stats.participation?.[statKey as keyof ParticipationStats] ?? null;
-          break;
-        case 'banlistVoting':
-          value = stats.banlistVoting?.[statKey as keyof BanlistVotingStats] ?? null;
+        case 'banlist':
+          // Check both participation and banlistVoting stats
+          if (statKey === 'timesAsModerator' || statKey === 'banlistSuggestionsChosen') {
+            value = stats.participation?.[statKey as keyof ParticipationStats] ?? null;
+          } else {
+            value = stats.banlistVoting?.[statKey as keyof BanlistVotingStats] ?? null;
+          }
           break;
       }
 
@@ -819,5 +948,101 @@ export async function getComparativeStats(
   } catch (error) {
     console.error("Error calculating comparative stats:", error);
     return { success: false, error: "Failed to calculate comparative stats" };
+  }
+}
+
+// Get all stats for all players in a single call
+export async function getAllPlayersAllStats(
+  minSessions: number
+): Promise<AllPlayersStatsResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Get all players
+    const players = await prisma.player.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' }
+    });
+
+    // Calculate stats for each player
+    const allStats: PlayerAllStats[] = [];
+
+    for (const player of players) {
+      const stats = await getPlayerStats(player.id);
+
+      if (!stats.success || !stats.participation) continue;
+
+      const sessionsPlayed = stats.participation.totalSessions;
+
+      // Filter by minimum sessions
+      if (sessionsPlayed < minSessions) continue;
+
+      // Calculate match win rate
+      const totalMatches = (stats.performance?.matchWins || 0) +
+                          (stats.performance?.matchLosses || 0) +
+                          (stats.performance?.matchDraws || 0);
+      const matchWinRate = totalMatches > 0
+        ? Math.round(((stats.performance?.matchWins || 0) / totalMatches) * 1000) / 10
+        : 0;
+
+      // Calculate game win rate
+      const totalGames = (stats.performance?.gameWins || 0) + (stats.performance?.gameLosses || 0);
+      const gameWinRate = totalGames > 0
+        ? Math.round(((stats.performance?.gameWins || 0) / totalGames) * 1000) / 10
+        : 0;
+
+      // Build comprehensive stats object
+      allStats.push({
+        playerId: player.id,
+        playerName: player.name,
+        sessionsPlayed,
+
+        // Performance stats
+        totalWins: stats.performance?.totalWins || 0,
+        runnerUps: stats.performance?.runnerUps || 0,
+        thirdPlace: stats.performance?.thirdPlace || 0,
+        totalLosses: stats.performance?.totalLosses || 0,
+        averagePlacement: stats.performance?.averagePlacement ?? null,
+        matchWins: stats.performance?.matchWins || 0,
+        matchWinRate,
+        gameWins: stats.performance?.gameWins || 0,
+        gameWinRate,
+        twoOhsGiven: stats.performance?.twoOhsGiven || 0,
+        twoOhsReceived: stats.performance?.twoOhsReceived || 0,
+        longestWinStreak: stats.performance?.longestWinStreak || 0,
+        longestLossStreak: stats.performance?.longestLossStreak || 0,
+
+        // Economy stats
+        totalPointsEarned: stats.economy?.totalPointsEarned || 0,
+        totalPointsSpent: stats.economy?.totalPointsSpent || 0,
+        currentBalance: stats.economy?.currentBalance || 0,
+        averagePointsPerSession: stats.economy?.averagePointsPerSession || 0,
+        timesVPTaken: stats.economy?.timesVPTaken || 0,
+        timesVPPassed: stats.economy?.timesVPPassed || 0,
+
+        // Participation stats
+        totalSessions: stats.participation?.totalSessions || 0,
+        sessionsSinceLastVP: stats.participation?.sessionsSinceLastVP || 0,
+        timesAsModerator: stats.participation?.timesAsModerator || 0,
+        banlistSuggestionsChosen: stats.participation?.banlistSuggestionsChosen || 0,
+
+        // Banlist voting stats
+        averageVotesPerSuggestion: stats.banlistVoting?.averageVotesPerSuggestion ?? null,
+        averageSuggestionsWithThreshold: stats.banlistVoting?.averageSuggestionsWithThreshold ?? null,
+        averageChosenPerSession: stats.banlistVoting?.averageChosenPerSession ?? null,
+        timesChoseOwnSuggestion: stats.banlistVoting?.timesChoseOwnSuggestion ?? 0
+      });
+    }
+
+    return {
+      success: true,
+      players: allStats
+    };
+  } catch (error) {
+    console.error("Error calculating all players stats:", error);
+    return { success: false, error: "Failed to calculate all players stats" };
   }
 }
