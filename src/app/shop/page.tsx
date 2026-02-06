@@ -41,7 +41,6 @@ type SortOption = 'date-desc' | 'date-asc' | 'alpha-asc' | 'alpha-desc';
 export default function ShopPage() {
   const [sets, setSets] = useState<ShopSet[]>([]);
   const [nextSessionNumber, setNextSessionNumber] = useState<number | null>(null);
-  const [nextSessionDate, setNextSessionDate] = useState<Date | null>(null);
   const [availabilityCutoffDate, setAvailabilityCutoffDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +69,6 @@ export default function ShopPage() {
       if (result.success && result.sets) {
         setSets(result.sets);
         setNextSessionNumber(result.nextSessionNumber || null);
-        setNextSessionDate(result.nextSessionDate || null);
         setAvailabilityCutoffDate(result.availabilityCutoffDate || null);
       } else {
         setError(result.error || 'Failed to load shop sets');

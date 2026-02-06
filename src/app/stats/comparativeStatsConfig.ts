@@ -4,17 +4,13 @@
 export interface ComparativeStatType {
   key: string;
   label: string;
-  category: 'performance' | 'economy' | 'banlist' | 'cards';
+  category: 'performance' | 'economy' | 'banlist' | 'deckbuilding';
   formatter: (value: number | string | null) => string;
   sortDirection: 'desc' | 'asc';
 }
 
 // Configuration for all comparative stats
 export const COMPARATIVE_STATS: ComparativeStatType[] = [
-  // Card Stats (1)
-  { key: 'mostPlayedCards', label: 'Most Played Cards', category: 'cards', formatter: (v) => String(v), sortDirection: 'desc' },
-
-
   // Performance Stats (13)
   { key: 'totalWins', label: 'Total Wins (1st)', category: 'performance', formatter: (v) => String(v), sortDirection: 'desc' },
   { key: 'runnerUps', label: 'Runner Ups (2nd)', category: 'performance', formatter: (v) => String(v), sortDirection: 'desc' },
@@ -46,4 +42,8 @@ export const COMPARATIVE_STATS: ComparativeStatType[] = [
   { key: 'timesAsModerator', label: 'Times as Moderator', category: 'banlist', formatter: (v) => String(v), sortDirection: 'desc' },
   { key: 'banlistSuggestionsChosen', label: 'Banlist Suggestions Chosen', category: 'banlist', formatter: (v) => String(v), sortDirection: 'desc' },
   { key: 'timesChoseOwnSuggestion', label: 'Times Chose Own Suggestion', category: 'banlist', formatter: (v) => String(v), sortDirection: 'desc' },
+
+  // Deck Building Stats (2)
+  { key: 'averageUniqueCards', label: 'Avg Unique Cards per Session', category: 'deckbuilding', formatter: (v) => String(v), sortDirection: 'desc' },
+  { key: 'averageCardsChanged', label: 'Avg Cards Changed per Session', category: 'deckbuilding', formatter: (v) => String(v), sortDirection: 'desc' },
 ];

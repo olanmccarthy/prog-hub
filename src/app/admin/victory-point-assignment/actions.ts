@@ -197,7 +197,6 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
     playerPairings.forEach(pairing => {
       const isPlayer1 = pairing.player1Id === playerId;
       const playerWins = isPlayer1 ? pairing.player1wins : pairing.player2wins;
-      const opponentWins = isPlayer1 ? pairing.player2wins : pairing.player1wins;
       const opponentId = isPlayer1 ? pairing.player2Id : pairing.player1Id;
 
       gameWins += playerWins;

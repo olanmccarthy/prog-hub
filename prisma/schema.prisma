@@ -54,6 +54,7 @@ model Session {
   pairings           Pairing[]
   victoryPoints      VictoryPoint[]
   walletTransactions WalletTransaction[]
+  transactions       Transaction[]
 
   @@index([active], map: "idx_active")
   @@index([complete], map: "idx_complete")
@@ -204,15 +205,18 @@ model Transaction {
   id        Int      @id @default(autoincrement())
   playerId  Int      @map("player_id")
   setId     Int      @map("set_id")
+  sessionId Int?     @map("session_id")
   amount    Int
   date      DateTime @default(now())
 
   // Relations
-  player Player @relation(fields: [playerId], references: [id])
-  set    Set    @relation(fields: [setId], references: [id])
+  player  Player   @relation(fields: [playerId], references: [id])
+  set     Set      @relation(fields: [setId], references: [id])
+  session Session? @relation(fields: [sessionId], references: [id])
 
   @@index([playerId], map: "idx_transaction_player_id")
   @@index([setId], map: "idx_transaction_set_id")
+  @@index([sessionId], map: "idx_transaction_session_id")
   @@index([date], map: "idx_transaction_date")
   @@map("transactions")
 }
@@ -285,4 +289,13 @@ model WalletPointBreakdown {
   active Boolean @default(false)
 
   @@map("wallet_point_breakdowns")
+}
+
+model SynergyExcludedCard {
+  id     Int      @id @default(autoincrement())
+  cardId Int      @map("card_id")
+  addedAt DateTime @default(now()) @map("added_at")
+
+  @@unique([cardId])
+  @@map("synergy_excluded_cards")
 }
