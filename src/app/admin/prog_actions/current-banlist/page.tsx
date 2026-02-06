@@ -20,7 +20,6 @@ import {
   searchCardNames,
   getCardNames,
   CardOption,
-  CardWithName,
 } from './actions';
 
 interface CardEntry {

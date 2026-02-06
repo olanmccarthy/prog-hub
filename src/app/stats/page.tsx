@@ -18,7 +18,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  TextField,
   SelectChangeEvent,
   ToggleButton,
   ToggleButtonGroup
@@ -28,13 +27,18 @@ import {
   getPlayerList,
   getPlayerStats,
   getAllPlayersAllStats,
-  getAllPlayersCardUsage,
   getCompletedSessions,
   type PlayerStatsResult,
-  type PlayerAllStats,
-  type CardUsage
+  type PlayerAllStats
 } from './actions';
 import { COMPARATIVE_STATS } from './comparativeStatsConfig';
+import PlacementConsistencyCard from './components/PlacementConsistencyCard';
+import AverageROICard from './components/AverageROICard';
+import ComebackPercentageCard from './components/ComebackPercentageCard';
+import DeckDiversityCard from './components/DeckDiversityCard';
+import DeckUniquenessCard from './components/DeckUniquenessCard';
+import UniqueCardsCard from './components/UniqueCardsCard';
+import CardsChangedCard from './components/CardsChangedCard';
 
 export default function StatsPage() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
@@ -42,23 +46,16 @@ export default function StatsPage() {
   const [stats, setStats] = useState<PlayerStatsResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [cardLimit, setCardLimit] = useState<number>(10);
-  const [cardFilter, setCardFilter] = useState<string>('');
 
   // Comparative view state
   const [viewMode, setViewMode] = useState<'personal' | 'comparative'>('personal');
   const [allPlayersData, setAllPlayersData] = useState<PlayerAllStats[] | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<'performance' | 'economy' | 'banlist' | 'cards'>('performance');
+  const [selectedCategory, setSelectedCategory] = useState<'performance' | 'economy' | 'banlist' | 'deckbuilding'>('performance');
   const [sortColumn, setSortColumn] = useState<string>('totalWins');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [comparativeLoading, setComparativeLoading] = useState(false);
-  const [allPlayersCards, setAllPlayersCards] = useState<CardUsage[] | null>(null);
-  const [allPlayersCardLimit, setAllPlayersCardLimit] = useState<number>(50);
-  const [completedSessions, setCompletedSessions] = useState<Array<{ id: number; number: number; setCode: string }>>([]);
-  const [cardStartSession, setCardStartSession] = useState<number | null>(null);
-  const [cardEndSession, setCardEndSession] = useState<number | null>(null);
-  const [personalCardStartSession, setPersonalCardStartSession] = useState<number | null>(null);
-  const [personalCardEndSession, setPersonalCardEndSession] = useState<number | null>(null);
+  const [cardStartSession, setCardStartSession] = useState<number | undefined>(undefined);
+  const [cardEndSession, setCardEndSession] = useState<number | undefined>(undefined);
 
   // Load current user and player list on mount
   useEffect(() => {
@@ -82,15 +79,12 @@ export default function StatsPage() {
         }
 
         if (sessionsResult.success && sessionsResult.sessions) {
-          setCompletedSessions(sessionsResult.sessions);
           // Set default range: first to last completed session
           if (sessionsResult.sessions.length > 0) {
             const firstSession = sessionsResult.sessions[0].id;
             const lastSession = sessionsResult.sessions[sessionsResult.sessions.length - 1].id;
             setCardStartSession(firstSession);
             setCardEndSession(lastSession);
-            setPersonalCardStartSession(firstSession);
-            setPersonalCardEndSession(lastSession);
           }
         }
 
@@ -137,8 +131,8 @@ export default function StatsPage() {
     try {
       const statsResult = await getPlayerStats(
         playerId,
-        personalCardStartSession ?? undefined,
-        personalCardEndSession ?? undefined
+        cardStartSession ?? undefined,
+        cardEndSession ?? undefined
       );
       if (!statsResult.success) {
         setError(statsResult.error || 'Failed to load statistics');
@@ -201,146 +195,23 @@ export default function StatsPage() {
     }
   };
 
-  // Load all players card usage
-  const loadAllPlayersCards = async () => {
-    try {
-      const result = await getAllPlayersCardUsage(
-        allPlayersCardLimit,
-        cardStartSession ?? undefined,
-        cardEndSession ?? undefined
-      );
-      if (result.success && result.cards) {
-        setAllPlayersCards(result.cards);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
-  // Handle all players card limit change
-  const handleAllPlayersCardLimitChange = async (event: SelectChangeEvent<number>) => {
-    const newLimit = Number(event.target.value);
-    setAllPlayersCardLimit(newLimit);
-
-    try {
-      const result = await getAllPlayersCardUsage(
-        newLimit,
-        cardStartSession ?? undefined,
-        cardEndSession ?? undefined
-      );
-      if (result.success && result.cards) {
-        setAllPlayersCards(result.cards);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Handle session range changes
-  const handleCardStartSessionChange = async (event: SelectChangeEvent<number>) => {
-    const newStart = Number(event.target.value);
-    setCardStartSession(newStart);
-
-    try {
-      const result = await getAllPlayersCardUsage(
-        allPlayersCardLimit,
-        newStart,
-        cardEndSession ?? undefined
-      );
-      if (result.success && result.cards) {
-        setAllPlayersCards(result.cards);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCardEndSessionChange = async (event: SelectChangeEvent<number>) => {
-    const newEnd = Number(event.target.value);
-    setCardEndSession(newEnd);
-
-    try {
-      const result = await getAllPlayersCardUsage(
-        allPlayersCardLimit,
-        cardStartSession ?? undefined,
-        newEnd
-      );
-      if (result.success && result.cards) {
-        setAllPlayersCards(result.cards);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Handle personal view session range changes
-  const handlePersonalCardStartSessionChange = async (event: SelectChangeEvent<number>) => {
-    const newStart = Number(event.target.value);
-    setPersonalCardStartSession(newStart);
-
-    if (selectedPlayerId) {
-      setLoading(true);
-      try {
-        const statsResult = await getPlayerStats(
-          selectedPlayerId,
-          newStart,
-          personalCardEndSession ?? undefined
-        );
-        if (statsResult.success) {
-          setStats(statsResult);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handlePersonalCardEndSessionChange = async (event: SelectChangeEvent<number>) => {
-    const newEnd = Number(event.target.value);
-    setPersonalCardEndSession(newEnd);
-
-    if (selectedPlayerId) {
-      setLoading(true);
-      try {
-        const statsResult = await getPlayerStats(
-          selectedPlayerId,
-          personalCardStartSession ?? undefined,
-          newEnd
-        );
-        if (statsResult.success) {
-          setStats(statsResult);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
 
   // Handle category change
   const handleCategoryChange = async (event: SelectChangeEvent<string>) => {
-    const newCategory = event.target.value as 'performance' | 'economy' | 'banlist' | 'cards';
+    const newCategory = event.target.value as 'performance' | 'economy' | 'banlist' | 'deckbuilding';
     setSelectedCategory(newCategory);
 
-    // Load card data if switching to cards category
-    if (newCategory === 'cards' && !allPlayersCards) {
-      await loadAllPlayersCards();
-    } else if (newCategory !== 'cards') {
-      // Reset sort to first stat in the new category
-      const firstStatInCategory = COMPARATIVE_STATS.find(s => s.category === newCategory);
-      if (firstStatInCategory) {
-        setSortColumn(firstStatInCategory.key);
-        setSortDirection(firstStatInCategory.sortDirection);
-      }
+    // Reset sort to first stat in the new category
+    const firstStatInCategory = COMPARATIVE_STATS.find(s => s.category === newCategory);
+    if (firstStatInCategory) {
+      setSortColumn(firstStatInCategory.key);
+      setSortDirection(firstStatInCategory.sortDirection);
     }
   };
 
-  // Get stats for selected category (exclude cards from COMPARATIVE_STATS)
+  // Get stats for selected category
   const categoryStats = useMemo(() => {
-    if (selectedCategory === 'cards') return [];
     return COMPARATIVE_STATS.filter(s => s.category === selectedCategory);
   }, [selectedCategory]);
 
@@ -365,14 +236,6 @@ export default function StatsPage() {
 
     return sorted;
   }, [allPlayersData, sortColumn, sortDirection]);
-
-  // Filter and limit cards
-  const filteredCards = stats?.mostPlayedCards
-    ?.filter(card =>
-      cardFilter === '' ||
-      card.cardName.toLowerCase().includes(cardFilter.toLowerCase())
-    )
-    .slice(0, cardLimit) || [];
 
   if (loading && !stats) {
     return (
@@ -449,57 +312,9 @@ export default function StatsPage() {
                 <MenuItem value="performance">Performance</MenuItem>
                 <MenuItem value="economy">Economy</MenuItem>
                 <MenuItem value="banlist">Banlist</MenuItem>
-                <MenuItem value="cards">Most Played Cards</MenuItem>
+                <MenuItem value="deckbuilding">Deck Building</MenuItem>
               </Select>
             </FormControl>
-
-            {selectedCategory === 'cards' && (
-              <>
-                <FormControl sx={{ minWidth: 150 }}>
-                  <InputLabel>Start Session</InputLabel>
-                  <Select
-                    value={cardStartSession ?? ''}
-                    onChange={handleCardStartSessionChange}
-                    label="Start Session"
-                  >
-                    {completedSessions.map(session => (
-                      <MenuItem key={session.id} value={session.id}>
-                        #{session.number} {session.setCode}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl sx={{ minWidth: 150 }}>
-                  <InputLabel>End Session</InputLabel>
-                  <Select
-                    value={cardEndSession ?? ''}
-                    onChange={handleCardEndSessionChange}
-                    label="End Session"
-                  >
-                    {completedSessions.map(session => (
-                      <MenuItem key={session.id} value={session.id}>
-                        #{session.number} {session.setCode}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <FormControl sx={{ minWidth: 150 }}>
-                  <InputLabel>Limit</InputLabel>
-                  <Select
-                    value={allPlayersCardLimit}
-                    onChange={handleAllPlayersCardLimitChange}
-                    label="Limit"
-                  >
-                    <MenuItem value={25}>25</MenuItem>
-                    <MenuItem value={50}>50</MenuItem>
-                    <MenuItem value={100}>100</MenuItem>
-                    <MenuItem value={200}>200</MenuItem>
-                  </Select>
-                </FormControl>
-              </>
-            )}
           </Box>
         )}
       </Box>
@@ -545,6 +360,14 @@ export default function StatsPage() {
               <StatCard label="2-0s Received" value={stats.performance?.twoOhsReceived || 0} />
               <StatCard label="Longest Win Streak" value={stats.performance?.longestWinStreak || 0} />
               <StatCard label="Longest Loss Streak" value={stats.performance?.longestLossStreak || 0} />
+
+              {/* New Performance Stats */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <PlacementConsistencyCard playerId={selectedPlayerId || undefined} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <ComebackPercentageCard playerId={selectedPlayerId || undefined} />
+              </Grid>
             </Grid>
           </Paper>
 
@@ -562,6 +385,11 @@ export default function StatsPage() {
               <StatCard label="Times VP Taken" value={stats.economy?.timesVPTaken || 0} />
               <StatCard label="Times VP Passed" value={stats.economy?.timesVPPassed || 0} />
               <StatCard label="Sessions Since Last VP" value={stats.participation?.sessionsSinceLastVP || 0} />
+
+              {/* New Economy Stat */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <AverageROICard playerId={selectedPlayerId || undefined} />
+              </Grid>
             </Grid>
           </Paper>
 
@@ -591,100 +419,33 @@ export default function StatsPage() {
             </Paper>
           )}
 
-          {/* Most Played Cards */}
-          <Paper sx={{ p: 3, mb: 3, backgroundColor: 'var(--bg-elevated)' }}>
-            <Typography variant="h6" gutterBottom>
-              Most Played Cards
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-              <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>Start Session</InputLabel>
-                <Select
-                  value={personalCardStartSession ?? ''}
-                  onChange={handlePersonalCardStartSessionChange}
-                  label="Start Session"
-                  size="small"
-                >
-                  {completedSessions.map(session => (
-                    <MenuItem key={session.id} value={session.id}>
-                      #{session.number} {session.setCode}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>End Session</InputLabel>
-                <Select
-                  value={personalCardEndSession ?? ''}
-                  onChange={handlePersonalCardEndSessionChange}
-                  label="End Session"
-                  size="small"
-                >
-                  {completedSessions.map(session => (
-                    <MenuItem key={session.id} value={session.id}>
-                      #{session.number} {session.setCode}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl sx={{ minWidth: 120 }}>
-                <InputLabel>Limit</InputLabel>
-                <Select
-                  value={cardLimit}
-                  onChange={(e) => setCardLimit(Number(e.target.value))}
-                  label="Limit"
-                  size="small"
-                >
-                  <MenuItem value={5}>5</MenuItem>
-                  <MenuItem value={10}>10</MenuItem>
-                  <MenuItem value={15}>15</MenuItem>
-                  <MenuItem value={20}>20</MenuItem>
-                  <MenuItem value={25}>25</MenuItem>
-                  <MenuItem value={30}>30</MenuItem>
-                </Select>
-              </FormControl>
-              <TextField
-                label="Filter by card name"
-                value={cardFilter}
-                onChange={(e) => setCardFilter(e.target.value)}
-                size="small"
-                sx={{ flexGrow: 1, maxWidth: 400 }}
-              />
-            </Box>
-            {filteredCards.length > 0 ? (
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                      <TableCell><strong>Card Name</strong></TableCell>
-                      <TableCell align="right"><strong>Times Played</strong></TableCell>
-                      <TableCell align="right"><strong>Decklists %</strong></TableCell>
-                      <TableCell align="right"><strong>Avg Copies</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filteredCards.map(card => (
-                      <TableRow key={card.cardId}>
-                        <TableCell>{card.cardName}</TableCell>
-                        <TableCell align="right">{card.timesPlayed}</TableCell>
-                        <TableCell align="right">{card.decklistPercentage}%</TableCell>
-                        <TableCell align="right">{card.averageCopies}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            ) : (
-              <Typography color="var(--text-secondary)">
-                {stats.mostPlayedCards?.length === 0
-                  ? 'No decklists submitted yet'
-                  : 'No cards match the filter'}
-              </Typography>
+          {/* Deck Building Analysis */}
+          <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>
+            Deck Building Analysis
+          </Typography>
+
+          {/* Deck Diversity */}
+          <Grid container spacing={3} sx={{ mb: 3 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <DeckDiversityCard playerId={selectedPlayerId || undefined} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <DeckUniquenessCard playerId={selectedPlayerId || undefined} />
+            </Grid>
+            {stats.deckBuilding && (
+              <>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <UniqueCardsCard averageUniqueCards={stats.deckBuilding.averageUniqueCards} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <CardsChangedCard averageCardsChanged={stats.deckBuilding.averageCardsChanged} />
+                </Grid>
+              </>
             )}
-          </Paper>
+          </Grid>
 
           {/* Head-to-Head Records */}
-          <Paper sx={{ p: 3, backgroundColor: 'var(--bg-elevated)' }}>
+          <Paper sx={{ p: 3, backgroundColor: 'var(--bg-elevated)', mb: 3 }}>
             <Typography variant="h6" gutterBottom>
               Head-to-Head Records
             </Typography>
@@ -719,50 +480,48 @@ export default function StatsPage() {
               </Typography>
             )}
           </Paper>
+
+          {/* Most Played Cards */}
+          <Paper sx={{ p: 3, backgroundColor: 'var(--bg-elevated)' }}>
+            <Typography variant="h6" gutterBottom>
+              Most Played Cards (Top 50)
+            </Typography>
+            {stats.mostPlayedCards && stats.mostPlayedCards.length > 0 ? (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                      <TableCell><strong>Rank</strong></TableCell>
+                      <TableCell><strong>Card Name</strong></TableCell>
+                      <TableCell align="right"><strong>Times Played</strong></TableCell>
+                      <TableCell align="right"><strong>In Decklists</strong></TableCell>
+                      <TableCell align="right"><strong>Avg Copies</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {stats.mostPlayedCards.slice(0, 50).map((card, index) => (
+                      <TableRow key={card.cardId}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>{card.cardName}</TableCell>
+                        <TableCell align="right">{card.timesPlayed}</TableCell>
+                        <TableCell align="right">{card.decklistPercentage}%</TableCell>
+                        <TableCell align="right">{card.averageCopies}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Typography color="var(--text-secondary)">
+                No decklists submitted yet
+              </Typography>
+            )}
+          </Paper>
         </>
       )}
 
-      {/* Most Played Cards - All Players */}
-      {viewMode === 'comparative' && selectedCategory === 'cards' && allPlayersCards && (
-        <Paper sx={{ p: 3, backgroundColor: 'var(--bg-elevated)' }}>
-          <Typography variant="h6" gutterBottom>
-            Most Played Cards (All Players)
-          </Typography>
-          {allPlayersCards.length > 0 ? (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                    <TableCell><strong>Rank</strong></TableCell>
-                    <TableCell><strong>Card Name</strong></TableCell>
-                    <TableCell align="right"><strong>Decklists</strong></TableCell>
-                    <TableCell align="right"><strong>Decklists %</strong></TableCell>
-                    <TableCell align="right"><strong>Avg Copies</strong></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {allPlayersCards.map((card, index) => (
-                    <TableRow key={card.cardId}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{card.cardName}</TableCell>
-                      <TableCell align="right">{card.timesPlayed}</TableCell>
-                      <TableCell align="right">{card.decklistPercentage}%</TableCell>
-                      <TableCell align="right">{card.averageCopies}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          ) : (
-            <Typography color="var(--text-secondary)">
-              No decklists submitted yet
-            </Typography>
-          )}
-        </Paper>
-      )}
-
       {/* Multi-Column Rankings View */}
-      {viewMode === 'comparative' && selectedCategory !== 'cards' && sortedData.length > 0 && !comparativeLoading && (
+      {viewMode === 'comparative' && sortedData.length > 0 && !comparativeLoading && (
         <Paper sx={{ p: 3, backgroundColor: 'var(--bg-elevated)' }}>
           <Typography variant="h6" gutterBottom>
             {selectedCategory === 'banlist' ? 'Banlist' : selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Rankings
@@ -871,7 +630,7 @@ export default function StatsPage() {
         </Paper>
       )}
 
-      {viewMode === 'comparative' && selectedCategory !== 'cards' && !allPlayersData && !comparativeLoading && (
+      {viewMode === 'comparative' && !allPlayersData && !comparativeLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <Typography color="var(--text-secondary)">
             Loading rankings...
@@ -879,7 +638,7 @@ export default function StatsPage() {
         </Box>
       )}
 
-      {viewMode === 'comparative' && selectedCategory !== 'cards' && sortedData.length === 0 && allPlayersData && !comparativeLoading && (
+      {viewMode === 'comparative' && sortedData.length === 0 && allPlayersData && !comparativeLoading && (
         <Paper sx={{ p: 3, backgroundColor: 'var(--bg-elevated)' }}>
           <Typography color="var(--text-secondary)">
             No players meet the minimum session requirement

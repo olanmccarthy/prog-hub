@@ -43,6 +43,7 @@ const allNavigationRoutes = [
       { label: 'Loser Prizing', path: '/admin/loser-prizing' },
       { label: 'Moderator Selection', path: '/admin/moderator-selection' },
       { label: 'Wallet Point Breakdown', path: '/admin/wallet-breakdown' },
+      { label: 'Synergy Exclusions', path: '/admin/synergy-exclusions' },
     ],
   },
   {
@@ -69,7 +70,11 @@ const allNavigationRoutes = [
   },
   {
     label: 'Stats',
-    path: '/stats',
+    subItems: [
+      { label: 'Player Stats', path: '/stats' },
+      { label: 'Set Stats', path: '/stats/set-purchases' },
+      { label: 'Meta Analysis', path: '/stats/meta-analysis' },
+    ],
   },
   {
     label: 'Leaderboard',

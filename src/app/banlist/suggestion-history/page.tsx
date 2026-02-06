@@ -88,25 +88,26 @@ export default function BanlistSuggestionHistoryPage() {
   const [selectedPlayer, setSelectedPlayer] = useState<string | 'all'>('all');
 
   useEffect(() => {
-    fetchSuggestions();
-  }, []);
-
-  const fetchSuggestions = async () => {
-    setLoading(true);
-    setError(null);
-    const result = await getAllBanlistSuggestions();
-    if (result.success && result.suggestions) {
-      setSuggestions(result.suggestions);
-      // Set default session to the most recent (highest session number)
-      if (selectedSession === null && result.suggestions.length > 0) {
-        const mostRecentSession = Math.max(...result.suggestions.map(s => s.sessionNumber));
-        setSelectedSession(mostRecentSession);
+    const fetchSuggestions = async () => {
+      setLoading(true);
+      setError(null);
+      const result = await getAllBanlistSuggestions();
+      if (result.success && result.suggestions) {
+        setSuggestions(result.suggestions);
+        // Set default session to the most recent (highest session number)
+        if (selectedSession === null && result.suggestions.length > 0) {
+          const mostRecentSession = Math.max(...result.suggestions.map(s => s.sessionNumber));
+          setSelectedSession(mostRecentSession);
+        }
+      } else {
+        setError(result.error || 'Failed to load suggestions');
       }
-    } else {
-      setError(result.error || 'Failed to load suggestions');
-    }
-    setLoading(false);
-  };
+      setLoading(false);
+    };
+
+    fetchSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sessionList = useMemo(() => {
     const sessions = [...new Set(suggestions.map((s) => s.sessionNumber))];
