@@ -230,15 +230,28 @@ export async function getDecklists(
       return Array.isArray(field) ? field : [];
     };
 
+    // Fetch session modifiers for all sessions
+    const sessionModifiersMap = new Map();
+    for (const sessionId of sessionIds) {
+      const modifiers = await prisma.sessionModifier.findUnique({
+        where: { sessionId },
+      });
+      sessionModifiersMap.set(sessionId, modifiers);
+    }
+
     // Check if standings are finalized for each session and get placement
     const decklistsWithDetails: DecklistWithDetails[] = decklists.map(decklist => {
-      const standingsFinalized =
+      // Check if placements are filled
+      const placementsFilled =
         decklist.session.first !== null &&
         decklist.session.second !== null &&
         decklist.session.third !== null &&
         decklist.session.fourth !== null &&
         decklist.session.fifth !== null &&
         decklist.session.sixth !== null;
+
+      // Standings are considered finalized when all placements are filled
+      const standingsFinalized = placementsFilled;
 
       // Get match record
       const recordKey = `${decklist.sessionId}-${decklist.playerId}`;
@@ -280,8 +293,13 @@ export async function getDecklists(
       // Always show completed sessions
       if (decklist.sessionComplete) return true;
 
-      // For active session, only show if standings finalized or it's the user's own deck
+      // For active session
       if (decklist.sessionId === activeSession?.id) {
+        // Modifier 7: Early decklist public (show all decklists before standings finalized)
+        const modifiers = sessionModifiersMap.get(decklist.sessionId);
+        if (modifiers?.earlyDecklistPublic) return true;
+
+        // Otherwise: show if standings finalized or own deck
         return decklist.standingsFinalized || decklist.playerId === user.playerId;
       }
 

@@ -7,6 +7,7 @@ import {
   Box,
   Alert,
   CircularProgress,
+  Button,
 } from '@mui/material';
 import {
   getBanlistSuggestionsForVoting,
@@ -20,6 +21,7 @@ import { VotingComplete } from './components/VotingComplete';
 import { PlayerVotingView } from './components/PlayerVotingView';
 import { PostVotingView } from './components/PostVotingView';
 import { ModeratorSelectionView } from './components/ModeratorSelectionView';
+import { VoteDetailsView } from './components/VoteDetailsView';
 
 /**
  * Main voting page component that manages all state and routes to appropriate view.
@@ -42,6 +44,9 @@ export default function BanlistVotingPage() {
   const [isModerator, setIsModerator] = useState(false);
   const [selectedWinner, setSelectedWinner] = useState<number | null>(null);
   const [confirmedWinner, setConfirmedWinner] = useState<number | null>(null);
+  const [isNonProduction, setIsNonProduction] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showVoteDetails, setShowVoteDetails] = useState(false);
 
   useEffect(() => {
     fetchSuggestions();
@@ -64,6 +69,8 @@ export default function BanlistVotingPage() {
       setIsModerator(result.isModerator || false);
       setSelectedWinner(result.chosenSuggestionId || null);
       setConfirmedWinner(result.chosenSuggestionId || null);
+      setIsNonProduction(result.isNonProduction || false);
+      setIsAdmin(result.isAdmin || false);
     } else {
       setError(result.error || 'Failed to load suggestions');
     }
@@ -183,6 +190,31 @@ export default function BanlistVotingPage() {
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
+      )}
+
+      {/* Admin button to toggle vote details (only in production) */}
+      {!isNonProduction && isAdmin && submissionCount >= totalPlayerCount && (
+        <Box sx={{ mb: 3 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setShowVoteDetails(!showVoteDetails)}
+            sx={{
+              color: 'var(--text-primary)',
+              borderColor: 'var(--border-color)',
+              '&:hover': {
+                borderColor: 'var(--accent-primary)',
+                backgroundColor: 'var(--hover-light-grey)',
+              },
+            }}
+          >
+            {showVoteDetails ? 'Hide Vote Details' : 'Show Vote Details (Admin)'}
+          </Button>
+        </Box>
+      )}
+
+      {/* Show vote details in non-production OR when admin enables it */}
+      {((isNonProduction || (isAdmin && showVoteDetails)) && submissionCount >= totalPlayerCount) && (
+        <VoteDetailsView />
       )}
 
       {confirmedWinner ? (

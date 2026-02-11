@@ -24,6 +24,8 @@ export interface VictoryPointStatusResult {
   activeSessionNumber?: number;
   rankedPlayers: RankedPlayer[];
   alreadyAssigned: boolean;
+  awardTwoVictoryPoints?: boolean;
+  reverseVpOrder?: boolean;
 }
 
 export interface AssignVictoryPointResult {
@@ -76,6 +78,11 @@ export async function getVictoryPointStatus(): Promise<VictoryPointStatusResult>
       // Get ranked players anyway for display
       const rankedPlayers = await getRankedPlayersForSession(activeSession.id);
 
+      // Get modifiers
+      const modifiers = await prisma.sessionModifier.findUnique({
+        where: { sessionId: activeSession.id },
+      });
+
       return {
         success: true,
         canAssign: false,
@@ -83,6 +90,8 @@ export async function getVictoryPointStatus(): Promise<VictoryPointStatusResult>
         activeSessionNumber: activeSession.number,
         rankedPlayers,
         alreadyAssigned: true,
+        awardTwoVictoryPoints: modifiers?.awardTwoVictoryPoints || false,
+        reverseVpOrder: modifiers?.reverseVpOrder || false,
       };
     }
 
@@ -99,11 +108,17 @@ export async function getVictoryPointStatus(): Promise<VictoryPointStatusResult>
         activeSessionNumber: activeSession.number,
         rankedPlayers: [],
         alreadyAssigned: false,
+        awardTwoVictoryPoints: false,
       };
     }
 
     // Get ranked players
     const rankedPlayers = await getRankedPlayersForSession(activeSession.id);
+
+    // Get modifiers
+    const modifiers = await prisma.sessionModifier.findUnique({
+      where: { sessionId: activeSession.id },
+    });
 
     return {
       success: true,
@@ -111,6 +126,8 @@ export async function getVictoryPointStatus(): Promise<VictoryPointStatusResult>
       activeSessionNumber: activeSession.number,
       rankedPlayers,
       alreadyAssigned: false,
+      awardTwoVictoryPoints: modifiers?.awardTwoVictoryPoints || false,
+      reverseVpOrder: modifiers?.reverseVpOrder || false,
     };
   } catch (error) {
     console.error('Error getting victory point status:', error);
@@ -148,7 +165,12 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
     where: { active: true },
   });
 
-  const walletPoints = activeBreakdown
+  // Get session modifiers to apply to wallet points
+  const modifiers = await prisma.sessionModifier.findUnique({
+    where: { sessionId: sessionId },
+  });
+
+  let walletPoints = activeBreakdown
     ? [
         activeBreakdown.first,
         activeBreakdown.second,
@@ -158,6 +180,17 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
         activeBreakdown.sixth,
       ]
     : [0, 0, 0, 0, 0, 0];
+
+  // Apply wallet point modifiers to base amounts
+  // Modifier 1: Double wallet points
+  if (modifiers?.doubleWalletPoints) {
+    walletPoints = walletPoints.map((pts) => pts * 2);
+  }
+
+  // Modifier 12: Halve all wallet points (round up)
+  if (modifiers?.halveAllWalletPoints) {
+    walletPoints = walletPoints.map((pts) => Math.ceil(pts / 2));
+  }
 
   // Use saved placement fields from finalized standings
   const placementPlayerIds = [
@@ -260,7 +293,86 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
 
       // Wallet points this session based on rank (0 for last place)
       const rank = i + 1;
-      const walletPointsThisSession = rank === placementPlayerIds.length ? 0 : walletPoints[rank - 1] || 0;
+      const isLastPlace = rank === placementPlayerIds.length;
+
+      // Calculate base wallet points with modifiers
+      let walletPointsThisSession = 0;
+
+      if (modifiers?.equalSplitWallet) {
+        // Equal split mode: top 5 players split equally
+        if (!isLastPlace) {
+          const totalPoints = walletPoints.slice(0, 5).reduce((sum, pts) => sum + pts, 0);
+          walletPointsThisSession = Math.floor(totalPoints / 5);
+        }
+      } else {
+        // Normal mode: based on placement
+        walletPointsThisSession = isLastPlace ? 0 : walletPoints[rank - 1] || 0;
+      }
+
+      // Apply placement bonuses (if not last place)
+      if (!isLastPlace) {
+        // Modifier 3: Odd placement bonus
+        if (modifiers?.oddPlacementBonus && rank % 2 === 1) {
+          walletPointsThisSession += 1;
+        }
+
+        // Modifier 4: Even placement bonus
+        if (modifiers?.evenPlacementBonus && rank % 2 === 0) {
+          walletPointsThisSession += 1;
+        }
+
+        // Modifier 8: Match win bonus
+        if (modifiers?.matchWinBonus) {
+          walletPointsThisSession += stats.matchWins || 0;
+        }
+
+        // Bounty Hunter: Bonus for beating VP leaders
+        if (modifiers?.bountyHunter) {
+          // Get all players and their VP counts before this session
+          const allPlayers = await prisma.player.findMany({
+            select: { id: true },
+          });
+
+          const vpCounts = await Promise.all(
+            allPlayers.map(async (p) => ({
+              playerId: p.id,
+              vpCount: await prisma.victoryPoint.count({
+                where: { playerId: p.id },
+              }),
+            }))
+          );
+
+          // Find the max VP count
+          const maxVP = Math.max(...vpCounts.map(p => p.vpCount));
+
+          // Get all players at max VP (includes single leader or multiple tied)
+          const vpLeaders = vpCounts
+            .filter(p => p.vpCount === maxVP)
+            .map(p => p.playerId);
+
+          // Check how many VP leaders this player beat
+          let bountyCount = 0;
+          for (const leaderId of vpLeaders) {
+            const matchup = session.pairings.find(
+              p =>
+                (p.player1Id === playerId && p.player2Id === leaderId) ||
+                (p.player2Id === playerId && p.player1Id === leaderId)
+            );
+
+            if (matchup) {
+              const isPlayer1 = matchup.player1Id === playerId;
+              const playerWins = isPlayer1 ? matchup.player1wins : matchup.player2wins;
+
+              // Player beat this VP leader (won the match)
+              if (playerWins === 2) {
+                bountyCount++;
+              }
+            }
+          }
+
+          walletPointsThisSession += bountyCount;
+        }
+      }
 
       rankedPlayers.push({
         playerId: playerId,
@@ -277,6 +389,68 @@ async function getRankedPlayersForSession(sessionId: number): Promise<RankedPlay
   }
 
   return rankedPlayers;
+}
+
+/**
+ * Calculate bounty hunter bonus for a player
+ * Returns the number of VP leaders (at top) that this player beat
+ */
+async function calculateBountyHunterBonus(playerId: number, sessionId: number): Promise<number> {
+  // Get all players and their VP counts before this session
+  const allPlayers = await prisma.player.findMany({
+    select: { id: true },
+  });
+
+  const vpCounts = await Promise.all(
+    allPlayers.map(async (p) => ({
+      playerId: p.id,
+      vpCount: await prisma.victoryPoint.count({
+        where: { playerId: p.id },
+      }),
+    }))
+  );
+
+  // Find the max VP count
+  const maxVP = Math.max(...vpCounts.map(p => p.vpCount));
+
+  // Get all players at max VP (includes single leader or multiple tied)
+  const vpLeaders = vpCounts
+    .filter(p => p.vpCount === maxVP)
+    .map(p => p.playerId);
+
+  // Get session pairings
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: {
+      pairings: true,
+    },
+  });
+
+  if (!session) {
+    return 0;
+  }
+
+  // Check how many VP leaders this player beat
+  let bountyCount = 0;
+  for (const leaderId of vpLeaders) {
+    const matchup = session.pairings.find(
+      p =>
+        (p.player1Id === playerId && p.player2Id === leaderId) ||
+        (p.player2Id === playerId && p.player1Id === leaderId)
+    );
+
+    if (matchup) {
+      const isPlayer1 = matchup.player1Id === playerId;
+      const playerWins = isPlayer1 ? matchup.player1wins : matchup.player2wins;
+
+      // Player beat this VP leader (won the match)
+      if (playerWins === 2) {
+        bountyCount++;
+      }
+    }
+  }
+
+  return bountyCount;
 }
 
 /**
@@ -327,6 +501,11 @@ export async function assignVictoryPoint(
       };
     }
 
+    // Fetch session modifiers
+    const modifiers = await prisma.sessionModifier.findUnique({
+      where: { sessionId: activeSession.id },
+    });
+
     // Validate selected player exists in ranked list
     const selectedPlayer = rankedPlayers.find(p => p.playerId === selectedPlayerId);
     if (!selectedPlayer) {
@@ -336,61 +515,190 @@ export async function assignVictoryPoint(
       };
     }
 
-    // Create victory point for selected player
-    await prisma.victoryPoint.create({
-      data: {
-        playerId: selectedPlayerId,
-        sessionId: activeSession.id,
-      },
-    });
+    // Modifier 2: Award 2 VP instead of 1
+    const vpCount = modifiers?.awardTwoVictoryPoints ? 2 : 1;
+    for (let i = 0; i < vpCount; i++) {
+      await prisma.victoryPoint.create({
+        data: {
+          playerId: selectedPlayerId,
+          sessionId: activeSession.id,
+        },
+      });
+    }
 
-    // Award wallet points to all other players (except last place)
-    const walletPoints = [
-      activeBreakdown.first,
-      activeBreakdown.second,
-      activeBreakdown.third,
-      activeBreakdown.fourth,
-      activeBreakdown.fifth,
-      activeBreakdown.sixth,
-    ];
+    // Modifier 10: Equal Split Wallet (complete override)
+    if (modifiers?.equalSplitWallet) {
+      // Calculate total pool from 1st-5th places only
+      const totalPool =
+        activeBreakdown.first +
+        activeBreakdown.second +
+        activeBreakdown.third +
+        activeBreakdown.fourth +
+        activeBreakdown.fifth;
 
-    // Get the player who finished in last place (highest rank number)
-    const lastPlacePlayer = rankedPlayers[rankedPlayers.length - 1];
+      // Divide equally among top 5 players (including VP taker)
+      let perPlayerAmount = Math.floor(totalPool / 5);
 
-    // Exclude VP winner AND originally-last-place player from wallet points
-    const playersForWalletPoints = rankedPlayers
-      .filter(p => p.playerId !== selectedPlayerId && p.playerId !== lastPlacePlayer.playerId);
+      // Modifier 1: Apply doubling BEFORE other bonuses
+      if (modifiers?.doubleWalletPoints) {
+        perPlayerAmount *= 2;
+      }
 
-    // Award wallet points based on original ranking position
-    for (let i = 0; i < playersForWalletPoints.length; i++) {
-      const player = playersForWalletPoints[i];
-      const pointsToAward = walletPoints[player.rank - 1] || 0;
+      // Modifier 12: Halve all wallet points (round up)
+      if (modifiers?.halveAllWalletPoints) {
+        perPlayerAmount = Math.ceil(perPlayerAmount / 2);
+      }
 
-      if (pointsToAward > 0) {
-        // Update player's wallet
-        const wallet = await prisma.wallet.upsert({
-          where: { playerId: player.playerId },
-          update: {
-            amount: {
-              increment: pointsToAward,
+      // Get top 5 players (6th place excluded)
+      const eligiblePlayers = rankedPlayers.slice(0, 5);
+
+      // Award to each (including VP taker - don't filter them out)
+      for (const player of eligiblePlayers) {
+        let finalAmount = perPlayerAmount;
+
+        // Modifier 3 & 4: Odd/even placement bonuses
+        if (modifiers?.oddPlacementBonus && player.rank % 2 === 1) {
+          finalAmount += 1;
+        }
+        if (modifiers?.evenPlacementBonus && player.rank % 2 === 0) {
+          finalAmount += 1;
+        }
+
+        // Modifier 8: Match win bonus
+        if (modifiers?.matchWinBonus) {
+          finalAmount += player.matchWins || 0;
+        }
+
+        // Bounty Hunter: Bonus for beating VP leaders
+        if (modifiers?.bountyHunter) {
+          const bountyBonus = await calculateBountyHunterBonus(player.playerId, activeSession.id);
+          finalAmount += bountyBonus;
+        }
+
+        // Modifier 9: Admin halve wallet for specific players
+        if (
+          modifiers?.adminHalveWallet &&
+          Array.isArray(modifiers.halvedPlayerIds) &&
+          modifiers.halvedPlayerIds.includes(player.playerId)
+        ) {
+          finalAmount = Math.floor(finalAmount / 2);
+        }
+
+        if (finalAmount > 0) {
+          // Update player's wallet
+          const wallet = await prisma.wallet.upsert({
+            where: { playerId: player.playerId },
+            update: {
+              amount: {
+                increment: finalAmount,
+              },
             },
-          },
-          create: {
-            playerId: player.playerId,
-            amount: pointsToAward,
-          },
-        });
+            create: {
+              playerId: player.playerId,
+              amount: finalAmount,
+            },
+          });
 
-        // Create wallet transaction record
-        await prisma.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            sessionId: activeSession.id,
-            amount: pointsToAward,
-            type: 'VICTORY_POINT_AWARD',
-            description: `Session ${activeSession.number} - ${player.rank}${player.rank === 1 ? 'st' : player.rank === 2 ? 'nd' : player.rank === 3 ? 'rd' : 'th'} place award (VP declined)`,
-          },
-        });
+          // Create wallet transaction record
+          await prisma.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              sessionId: activeSession.id,
+              amount: finalAmount,
+              type: 'VICTORY_POINT_AWARD',
+              description: `Session ${activeSession.number} - Equal split distribution (${player.rank}${player.rank === 1 ? 'st' : player.rank === 2 ? 'nd' : player.rank === 3 ? 'rd' : 'th'} place)`,
+            },
+          });
+        }
+      }
+    } else {
+      // Normal distribution (existing logic)
+      // Award wallet points to all other players (except last place)
+      let walletPoints = [
+        activeBreakdown.first,
+        activeBreakdown.second,
+        activeBreakdown.third,
+        activeBreakdown.fourth,
+        activeBreakdown.fifth,
+        activeBreakdown.sixth,
+      ];
+
+      // Modifier 1: Double wallet points
+      if (modifiers?.doubleWalletPoints) {
+        walletPoints = walletPoints.map((pts) => pts * 2);
+      }
+
+      // Modifier 12: Halve all wallet points (round up)
+      if (modifiers?.halveAllWalletPoints) {
+        walletPoints = walletPoints.map((pts) => Math.ceil(pts / 2));
+      }
+
+      // Get the player who finished in last place (highest rank number)
+      const lastPlacePlayer = rankedPlayers[rankedPlayers.length - 1];
+
+      // Exclude VP winner AND originally-last-place player from wallet points
+      const playersForWalletPoints = rankedPlayers.filter(
+        (p) => p.playerId !== selectedPlayerId && p.playerId !== lastPlacePlayer.playerId
+      );
+
+      // Award wallet points based on original ranking position
+      for (const player of playersForWalletPoints) {
+        let pointsToAward = walletPoints[player.rank - 1] || 0;
+
+        // Modifier 3 & 4: Odd/even placement bonuses
+        if (modifiers?.oddPlacementBonus && player.rank % 2 === 1) {
+          pointsToAward += 1;
+        }
+        if (modifiers?.evenPlacementBonus && player.rank % 2 === 0) {
+          pointsToAward += 1;
+        }
+
+        // Modifier 8: Match win bonus
+        if (modifiers?.matchWinBonus) {
+          pointsToAward += player.matchWins || 0;
+        }
+
+        // Bounty Hunter: Bonus for beating VP leaders
+        if (modifiers?.bountyHunter) {
+          const bountyBonus = await calculateBountyHunterBonus(player.playerId, activeSession.id);
+          pointsToAward += bountyBonus;
+        }
+
+        // Modifier 9: Admin halve wallet for specific players
+        if (
+          modifiers?.adminHalveWallet &&
+          Array.isArray(modifiers.halvedPlayerIds) &&
+          modifiers.halvedPlayerIds.includes(player.playerId)
+        ) {
+          pointsToAward = Math.floor(pointsToAward / 2);
+        }
+
+        if (pointsToAward > 0) {
+          // Update player's wallet
+          const wallet = await prisma.wallet.upsert({
+            where: { playerId: player.playerId },
+            update: {
+              amount: {
+                increment: pointsToAward,
+              },
+            },
+            create: {
+              playerId: player.playerId,
+              amount: pointsToAward,
+            },
+          });
+
+          // Create wallet transaction record
+          await prisma.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              sessionId: activeSession.id,
+              amount: pointsToAward,
+              type: 'VICTORY_POINT_AWARD',
+              description: `Session ${activeSession.number} - ${player.rank}${player.rank === 1 ? 'st' : player.rank === 2 ? 'nd' : player.rank === 3 ? 'rd' : 'th'} place award (VP declined)`,
+            },
+          });
+        }
       }
     }
 

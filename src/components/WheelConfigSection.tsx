@@ -19,6 +19,11 @@ import {
   TextField,
   Checkbox,
   Typography,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  FormControlLabel,
+  Alert,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -33,12 +38,52 @@ export interface WheelEntry {
   name: string;
   description: string;
   chance: number;
+  // Wallet & Victory Point Modifiers
+  doubleWalletPoints?: boolean;
+  awardTwoVictoryPoints?: boolean;
+  oddPlacementBonus?: boolean;
+  evenPlacementBonus?: boolean;
+  reverseVpOrder?: boolean;
+  matchWinBonus?: boolean;
+  adminHalveWallet?: boolean;
+  equalSplitWallet?: boolean;
+  halveAllWalletPoints?: boolean;
+  bountyHunter?: boolean;
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic?: boolean;
+  // Event Wheel Modifiers
+  allowMultipleEventSpins?: boolean;
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist?: boolean;
+  trueDemocracyBanlist?: boolean;
+  // Metadata
+  halvedPlayerIds?: number[] | null;
 }
 
 export interface CreateEntryInput {
   name: string;
   description: string;
   chance: number;
+  // Wallet & Victory Point Modifiers
+  doubleWalletPoints?: boolean;
+  awardTwoVictoryPoints?: boolean;
+  oddPlacementBonus?: boolean;
+  evenPlacementBonus?: boolean;
+  reverseVpOrder?: boolean;
+  matchWinBonus?: boolean;
+  adminHalveWallet?: boolean;
+  equalSplitWallet?: boolean;
+  halveAllWalletPoints?: boolean;
+  bountyHunter?: boolean;
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic?: boolean;
+  // Event Wheel Modifiers
+  allowMultipleEventSpins?: boolean;
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist?: boolean;
+  trueDemocracyBanlist?: boolean;
+  // Metadata
+  halvedPlayerIds?: number[] | null;
 }
 
 interface WheelConfigSectionProps {
@@ -71,6 +116,21 @@ export function WheelConfigSection({
     name: '',
     description: '',
     chance: 0,
+    doubleWalletPoints: false,
+    awardTwoVictoryPoints: false,
+    oddPlacementBonus: false,
+    evenPlacementBonus: false,
+    reverseVpOrder: false,
+    matchWinBonus: false,
+    adminHalveWallet: false,
+    equalSplitWallet: false,
+    halveAllWalletPoints: false,
+    bountyHunter: false,
+    earlyDecklistPublic: false,
+    allowMultipleEventSpins: false,
+    skipModeratorRandomBanlist: false,
+    trueDemocracyBanlist: false,
+    halvedPlayerIds: null,
   });
   const [massEditMode, setMassEditMode] = useState(false);
   const [massEditValues, setMassEditValues] = useState<Record<number, number>>({});
@@ -96,6 +156,21 @@ export function WheelConfigSection({
         name: entry.name,
         description: entry.description,
         chance: entry.chance,
+        doubleWalletPoints: entry.doubleWalletPoints || false,
+        awardTwoVictoryPoints: entry.awardTwoVictoryPoints || false,
+        oddPlacementBonus: entry.oddPlacementBonus || false,
+        evenPlacementBonus: entry.evenPlacementBonus || false,
+        reverseVpOrder: entry.reverseVpOrder || false,
+        matchWinBonus: entry.matchWinBonus || false,
+        adminHalveWallet: entry.adminHalveWallet || false,
+        equalSplitWallet: entry.equalSplitWallet || false,
+        halveAllWalletPoints: entry.halveAllWalletPoints || false,
+        bountyHunter: entry.bountyHunter || false,
+        earlyDecklistPublic: entry.earlyDecklistPublic || false,
+        allowMultipleEventSpins: entry.allowMultipleEventSpins || false,
+        skipModeratorRandomBanlist: entry.skipModeratorRandomBanlist || false,
+        trueDemocracyBanlist: entry.trueDemocracyBanlist || false,
+        halvedPlayerIds: entry.halvedPlayerIds || null,
       });
     } else {
       setEditingId(null);
@@ -103,6 +178,17 @@ export function WheelConfigSection({
         name: '',
         description: '',
         chance: 0,
+        doubleWalletPoints: false,
+        awardTwoVictoryPoints: false,
+        oddPlacementBonus: false,
+        evenPlacementBonus: false,
+        reverseVpOrder: false,
+        matchWinBonus: false,
+        adminHalveWallet: false,
+        equalSplitWallet: false,
+        earlyDecklistPublic: false,
+        allowMultipleEventSpins: false,
+        halvedPlayerIds: null,
       });
     }
     setDialogOpen(true);
@@ -628,6 +714,270 @@ export function WheelConfigSection({
                 },
               }}
             />
+
+            {/* Modifiers Section */}
+            <Accordion
+              sx={{
+                backgroundColor: 'var(--bg-elevated)',
+                border: '1px solid var(--border-color)',
+                '&:before': { display: 'none' },
+              }}
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon sx={{ color: 'var(--text-bright)' }} />}
+                sx={{ color: 'var(--text-bright)' }}
+              >
+                <Typography>Modifiers (Optional)</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* Warning for conflicting modifiers */}
+                  {formData.doubleWalletPoints && formData.equalSplitWallet && (
+                    <Alert severity="warning">
+                      Equal split will apply AFTER doubling calculation
+                    </Alert>
+                  )}
+                  {formData.oddPlacementBonus && formData.evenPlacementBonus && (
+                    <Alert severity="warning">
+                      Enabling both bonuses gives all players +1 point
+                    </Alert>
+                  )}
+
+                  {/* Wallet & Victory Points */}
+                  <Typography variant="subtitle2" sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
+                    Wallet & Victory Points
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.doubleWalletPoints}
+                        onChange={(e) =>
+                          setFormData({ ...formData, doubleWalletPoints: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Double Wallet Points</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.awardTwoVictoryPoints}
+                        onChange={(e) =>
+                          setFormData({ ...formData, awardTwoVictoryPoints: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Award 2 VP (instead of 1)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.oddPlacementBonus}
+                        onChange={(e) =>
+                          setFormData({ ...formData, oddPlacementBonus: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Odd Placement Bonus (+1 wallet point)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.evenPlacementBonus}
+                        onChange={(e) =>
+                          setFormData({ ...formData, evenPlacementBonus: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Even Placement Bonus (+1 wallet point)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.reverseVpOrder}
+                        onChange={(e) =>
+                          setFormData({ ...formData, reverseVpOrder: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Reverse VP Assignment Order (6th → 1st)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.matchWinBonus}
+                        onChange={(e) =>
+                          setFormData({ ...formData, matchWinBonus: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Match Win Bonus (+1 per match win)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.adminHalveWallet}
+                        onChange={(e) =>
+                          setFormData({ ...formData, adminHalveWallet: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Admin Halve Wallet (for specific players)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.equalSplitWallet}
+                        onChange={(e) =>
+                          setFormData({ ...formData, equalSplitWallet: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Equal Split Wallet (1st-5th, VP taker included)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.halveAllWalletPoints}
+                        onChange={(e) =>
+                          setFormData({ ...formData, halveAllWalletPoints: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Halve All Wallet Points (rounds up)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.bountyHunter}
+                        onChange={(e) =>
+                          setFormData({ ...formData, bountyHunter: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Bounty Hunter (+1 for beating each player at top VP)</Typography>}
+                  />
+
+                  {/* Decklist Visibility */}
+                  <Divider sx={{ borderColor: 'var(--border-color)', my: 1 }} />
+                  <Typography variant="subtitle2" sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
+                    Decklist Visibility
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.earlyDecklistPublic}
+                        onChange={(e) =>
+                          setFormData({ ...formData, earlyDecklistPublic: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Make Decklists Public Before Standings</Typography>}
+                  />
+
+                  {/* Event Wheel */}
+                  <Divider sx={{ borderColor: 'var(--border-color)', my: 1 }} />
+                  <Typography variant="subtitle2" sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
+                    Event Wheel
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.allowMultipleEventSpins}
+                        onChange={(e) =>
+                          setFormData({ ...formData, allowMultipleEventSpins: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Allow Multiple Event Spins (additive)</Typography>}
+                  />
+
+                  {/* Moderator & Banlist */}
+                  <Divider sx={{ borderColor: 'var(--border-color)', my: 1 }} />
+                  <Typography variant="subtitle2" sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
+                    Moderator & Banlist
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.skipModeratorRandomBanlist}
+                        onChange={(e) =>
+                          setFormData({ ...formData, skipModeratorRandomBanlist: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>Skip Moderator, Random Banlist (2+ votes)</Typography>}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.trueDemocracyBanlist}
+                        onChange={(e) =>
+                          setFormData({ ...formData, trueDemocracyBanlist: e.target.checked })
+                        }
+                        sx={{
+                          color: 'var(--text-secondary)',
+                          '&.Mui-checked': { color: 'var(--accent-primary)' },
+                        }}
+                      />
+                    }
+                    label={<Typography sx={{ color: 'var(--text-primary)' }}>True Democracy (most votes, tie = random)</Typography>}
+                  />
+                </Box>
+              </AccordionDetails>
+            </Accordion>
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>

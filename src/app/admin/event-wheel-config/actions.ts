@@ -1,6 +1,7 @@
 'use server';
 
 import { prisma } from '@lib/prisma';
+import { Prisma } from '@prisma/client';
 import { getCurrentUser } from '@lib/auth';
 import { revalidatePath } from 'next/cache';
 
@@ -9,6 +10,26 @@ export interface EventWheelEntry {
   name: string;
   description: string;
   chance: number;
+  // Wallet & Victory Point Modifiers
+  doubleWalletPoints?: boolean;
+  awardTwoVictoryPoints?: boolean;
+  oddPlacementBonus?: boolean;
+  evenPlacementBonus?: boolean;
+  reverseVpOrder?: boolean;
+  matchWinBonus?: boolean;
+  adminHalveWallet?: boolean;
+  equalSplitWallet?: boolean;
+  halveAllWalletPoints?: boolean;
+  bountyHunter?: boolean;
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic?: boolean;
+  // Event Wheel Modifiers
+  allowMultipleEventSpins?: boolean;
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist?: boolean;
+  trueDemocracyBanlist?: boolean;
+  // Metadata
+  halvedPlayerIds?: number[] | null;
 }
 
 export interface GetEntriesResult {
@@ -21,6 +42,25 @@ export interface CreateEntryInput {
   name: string;
   description: string;
   chance: number;
+  // Wallet & Victory Point Modifiers
+  doubleWalletPoints?: boolean;
+  awardTwoVictoryPoints?: boolean;
+  oddPlacementBonus?: boolean;
+  evenPlacementBonus?: boolean;
+  reverseVpOrder?: boolean;
+  matchWinBonus?: boolean;
+  adminHalveWallet?: boolean;
+  equalSplitWallet?: boolean;
+  halveAllWalletPoints?: boolean;
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic?: boolean;
+  // Event Wheel Modifiers
+  allowMultipleEventSpins?: boolean;
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist?: boolean;
+  trueDemocracyBanlist?: boolean;
+  // Metadata
+  halvedPlayerIds?: number[] | null;
 }
 
 export interface CreateEntryResult {
@@ -82,6 +122,20 @@ export async function getEventWheelEntries(): Promise<GetEntriesResult> {
         name: e.name,
         description: e.description,
         chance: e.chance,
+        doubleWalletPoints: e.doubleWalletPoints,
+        awardTwoVictoryPoints: e.awardTwoVictoryPoints,
+        oddPlacementBonus: e.oddPlacementBonus,
+        evenPlacementBonus: e.evenPlacementBonus,
+        reverseVpOrder: e.reverseVpOrder,
+        matchWinBonus: e.matchWinBonus,
+        adminHalveWallet: e.adminHalveWallet,
+        equalSplitWallet: e.equalSplitWallet,
+        halveAllWalletPoints: e.halveAllWalletPoints,
+        earlyDecklistPublic: e.earlyDecklistPublic,
+        allowMultipleEventSpins: e.allowMultipleEventSpins,
+        skipModeratorRandomBanlist: e.skipModeratorRandomBanlist,
+        trueDemocracyBanlist: e.trueDemocracyBanlist,
+        halvedPlayerIds: e.halvedPlayerIds as number[] | null,
       })),
     };
   } catch (error) {
@@ -133,6 +187,20 @@ export async function createEventWheelEntry(input: CreateEntryInput): Promise<Cr
         name: input.name,
         description: input.description,
         chance: input.chance,
+        doubleWalletPoints: input.doubleWalletPoints || false,
+        awardTwoVictoryPoints: input.awardTwoVictoryPoints || false,
+        oddPlacementBonus: input.oddPlacementBonus || false,
+        evenPlacementBonus: input.evenPlacementBonus || false,
+        reverseVpOrder: input.reverseVpOrder || false,
+        matchWinBonus: input.matchWinBonus || false,
+        adminHalveWallet: input.adminHalveWallet || false,
+        equalSplitWallet: input.equalSplitWallet || false,
+        halveAllWalletPoints: input.halveAllWalletPoints || false,
+        earlyDecklistPublic: input.earlyDecklistPublic || false,
+        allowMultipleEventSpins: input.allowMultipleEventSpins || false,
+        skipModeratorRandomBanlist: input.skipModeratorRandomBanlist || false,
+        trueDemocracyBanlist: input.trueDemocracyBanlist || false,
+        halvedPlayerIds: input.halvedPlayerIds || Prisma.JsonNull,
       },
     });
 
@@ -196,6 +264,20 @@ export async function updateEventWheelEntry(
         name: input.name,
         description: input.description,
         chance: input.chance,
+        doubleWalletPoints: input.doubleWalletPoints || false,
+        awardTwoVictoryPoints: input.awardTwoVictoryPoints || false,
+        oddPlacementBonus: input.oddPlacementBonus || false,
+        evenPlacementBonus: input.evenPlacementBonus || false,
+        reverseVpOrder: input.reverseVpOrder || false,
+        matchWinBonus: input.matchWinBonus || false,
+        adminHalveWallet: input.adminHalveWallet || false,
+        equalSplitWallet: input.equalSplitWallet || false,
+        halveAllWalletPoints: input.halveAllWalletPoints || false,
+        earlyDecklistPublic: input.earlyDecklistPublic || false,
+        allowMultipleEventSpins: input.allowMultipleEventSpins || false,
+        skipModeratorRandomBanlist: input.skipModeratorRandomBanlist || false,
+        trueDemocracyBanlist: input.trueDemocracyBanlist || false,
+        halvedPlayerIds: input.halvedPlayerIds || Prisma.JsonNull,
       },
     });
 

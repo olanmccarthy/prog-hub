@@ -484,7 +484,7 @@ export default function DecklistsPage() {
                                     target.style.display = "none";
                                     const parent = target.parentElement;
                                     if (parent) {
-                                      parent.innerHTML = `<Typography variant="body2" sx={{ color: "var(--text-secondary)", textAlign: "center", p: 2 }}>Image not yet generated. Please finalize standings to generate images.${JSON.stringify(e)}</Typography>`;
+                                      parent.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 16px;">Image not yet generated. Please finalize standings to generate images.</div>`;
                                     }
                                   }}
                                 />

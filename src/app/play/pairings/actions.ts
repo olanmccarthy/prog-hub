@@ -923,7 +923,7 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
 /**
  * Generate deck images for all decklists in a session
  */
-async function generateDecklistImages(sessionId: number): Promise<void> {
+export async function generateDecklistImages(sessionId: number): Promise<void> {
   try {
     // Get the session to find the banlist
     const session = await prisma.session.findUnique({

@@ -48,6 +48,9 @@ model Session {
   fifth  Int?
   sixth  Int?
 
+  // Event tracking (array of event names for multiple spins)
+  selectedEvents String? @map("selected_events") @db.Text
+
   // Relations
   set                Set?                @relation(fields: [setId], references: [id])
   decklists          Decklist[]
@@ -55,11 +58,48 @@ model Session {
   victoryPoints      VictoryPoint[]
   walletTransactions WalletTransaction[]
   transactions       Transaction[]
+  modifiers          SessionModifier?
 
   @@index([active], map: "idx_active")
   @@index([complete], map: "idx_complete")
   @@index([moderatorId], map: "idx_moderator_id")
   @@map("sessions")
+}
+
+model SessionModifier {
+  id        Int @id @default(autoincrement())
+  sessionId Int @unique @map("session_id")
+
+  // Wallet & Victory Point Modifiers (merged from all spun events)
+  doubleWalletPoints    Boolean @default(false) @map("double_wallet_points")
+  awardTwoVictoryPoints Boolean @default(false) @map("award_two_victory_points")
+  oddPlacementBonus     Boolean @default(false) @map("odd_placement_bonus")
+  evenPlacementBonus    Boolean @default(false) @map("even_placement_bonus")
+  reverseVpOrder        Boolean @default(false) @map("reverse_vp_order")
+  matchWinBonus         Boolean @default(false) @map("match_win_bonus")
+  adminHalveWallet      Boolean @default(false) @map("admin_halve_wallet")
+  equalSplitWallet      Boolean @default(false) @map("equal_split_wallet")
+  halveAllWalletPoints  Boolean @default(false) @map("halve_all_wallet_points")
+  bountyHunter          Boolean @default(false) @map("bounty_hunter")
+
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic   Boolean @default(false) @map("early_decklist_public")
+
+  // Event Wheel Modifiers
+  allowMultipleEventSpins Boolean @default(false) @map("allow_multiple_event_spins")
+
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist Boolean @default(false) @map("skip_moderator_random_banlist")
+  trueDemocracyBanlist       Boolean @default(false) @map("true_democracy_banlist")
+
+  // Metadata for admin halve wallet feature (stores array of player IDs)
+  halvedPlayerIds Json? @map("halved_player_ids")
+
+  // Relations
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId], map: "idx_session_modifier_session_id")
+  @@map("session_modifiers")
 }
 
 model Decklist {
@@ -264,6 +304,31 @@ model EventWheelEntry {
   name        String @db.VarChar(255)
   description String @db.Text
   chance      Int
+
+  // Wallet & Victory Point Modifiers
+  doubleWalletPoints    Boolean @default(false) @map("double_wallet_points")
+  awardTwoVictoryPoints Boolean @default(false) @map("award_two_victory_points")
+  oddPlacementBonus     Boolean @default(false) @map("odd_placement_bonus")
+  evenPlacementBonus    Boolean @default(false) @map("even_placement_bonus")
+  reverseVpOrder        Boolean @default(false) @map("reverse_vp_order")
+  matchWinBonus         Boolean @default(false) @map("match_win_bonus")
+  adminHalveWallet      Boolean @default(false) @map("admin_halve_wallet")
+  equalSplitWallet      Boolean @default(false) @map("equal_split_wallet")
+  halveAllWalletPoints  Boolean @default(false) @map("halve_all_wallet_points")
+  bountyHunter          Boolean @default(false) @map("bounty_hunter")
+
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic   Boolean @default(false) @map("early_decklist_public")
+
+  // Event Wheel Modifiers
+  allowMultipleEventSpins Boolean @default(false) @map("allow_multiple_event_spins")
+
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist Boolean @default(false) @map("skip_moderator_random_banlist")
+  trueDemocracyBanlist       Boolean @default(false) @map("true_democracy_banlist")
+
+  // Metadata for admin halve wallet feature (stores array of player IDs)
+  halvedPlayerIds Json? @map("halved_player_ids")
 
   @@map("event_wheel_entries")
 }

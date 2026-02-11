@@ -17,7 +17,7 @@ import CasinoIcon from '@mui/icons-material/Casino';
 import EventWheel from '@components/EventWheel';
 import EventResultModal from '@components/EventResultModal';
 import { WheelConfigSection } from '@components/WheelConfigSection';
-import { getLoserPrizingEntries as getLoserPrizingStatus, spinLoserPrizingWheel, LoserPrizingStatusResult } from './actions';
+import { getLoserPrizingEntries as getLoserPrizingStatus, getPublicLoserPrizingEntries, spinLoserPrizingWheel, LoserPrizingStatusResult } from './actions';
 import {
   getLoserPrizingEntries as getLoserPrizingConfigEntries,
   createLoserPrizingEntry,
@@ -41,6 +41,7 @@ export default function LoserPrizingPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [configEntries, setConfigEntries] = useState<ConfigEntry[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     loadEntries();
@@ -51,10 +52,25 @@ export default function LoserPrizingPage() {
     try {
       setLoading(true);
       setError(null);
-      const result = await getLoserPrizingStatus();
-      setStatus(result);
-      if (!result.success && result.error) {
-        setError(result.error);
+
+      // Try admin action first
+      const adminResult = await getLoserPrizingStatus();
+
+      if (adminResult.success) {
+        // User is admin
+        setIsAdmin(true);
+        setStatus(adminResult);
+      } else if (adminResult.error === 'Admin access required') {
+        // User is not admin, use public action
+        setIsAdmin(false);
+        const publicResult = await getPublicLoserPrizingEntries();
+        setStatus(publicResult);
+        if (!publicResult.success && publicResult.error) {
+          setError(publicResult.error);
+        }
+      } else {
+        // Other error
+        setError(adminResult.error || null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load entries');
@@ -203,12 +219,21 @@ export default function LoserPrizingPage() {
             Spin for Consolation Prize
           </Typography>
 
-          <Typography
-            variant="body2"
-            sx={{ color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 600 }}
-          >
-            This wheel can be spun multiple times. Award prizes to players who didn&apos;t make top placements.
-          </Typography>
+          {isAdmin ? (
+            <Typography
+              variant="body2"
+              sx={{ color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 600 }}
+            >
+              This wheel can be spun multiple times. Award prizes to players who didn&apos;t make top placements.
+            </Typography>
+          ) : (
+            <Typography
+              variant="body2"
+              sx={{ color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 600 }}
+            >
+              View the possible consolation prizes below. Only admins can spin this wheel.
+            </Typography>
+          )}
 
           {wheelSegments.length > 0 && (
             <EventWheel
@@ -219,31 +244,33 @@ export default function LoserPrizingPage() {
             />
           )}
 
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={spinning ? <CircularProgress size={20} /> : <CasinoIcon />}
-            onClick={handleSpin}
-            disabled={spinning || wheelSegments.length === 0}
-            sx={{
-              backgroundColor: wheelSegments.length > 0
-                ? 'var(--accent-primary)'
-                : 'var(--grey-300)',
-              '&:hover': {
+          {isAdmin && (
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={spinning ? <CircularProgress size={20} /> : <CasinoIcon />}
+              onClick={handleSpin}
+              disabled={spinning || wheelSegments.length === 0}
+              sx={{
                 backgroundColor: wheelSegments.length > 0
-                  ? 'var(--accent-blue-hover)'
+                  ? 'var(--accent-primary)'
                   : 'var(--grey-300)',
-              },
-              '&:disabled': {
-                backgroundColor: 'var(--grey-300)',
-                color: 'var(--text-secondary)',
-              },
-              px: 4,
-              py: 1.5,
-            }}
-          >
-            {spinning ? 'Spinning...' : 'Spin the Wheel'}
-          </Button>
+                '&:hover': {
+                  backgroundColor: wheelSegments.length > 0
+                    ? 'var(--accent-blue-hover)'
+                    : 'var(--grey-300)',
+                },
+                '&:disabled': {
+                  backgroundColor: 'var(--grey-300)',
+                  color: 'var(--text-secondary)',
+                },
+                px: 4,
+                py: 1.5,
+              }}
+            >
+              {spinning ? 'Spinning...' : 'Spin the Wheel'}
+            </Button>
+          )}
         </Box>
       </Paper>
 
@@ -339,20 +366,22 @@ export default function LoserPrizingPage() {
         </Paper>
       )}
 
-      {/* Configuration Section */}
-      <WheelConfigSection
-        entries={configEntries}
-        onCreateEntry={createLoserPrizingEntry}
-        onUpdateEntry={updateLoserPrizingEntry}
-        onDeleteEntry={deleteLoserPrizingEntry}
-        onMassUpdate={(updates) => massUpdateLoserPrizingChances({ updates })}
-        onApplyMultiplier={(entryIds, multiplier) =>
-          applyMultiplierToLoserPrizingEntries({ entryIds, multiplier })
-        }
-        onSuccess={setSuccess}
-        onError={setError}
-        onReload={handleReload}
-      />
+      {/* Configuration Section (Admin Only) */}
+      {isAdmin && (
+        <WheelConfigSection
+          entries={configEntries}
+          onCreateEntry={createLoserPrizingEntry}
+          onUpdateEntry={updateLoserPrizingEntry}
+          onDeleteEntry={deleteLoserPrizingEntry}
+          onMassUpdate={(updates) => massUpdateLoserPrizingChances({ updates })}
+          onApplyMultiplier={(entryIds, multiplier) =>
+            applyMultiplierToLoserPrizingEntries({ entryIds, multiplier })
+          }
+          onSuccess={setSuccess}
+          onError={setError}
+          onReload={handleReload}
+        />
+      )}
 
       {/* Result Modal - always allow respin for loser prizing */}
       <EventResultModal

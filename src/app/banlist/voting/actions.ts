@@ -58,6 +58,8 @@ interface GetSuggestionsForVotingResult {
   totalPlayerCount?: number;
   isModerator?: boolean;
   chosenSuggestionId?: number | null;
+  isNonProduction?: boolean;
+  isAdmin?: boolean;
   error?: string;
 }
 
@@ -198,6 +200,8 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
       totalPlayerCount: totalPlayers,
       isModerator,
       chosenSuggestionId: chosenSuggestion?.id || null,
+      isNonProduction: process.env.NODE_ENV !== 'production',
+      isAdmin: user.isAdmin,
     };
   } catch (error) {
     console.error('Error fetching suggestions for voting:', error);
@@ -699,6 +703,97 @@ export async function clearWinningSuggestion(): Promise<SelectWinnerResult> {
       success: false,
       error:
         error instanceof Error ? error.message : 'Failed to clear selection',
+    };
+  }
+}
+
+export interface VoteDetail {
+  suggestionId: number;
+  playerName: string;
+  submittedBy: string;
+  voters: string[];
+}
+
+interface GetVoteDetailsResult {
+  success: boolean;
+  voteDetails?: VoteDetail[];
+  error?: string;
+}
+
+/**
+ * Get detailed vote information (who voted for what).
+ * Available in non-production environments or to admins.
+ */
+export async function getVoteDetails(): Promise<GetVoteDetailsResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Only allow in non-production environments OR for admins
+    if (process.env.NODE_ENV === 'production' && !user.isAdmin) {
+      return {
+        success: false,
+        error: 'Vote details are only available to admins in production',
+      };
+    }
+
+    // Get the active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return {
+        success: false,
+        error: 'No active session found',
+      };
+    }
+
+    // Get the banlist for this session
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!banlist) {
+      return {
+        success: false,
+        error: 'No banlist found for the active session',
+      };
+    }
+
+    // Get all suggestions for this banlist
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      where: { banlistId: banlist.id },
+      include: {
+        player: { select: { name: true } },
+        votes: {
+          include: {
+            player: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const voteDetails: VoteDetail[] = suggestions.map((suggestion) => ({
+      suggestionId: suggestion.id,
+      playerName: suggestion.player.name,
+      submittedBy: suggestion.player.name,
+      voters: suggestion.votes.map((vote) => vote.player.name),
+    }));
+
+    return {
+      success: true,
+      voteDetails,
+    };
+  } catch (error) {
+    console.error('Error fetching vote details:', error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to fetch vote details',
     };
   }
 }

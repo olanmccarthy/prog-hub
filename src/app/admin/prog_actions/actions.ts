@@ -630,6 +630,10 @@ export async function generatePairings(): Promise<GeneratePairingsResult> {
       })),
     });
 
+    // Generate decklist images for all players
+    const { generateDecklistImages } = await import('../../play/pairings/actions');
+    await generateDecklistImages(activeSession.id);
+
     // Send Discord notification with all pairings
     const { notifyNewSessionWithPairings } = await import('@lib/discordClient');
     await notifyNewSessionWithPairings(activeSession.id);
@@ -725,13 +729,22 @@ export async function autoVoteAllPlayers(): Promise<AutoVoteResult> {
       return { success: false, error: 'Only admins can use this test function' };
     }
 
-    // Get most recent banlist
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Get the banlist for the active session
     const banlist = await prisma.banlist.findFirst({
-      orderBy: { id: 'desc' },
+      where: { sessionId: activeSession.number },
     });
 
     if (!banlist) {
-      return { success: false, error: 'No banlist found' };
+      return { success: false, error: `No banlist found for session ${activeSession.number}` };
     }
 
     // Get all suggestions for this banlist
@@ -782,6 +795,7 @@ export async function autoVoteAllPlayers(): Promise<AutoVoteResult> {
       votesCreated += 2;
     }
 
+    revalidatePath('/admin/prog_actions');
     revalidatePath('/banlist/voting');
 
     return {
@@ -807,13 +821,22 @@ export async function autoCreateSuggestions(): Promise<AutoCreateSuggestionsResu
       return { success: false, error: 'Only admins can use this test function' };
     }
 
-    // Get most recent banlist
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return { success: false, error: 'No active session found' };
+    }
+
+    // Get the banlist for the active session
     const banlist = await prisma.banlist.findFirst({
-      orderBy: { id: 'desc' },
+      where: { sessionId: activeSession.number },
     });
 
     if (!banlist) {
-      return { success: false, error: 'No banlist found' };
+      return { success: false, error: `No banlist found for session ${activeSession.number}` };
     }
 
     // Get all players
@@ -927,6 +950,7 @@ export async function autoCreateSuggestions(): Promise<AutoCreateSuggestionsResu
       suggestionsCreated++;
     }
 
+    revalidatePath('/admin/prog_actions');
     revalidatePath('/banlist/voting');
     revalidatePath('/banlist/suggestion-history');
 
@@ -1102,7 +1126,34 @@ export async function resetSession(): Promise<ResetSessionResult> {
       where: { sessionId: activeSession.id },
     });
 
-    // Reset session fields
+    // Get the banlist for this session and delete all suggestions and votes
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (banlist) {
+      // Get all suggestions for this banlist
+      const suggestions = await prisma.banlistSuggestion.findMany({
+        where: { banlistId: banlist.id },
+        select: { id: true },
+      });
+
+      const suggestionIds = suggestions.map(s => s.id);
+
+      if (suggestionIds.length > 0) {
+        // Delete all votes for these suggestions
+        await prisma.banlistSuggestionVote.deleteMany({
+          where: { suggestionId: { in: suggestionIds } },
+        });
+
+        // Delete all suggestions
+        await prisma.banlistSuggestion.deleteMany({
+          where: { banlistId: banlist.id },
+        });
+      }
+    }
+
+    // Reset session fields (including moderatorId)
     await prisma.session.update({
       where: { id: activeSession.id },
       data: {
@@ -1115,6 +1166,7 @@ export async function resetSession(): Promise<ResetSessionResult> {
         fourth: null,
         fifth: null,
         sixth: null,
+        moderatorId: null,
         eventWheelSpun: false,
         victoryPointsAssigned: false,
         walletPointsAssigned: false,
@@ -1126,6 +1178,10 @@ export async function resetSession(): Promise<ResetSessionResult> {
     revalidatePath('/play/standings');
     revalidatePath('/play/decklist-submission');
     revalidatePath('/admin/victory-point-assignment');
+    revalidatePath('/admin/moderator-selection');
+    revalidatePath('/banlist/voting');
+    revalidatePath('/banlist/suggestion');
+    revalidatePath('/banlist/suggestion-history');
 
     return {
       success: true,
@@ -1390,6 +1446,7 @@ export interface SimulateMatchScoresResult {
   success: boolean;
   error?: string;
   pairingsUpdated?: number;
+  message?: string;
 }
 
 /**
@@ -1442,13 +1499,26 @@ export async function simulateMatchScores(): Promise<SimulateMatchScoresResult> 
       });
     }
 
+    // Automatically finalize standings after filling in scores
+    const { finalizeStandings } = await import('../../play/pairings/actions');
+    const finalizeResult = await finalizeStandings(activeSession.id);
+
+    if (!finalizeResult.success) {
+      return {
+        success: false,
+        error: `Scores simulated but failed to finalize standings: ${finalizeResult.error}`,
+      };
+    }
+
     revalidatePath('/admin/prog_actions');
     revalidatePath('/play/pairings');
     revalidatePath('/play/standings');
+    revalidatePath('/admin/victory-point-assignment');
 
     return {
       success: true,
       pairingsUpdated: pairings.length,
+      message: `Simulated scores for ${pairings.length} pairings and finalized standings`,
     };
   } catch (error) {
     console.error('Error simulating match scores:', error);

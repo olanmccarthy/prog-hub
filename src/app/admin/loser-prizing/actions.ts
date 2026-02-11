@@ -26,7 +26,40 @@ export interface SpinLoserPrizingResult {
 }
 
 /**
- * Get all loser prizing entries
+ * Get all loser prizing entries (public - anyone can view)
+ */
+export async function getPublicLoserPrizingEntries(): Promise<LoserPrizingStatusResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return {
+        success: false,
+        error: 'Authentication required',
+        entries: [],
+      };
+    }
+
+    // Get loser prizing entries
+    const entries = await prisma.loserPrizingEntry.findMany({
+      orderBy: { id: 'asc' },
+    });
+
+    return {
+      success: true,
+      entries,
+    };
+  } catch (error) {
+    console.error('Error getting loser prizing entries:', error);
+    return {
+      success: false,
+      error: 'Failed to load loser prizing entries',
+      entries: [],
+    };
+  }
+}
+
+/**
+ * Get all loser prizing entries (admin-only for configuration)
  */
 export async function getLoserPrizingEntries(): Promise<LoserPrizingStatusResult> {
   try {
