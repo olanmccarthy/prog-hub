@@ -900,10 +900,6 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
 
       if (betResult.success) {
         console.log(`Resolved ${betResult.betsResolved} bets for session ${sessionId}`);
-
-        // Send Discord notification for gambling results
-        const { notifyGamblingResults } = await import('@lib/discordClient');
-        await notifyGamblingResults(sessionId);
       } else {
         console.error(`Failed to resolve bets: ${betResult.error}`);
       }
