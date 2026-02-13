@@ -5,6 +5,49 @@ import { getCurrentUser } from '@lib/auth';
 import { saveBanlistImage } from '@lib/banlistImage/saveBanlistImage';
 import { parseBanlistField } from '@lib/banlistHelpers';
 
+// ============================================================================
+// AUTH CHECK
+// ============================================================================
+
+export interface CheckAdminResult {
+  success: boolean;
+  isAdmin: boolean;
+  authenticated: boolean;
+}
+
+/**
+ * Check if current user is authenticated and is admin
+ */
+export async function checkIsAdmin(): Promise<CheckAdminResult> {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return {
+        success: true,
+        isAdmin: false,
+        authenticated: false,
+      };
+    }
+
+    return {
+      success: true,
+      isAdmin: user.isAdmin || false,
+      authenticated: true,
+    };
+  } catch (error) {
+    console.error('Error checking admin status:', error);
+    return {
+      success: true,
+      isAdmin: false,
+      authenticated: false,
+    };
+  }
+}
+
+// ============================================================================
+// BANLIST HISTORY
+// ============================================================================
 
 /**
  * Decode HTML apostrophe entities in card names

@@ -29,6 +29,8 @@ import {
   getPublicLoserPrizingEntries,
   spinLoserPrizingWheel,
   applyLoserPrizingResult,
+  getPlayers,
+  getWalletBalance,
   type LoserPrizingStatusResult,
 } from './actions';
 import {
@@ -115,10 +117,9 @@ export default function LoserPrizingPage() {
 
   const loadPlayers = async () => {
     try {
-      const response = await fetch('/api/players');
-      if (response.ok) {
-        const data = await response.json();
-        setPlayers(data.players || []);
+      const result = await getPlayers();
+      if (result.success && result.players) {
+        setPlayers(result.players);
       }
     } catch (err) {
       console.error('Failed to load players:', err);
@@ -127,10 +128,9 @@ export default function LoserPrizingPage() {
 
   const loadPlayerWalletBalance = async (playerId: number) => {
     try {
-      const response = await fetch(`/api/wallet/${playerId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedPlayerWalletBalance(data.amount || 0);
+      const result = await getWalletBalance(playerId);
+      if (result.success) {
+        setSelectedPlayerWalletBalance(result.amount || 0);
       }
     } catch (err) {
       console.error('Failed to load player wallet balance:', err);

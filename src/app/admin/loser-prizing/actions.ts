@@ -7,6 +7,74 @@ import { requireActiveSession } from '@lib/sessionHelpers';
 import { selectWeightedRandom } from '@lib/randomHelpers';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@lib/auth';
+
+// ============================================================================
+// PLAYER & WALLET QUERIES
+// ============================================================================
+
+export interface GetPlayersResult {
+  success: boolean;
+  players?: Array<{ id: number; name: string }>;
+  error?: string;
+}
+
+export interface GetWalletBalanceResult {
+  success: boolean;
+  amount?: number;
+  error?: string;
+}
+
+/**
+ * Get all players (for loser prizing player selection)
+ */
+export async function getPlayers(): Promise<GetPlayersResult> {
+  try {
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
+    }
+
+    const players = await prisma.player.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    return { success: true, players };
+  } catch (error) {
+    console.error('Error fetching players:', error);
+    return { success: false, error: 'Failed to fetch players' };
+  }
+}
+
+/**
+ * Get wallet balance for a specific player
+ */
+export async function getWalletBalance(playerId: number): Promise<GetWalletBalanceResult> {
+  try {
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
+    }
+
+    const wallet = await prisma.wallet.findUnique({
+      where: { playerId },
+    });
+
+    return { success: true, amount: wallet?.amount || 0 };
+  } catch (error) {
+    console.error('Error fetching wallet balance:', error);
+    return { success: false, error: 'Failed to fetch wallet balance' };
+  }
+}
+
+// ============================================================================
+// LOSER PRIZING
+// ============================================================================
 import {
   updateWallet,
   calculateSessionsSinceLastWin,
