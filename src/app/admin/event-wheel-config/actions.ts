@@ -4,32 +4,13 @@ import { prisma } from '@lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getCurrentUser } from '@lib/auth';
 import { revalidatePath } from 'next/cache';
+import type { SessionModifierFields } from '@/src/types/sessionModifiers';
 
-export interface EventWheelEntry {
+export interface EventWheelEntry extends SessionModifierFields {
   id: number;
   name: string;
   description: string;
   chance: number;
-  // Wallet & Victory Point Modifiers
-  doubleWalletPoints?: boolean;
-  awardTwoVictoryPoints?: boolean;
-  oddPlacementBonus?: boolean;
-  evenPlacementBonus?: boolean;
-  reverseVpOrder?: boolean;
-  matchWinBonus?: boolean;
-  adminHalveWallet?: boolean;
-  equalSplitWallet?: boolean;
-  halveAllWalletPoints?: boolean;
-  bountyHunter?: boolean;
-  // Decklist Visibility Modifiers
-  earlyDecklistPublic?: boolean;
-  // Event Wheel Modifiers
-  allowMultipleEventSpins?: boolean;
-  // Moderator & Banlist Modifiers
-  skipModeratorRandomBanlist?: boolean;
-  trueDemocracyBanlist?: boolean;
-  // Metadata
-  halvedPlayerIds?: number[] | null;
 }
 
 export interface GetEntriesResult {
@@ -38,29 +19,10 @@ export interface GetEntriesResult {
   error?: string;
 }
 
-export interface CreateEntryInput {
+export interface CreateEntryInput extends SessionModifierFields {
   name: string;
   description: string;
   chance: number;
-  // Wallet & Victory Point Modifiers
-  doubleWalletPoints?: boolean;
-  awardTwoVictoryPoints?: boolean;
-  oddPlacementBonus?: boolean;
-  evenPlacementBonus?: boolean;
-  reverseVpOrder?: boolean;
-  matchWinBonus?: boolean;
-  adminHalveWallet?: boolean;
-  equalSplitWallet?: boolean;
-  halveAllWalletPoints?: boolean;
-  // Decklist Visibility Modifiers
-  earlyDecklistPublic?: boolean;
-  // Event Wheel Modifiers
-  allowMultipleEventSpins?: boolean;
-  // Moderator & Banlist Modifiers
-  skipModeratorRandomBanlist?: boolean;
-  trueDemocracyBanlist?: boolean;
-  // Metadata
-  halvedPlayerIds?: number[] | null;
 }
 
 export interface CreateEntryResult {
@@ -131,10 +93,12 @@ export async function getEventWheelEntries(): Promise<GetEntriesResult> {
         adminHalveWallet: e.adminHalveWallet,
         equalSplitWallet: e.equalSplitWallet,
         halveAllWalletPoints: e.halveAllWalletPoints,
+        bountyHunter: e.bountyHunter,
         earlyDecklistPublic: e.earlyDecklistPublic,
         allowMultipleEventSpins: e.allowMultipleEventSpins,
         skipModeratorRandomBanlist: e.skipModeratorRandomBanlist,
         trueDemocracyBanlist: e.trueDemocracyBanlist,
+        gamblingEnabled: e.gamblingEnabled,
         halvedPlayerIds: e.halvedPlayerIds as number[] | null,
       })),
     };
@@ -196,10 +160,12 @@ export async function createEventWheelEntry(input: CreateEntryInput): Promise<Cr
         adminHalveWallet: input.adminHalveWallet || false,
         equalSplitWallet: input.equalSplitWallet || false,
         halveAllWalletPoints: input.halveAllWalletPoints || false,
+        bountyHunter: input.bountyHunter || false,
         earlyDecklistPublic: input.earlyDecklistPublic || false,
         allowMultipleEventSpins: input.allowMultipleEventSpins || false,
         skipModeratorRandomBanlist: input.skipModeratorRandomBanlist || false,
         trueDemocracyBanlist: input.trueDemocracyBanlist || false,
+        gamblingEnabled: input.gamblingEnabled || false,
         halvedPlayerIds: input.halvedPlayerIds || Prisma.JsonNull,
       },
     });
@@ -273,10 +239,12 @@ export async function updateEventWheelEntry(
         adminHalveWallet: input.adminHalveWallet || false,
         equalSplitWallet: input.equalSplitWallet || false,
         halveAllWalletPoints: input.halveAllWalletPoints || false,
+        bountyHunter: input.bountyHunter || false,
         earlyDecklistPublic: input.earlyDecklistPublic || false,
         allowMultipleEventSpins: input.allowMultipleEventSpins || false,
         skipModeratorRandomBanlist: input.skipModeratorRandomBanlist || false,
         trueDemocracyBanlist: input.trueDemocracyBanlist || false,
+        gamblingEnabled: input.gamblingEnabled || false,
         halvedPlayerIds: input.halvedPlayerIds || Prisma.JsonNull,
       },
     });
