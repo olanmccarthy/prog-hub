@@ -32,58 +32,19 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
+import type { SessionModifierFields } from '@/src/types/sessionModifiers';
 
-export interface WheelEntry {
+export interface WheelEntry extends SessionModifierFields {
   id: number;
   name: string;
   description: string;
   chance: number;
-  // Wallet & Victory Point Modifiers
-  doubleWalletPoints?: boolean;
-  awardTwoVictoryPoints?: boolean;
-  oddPlacementBonus?: boolean;
-  evenPlacementBonus?: boolean;
-  reverseVpOrder?: boolean;
-  matchWinBonus?: boolean;
-  adminHalveWallet?: boolean;
-  equalSplitWallet?: boolean;
-  halveAllWalletPoints?: boolean;
-  bountyHunter?: boolean;
-  // Decklist Visibility Modifiers
-  earlyDecklistPublic?: boolean;
-  // Event Wheel Modifiers
-  allowMultipleEventSpins?: boolean;
-  // Moderator & Banlist Modifiers
-  skipModeratorRandomBanlist?: boolean;
-  trueDemocracyBanlist?: boolean;
-  // Metadata
-  halvedPlayerIds?: number[] | null;
 }
 
-export interface CreateEntryInput {
+export interface CreateEntryInput extends SessionModifierFields {
   name: string;
   description: string;
   chance: number;
-  // Wallet & Victory Point Modifiers
-  doubleWalletPoints?: boolean;
-  awardTwoVictoryPoints?: boolean;
-  oddPlacementBonus?: boolean;
-  evenPlacementBonus?: boolean;
-  reverseVpOrder?: boolean;
-  matchWinBonus?: boolean;
-  adminHalveWallet?: boolean;
-  equalSplitWallet?: boolean;
-  halveAllWalletPoints?: boolean;
-  bountyHunter?: boolean;
-  // Decklist Visibility Modifiers
-  earlyDecklistPublic?: boolean;
-  // Event Wheel Modifiers
-  allowMultipleEventSpins?: boolean;
-  // Moderator & Banlist Modifiers
-  skipModeratorRandomBanlist?: boolean;
-  trueDemocracyBanlist?: boolean;
-  // Metadata
-  halvedPlayerIds?: number[] | null;
 }
 
 interface WheelConfigSectionProps {

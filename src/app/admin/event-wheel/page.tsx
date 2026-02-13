@@ -34,8 +34,8 @@ import {
   manuallyApplyEventEntry,
   resetSessionModifiers,
   EventWheelStatusResult,
-  SessionModifiers,
 } from './actions';
+import type { SessionModifiers } from '@/src/types/sessionModifiers';
 import {
   getEventWheelEntries,
   createEventWheelEntry,

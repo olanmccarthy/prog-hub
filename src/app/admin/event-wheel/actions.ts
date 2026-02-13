@@ -7,6 +7,7 @@ import { selectWeightedRandom } from '@lib/randomHelpers';
 import { mergeSessionModifiers } from '@lib/sessionModifierHelpers';
 import { revalidatePath } from 'next/cache';
 import type { EventWheelEntry } from '@prisma/client';
+import type { SessionModifiers } from '@/src/types/sessionModifiers';
 
 export interface EventWheelStatusResult {
   success: boolean;
@@ -25,25 +26,6 @@ export interface SpinWheelResult {
     name: string;
     description: string;
   } | null;
-}
-
-export interface SessionModifiers {
-  doubleWalletPoints: boolean;
-  awardTwoVictoryPoints: boolean;
-  oddPlacementBonus: boolean;
-  evenPlacementBonus: boolean;
-  reverseVpOrder: boolean;
-  matchWinBonus: boolean;
-  adminHalveWallet: boolean;
-  equalSplitWallet: boolean;
-  halveAllWalletPoints: boolean;
-  bountyHunter: boolean;
-  earlyDecklistPublic: boolean;
-  allowMultipleEventSpins: boolean;
-  skipModeratorRandomBanlist: boolean;
-  trueDemocracyBanlist: boolean;
-  gamblingEnabled: boolean;
-  halvedPlayerIds: number[] | null;
 }
 
 export interface GetActiveModifiersResult {

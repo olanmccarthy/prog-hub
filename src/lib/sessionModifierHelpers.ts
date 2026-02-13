@@ -1,25 +1,4 @@
-/**
- * Session modifiers that can be applied via event wheel outcomes.
- * Matches the SessionModifier model in the Prisma schema.
- */
-export interface SessionModifiers {
-  doubleWalletPoints?: boolean;
-  awardTwoVictoryPoints?: boolean;
-  oddPlacementBonus?: boolean;
-  evenPlacementBonus?: boolean;
-  reverseVpOrder?: boolean;
-  matchWinBonus?: boolean;
-  adminHalveWallet?: boolean;
-  equalSplitWallet?: boolean;
-  halveAllWalletPoints?: boolean;
-  bountyHunter?: boolean;
-  earlyDecklistPublic?: boolean;
-  allowMultipleEventSpins?: boolean;
-  skipModeratorRandomBanlist?: boolean;
-  trueDemocracyBanlist?: boolean;
-  gamblingEnabled?: boolean;
-  halvedPlayerIds?: number[] | null;
-}
+import type { SessionModifiers } from '@/src/types/sessionModifiers';
 
 /**
  * Merges new session modifiers into existing modifiers.
