@@ -18,7 +18,7 @@ const sqsClient = new SQSClient({
 const QUEUE_URL = process.env.DISCORD_SQS_QUEUE_URL || '';
 
 interface NotificationMessage {
-  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists' | 'error';
+  type: 'session-pairings' | 'pairings' | 'standings' | 'new-session' | 'banlist-chosen' | 'banlist-suggestions' | 'leaderboard' | 'wallet-update' | 'transaction' | 'decklists' | 'gambling-results' | 'error';
   payload: Record<string, unknown>;
 }
 
@@ -162,6 +162,17 @@ export async function notifyDecklists(sessionId: number): Promise<boolean> {
   console.log(`[DiscordClient] Queuing decklists notification for session ${sessionId}`);
   return sendToQueue({
     type: 'decklists',
+    payload: { sessionId },
+  });
+}
+
+/**
+ * Send notification when gambling bets are resolved
+ */
+export async function notifyGamblingResults(sessionId: number): Promise<boolean> {
+  console.log(`[DiscordClient] Queuing gambling results notification for session ${sessionId}`);
+  return sendToQueue({
+    type: 'gambling-results',
     payload: { sessionId },
   });
 }

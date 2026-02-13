@@ -1,26 +1,11 @@
 'use server';
 
 import { prisma } from '@lib/prisma';
-import { getCurrentUser } from '@lib/auth';
+import { requireAuth } from '@lib/serverUtils';
+import { getActiveSession } from '@lib/sessionHelpers';
+import { parseBanlistField } from '@lib/banlistHelpers';
 import { getMostRecentBanlist } from '../actions';
 import { revalidatePath } from 'next/cache';
-
-/**
- * Helper function to parse banlist field (handles both string and array)
- */
-function parseBanlistField(field: unknown): number[] {
-  if (!field) return [];
-  if (typeof field === 'string') {
-    if (field.trim() === '') return [];
-    try {
-      return JSON.parse(field) as number[];
-    } catch {
-      return [];
-    }
-  }
-  if (Array.isArray(field)) return field;
-  return [];
-}
 
 /**
  * Decode HTML apostrophe entities in card names
@@ -65,15 +50,14 @@ interface GetSuggestionsForVotingResult {
 
 export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsForVotingResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Get the active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return {
@@ -140,12 +124,12 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
 
     // Collect all unique card IDs from all suggestions
     const allCardIds = new Set<number>();
-    suggestions.forEach(s => {
-      parseBanlistField(s.banned).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.limited).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.semilimited).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.unlimited).forEach(id => allCardIds.add(id));
-    });
+    for (const s of suggestions) {
+      (await parseBanlistField(s.banned)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.limited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.semilimited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.unlimited)).forEach(id => allCardIds.add(id));
+    }
 
     // Batch fetch all cards in one query
     const cards = await prisma.card.findMany({
@@ -168,11 +152,11 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
 
     return {
       success: true,
-      suggestions: suggestions.map((s) => {
-        const banned = parseBanlistField(s.banned);
-        const limited = parseBanlistField(s.limited);
-        const semilimited = parseBanlistField(s.semilimited);
-        const unlimited = parseBanlistField(s.unlimited);
+      suggestions: await Promise.all(suggestions.map(async (s) => {
+        const banned = await parseBanlistField(s.banned);
+        const limited = await parseBanlistField(s.limited);
+        const semilimited = await parseBanlistField(s.semilimited);
+        const unlimited = await parseBanlistField(s.unlimited);
 
         return {
           id: s.id,
@@ -190,7 +174,7 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
           voteCount: s.votes.length,
           comment: s.comment || undefined,
         };
-      }),
+      })),
       currentUserId: user.playerId,
       hasVoted,
       userVotedIds,
@@ -252,10 +236,10 @@ async function createBanlistFromWinningSuggestion(
 
     // Parse current lists and create Sets for lookup
     // Ensure we're working with arrays of numbers, not strings
-    const currentBannedArray = parseBanlistField(currentBanlist.banned);
-    const currentLimitedArray = parseBanlistField(currentBanlist.limited);
-    const currentSemilimitedArray = parseBanlistField(currentBanlist.semilimited);
-    const currentUnlimitedArray = parseBanlistField(currentBanlist.unlimited);
+    const currentBannedArray = await parseBanlistField(currentBanlist.banned);
+    const currentLimitedArray = await parseBanlistField(currentBanlist.limited);
+    const currentSemilimitedArray = await parseBanlistField(currentBanlist.semilimited);
+    const currentUnlimitedArray = await parseBanlistField(currentBanlist.unlimited);
 
     // Double-check these are arrays (defensive programming)
     if (!Array.isArray(currentBannedArray) || !Array.isArray(currentLimitedArray) ||
@@ -414,15 +398,14 @@ export async function selectWinningSuggestion(
   suggestionId: number,
 ): Promise<SelectWinnerResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Get active session to check moderator
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -491,10 +474,10 @@ export async function selectWinningSuggestion(
     const banlistResult = await createBanlistFromWinningSuggestion(
       suggestion.banlistId,
       {
-        banned: parseBanlistField(suggestion.banned),
-        limited: parseBanlistField(suggestion.limited),
-        semilimited: parseBanlistField(suggestion.semilimited),
-        unlimited: parseBanlistField(suggestion.unlimited),
+        banned: await parseBanlistField(suggestion.banned),
+        limited: await parseBanlistField(suggestion.limited),
+        semilimited: await parseBanlistField(suggestion.semilimited),
+        unlimited: await parseBanlistField(suggestion.unlimited),
       },
     );
 
@@ -513,10 +496,10 @@ export async function selectWinningSuggestion(
         const { saveBanlistImage } = await import('@lib/banlistImage');
         await saveBanlistImage({
           sessionNumber: newBanlist.sessionId,
-          banned: parseBanlistField(newBanlist.banned),
-          limited: parseBanlistField(newBanlist.limited),
-          semilimited: parseBanlistField(newBanlist.semilimited),
-          unlimited: parseBanlistField(newBanlist.unlimited),
+          banned: await parseBanlistField(newBanlist.banned),
+          limited: await parseBanlistField(newBanlist.limited),
+          semilimited: await parseBanlistField(newBanlist.semilimited),
+          unlimited: await parseBanlistField(newBanlist.unlimited),
         });
         console.log(`Banlist image generated for session ${newBanlist.sessionId}`);
       } catch (imageError) {
@@ -553,10 +536,11 @@ export async function submitVotes(
   suggestionIds: number[],
 ): Promise<SubmitVotesResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Validate minimum votes
     if (suggestionIds.length < 2) {
@@ -624,15 +608,14 @@ export async function submitVotes(
 
 export async function clearWinningSuggestion(): Promise<SelectWinnerResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Get the active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return {
@@ -726,10 +709,11 @@ interface GetVoteDetailsResult {
  */
 export async function getVoteDetails(): Promise<GetVoteDetailsResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Only allow in non-production environments OR for admins
     if (process.env.NODE_ENV === 'production' && !user.isAdmin) {
@@ -740,9 +724,7 @@ export async function getVoteDetails(): Promise<GetVoteDetailsResult> {
     }
 
     // Get the active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return {

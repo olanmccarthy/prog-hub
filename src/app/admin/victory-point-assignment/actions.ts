@@ -1,7 +1,8 @@
 'use server';
 
 import { prisma } from '@lib/prisma';
-import { getCurrentUser } from '@lib/auth';
+import { requireAdmin } from '@lib/serverUtils';
+import { getActiveSession } from '@lib/sessionHelpers';
 import { revalidatePath } from 'next/cache';
 
 export interface RankedPlayer {
@@ -39,11 +40,11 @@ export interface AssignVictoryPointResult {
  */
 export async function getVictoryPointStatus(): Promise<VictoryPointStatusResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return {
         success: false,
-        error: 'Admin access required',
+        error: authResult.error,
         canAssign: false,
         rankedPlayers: [],
         alreadyAssigned: false,
@@ -461,18 +462,11 @@ export async function assignVictoryPoint(
   rankedPlayers: RankedPlayer[]
 ): Promise<AssignVictoryPointResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
-      return {
-        success: false,
-        error: 'Admin access required',
-      };
-    }
+    const authResult = await requireAdmin();
+    if (!authResult.success) return authResult;
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return {
@@ -514,6 +508,10 @@ export async function assignVictoryPoint(
         error: 'Selected player not found in rankings',
       };
     }
+
+    // Loser Prizing: "Why Not Both?" - check if special player can take both VP and wallet
+    const canTakeBoth = modifiers?.loserPrizingTakeVpAndWallet &&
+                        modifiers.loserPrizingPlayerId === selectedPlayerId;
 
     // Modifier 2: Award 2 VP instead of 1
     const vpCount = modifiers?.awardTwoVictoryPoints ? 2 : 1;
@@ -642,7 +640,12 @@ export async function assignVictoryPoint(
       );
 
       // Award wallet points based on original ranking position
-      for (const player of playersForWalletPoints) {
+      // If "Why Not Both?" is active, also award to the VP taker
+      const allEligiblePlayers = canTakeBoth
+        ? rankedPlayers.filter(p => p.playerId !== lastPlacePlayer.playerId)
+        : playersForWalletPoints;
+
+      for (const player of allEligiblePlayers) {
         let pointsToAward = walletPoints[player.rank - 1] || 0;
 
         // Modifier 3 & 4: Odd/even placement bonuses
@@ -664,6 +667,14 @@ export async function assignVictoryPoint(
           pointsToAward += bountyBonus;
         }
 
+        // Loser Prizing: Crazy Time - double points for specific player
+        if (
+          modifiers?.loserPrizingDoublePoints &&
+          modifiers.loserPrizingPlayerId === player.playerId
+        ) {
+          pointsToAward *= 2;
+        }
+
         // Modifier 9: Admin halve wallet for specific players
         if (
           modifiers?.adminHalveWallet &&
@@ -671,6 +682,55 @@ export async function assignVictoryPoint(
           modifiers.halvedPlayerIds.includes(player.playerId)
         ) {
           pointsToAward = Math.floor(pointsToAward / 2);
+        }
+
+        // Loser Prizing: Dead Weight - split points with target player
+        if (
+          modifiers?.loserPrizingSharedPoints &&
+          modifiers.loserPrizingPlayerId === player.playerId &&
+          modifiers.loserPrizingTargetPlayerId
+        ) {
+          const halfPoints = Math.floor(pointsToAward / 2);
+
+          // Give half to main player
+          if (halfPoints > 0) {
+            const wallet = await prisma.wallet.upsert({
+              where: { playerId: player.playerId },
+              update: { amount: { increment: halfPoints } },
+              create: { playerId: player.playerId, amount: halfPoints },
+            });
+
+            await prisma.walletTransaction.create({
+              data: {
+                walletId: wallet.id,
+                sessionId: activeSession.id,
+                amount: halfPoints,
+                type: 'VICTORY_POINT_AWARD',
+                description: `Session ${activeSession.number} - Dead Weight (shared)`,
+              },
+            });
+          }
+
+          // Give half to target player
+          if (halfPoints > 0) {
+            const targetWallet = await prisma.wallet.upsert({
+              where: { playerId: modifiers.loserPrizingTargetPlayerId },
+              update: { amount: { increment: halfPoints } },
+              create: { playerId: modifiers.loserPrizingTargetPlayerId, amount: halfPoints },
+            });
+
+            await prisma.walletTransaction.create({
+              data: {
+                walletId: targetWallet.id,
+                sessionId: activeSession.id,
+                amount: halfPoints,
+                type: 'LOSER_PRIZING',
+                description: `Session ${activeSession.number} - Dead Weight (received share)`,
+              },
+            });
+          }
+
+          continue; // Skip normal wallet award for this player
         }
 
         if (pointsToAward > 0) {
@@ -689,16 +749,46 @@ export async function assignVictoryPoint(
           });
 
           // Create wallet transaction record
+          const description = canTakeBoth && player.playerId === selectedPlayerId
+            ? `Session ${activeSession.number} - Why Not Both? (VP + Wallet)`
+            : `Session ${activeSession.number} - ${player.rank}${player.rank === 1 ? 'st' : player.rank === 2 ? 'nd' : player.rank === 3 ? 'rd' : 'th'} place award (VP declined)`;
+
           await prisma.walletTransaction.create({
             data: {
               walletId: wallet.id,
               sessionId: activeSession.id,
               amount: pointsToAward,
               type: 'VICTORY_POINT_AWARD',
-              description: `Session ${activeSession.number} - ${player.rank}${player.rank === 1 ? 'st' : player.rank === 2 ? 'nd' : player.rank === 3 ? 'rd' : 'th'} place award (VP declined)`,
+              description,
             },
           });
         }
+      }
+    }
+
+    // Loser Prizing: The Market is Going to go Up - payout investment if player placed 1st or 2nd
+    if (
+      modifiers?.loserPrizingInvestment &&
+      modifiers.loserPrizingPlayerId
+    ) {
+      const investorPlayer = rankedPlayers.find(p => p.playerId === modifiers.loserPrizingPlayerId);
+      if (investorPlayer && (investorPlayer.rank === 1 || investorPlayer.rank === 2)) {
+        const payout = modifiers.loserPrizingInvestment * 2;
+        const wallet = await prisma.wallet.upsert({
+          where: { playerId: modifiers.loserPrizingPlayerId },
+          update: { amount: { increment: payout } },
+          create: { playerId: modifiers.loserPrizingPlayerId, amount: payout },
+        });
+
+        await prisma.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            sessionId: activeSession.id,
+            amount: payout,
+            type: 'LOSER_PRIZING',
+            description: `The Market investment payout (${investorPlayer.rank}${investorPlayer.rank === 1 ? 'st' : 'nd'} place)`,
+          },
+        });
       }
     }
 

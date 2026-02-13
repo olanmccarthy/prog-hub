@@ -5,10 +5,8 @@ import {
   Container,
   Typography,
   Box,
-  Alert,
-  CircularProgress,
-  Button,
 } from '@mui/material';
+import { LoadingBox, ErrorAlert, PrimaryButton } from '@/src/components';
 import {
   getBanlistSuggestionsForVoting,
   submitVotes,
@@ -168,9 +166,7 @@ export default function BanlistVotingPage() {
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-          <CircularProgress />
-        </Box>
+        <LoadingBox minHeight="400px" />
       </Container>
     );
   }
@@ -186,29 +182,16 @@ export default function BanlistVotingPage() {
         {sessionNumber && ` - Session ${sessionNumber}`}
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
 
       {/* Admin button to toggle vote details (only in production) */}
       {!isNonProduction && isAdmin && submissionCount >= totalPlayerCount && (
         <Box sx={{ mb: 3 }}>
-          <Button
-            variant="outlined"
+          <PrimaryButton
             onClick={() => setShowVoteDetails(!showVoteDetails)}
-            sx={{
-              color: 'var(--text-primary)',
-              borderColor: 'var(--border-color)',
-              '&:hover': {
-                borderColor: 'var(--accent-primary)',
-                backgroundColor: 'var(--hover-light-grey)',
-              },
-            }}
           >
             {showVoteDetails ? 'Hide Vote Details' : 'Show Vote Details (Admin)'}
-          </Button>
+          </PrimaryButton>
         </Box>
       )}
 

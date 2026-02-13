@@ -3,6 +3,7 @@
 import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 import { saveDeckImage } from "@lib/deckImage/saveDeckImage";
+import { parseBanlistField } from "@lib/banlistHelpers";
 
 export interface DecklistWithDetails {
   id: number;
@@ -413,20 +414,6 @@ function parseDeckField(field: unknown): number[] {
   return [];
 }
 
-function parseBanlistField(field: unknown): number[] {
-  if (typeof field === 'string') {
-    try {
-      const parsed = JSON.parse(field);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  if (Array.isArray(field)) {
-    return field;
-  }
-  return [];
-}
 
 interface RegenerateDeckImageResult {
   success: boolean;
@@ -478,10 +465,10 @@ export async function regenerateDeckImage(
     const banlistData = banlist
       ? {
           sessionNumber: decklist.session.number,
-          banned: parseBanlistField(banlist.banned),
-          limited: parseBanlistField(banlist.limited),
-          semilimited: parseBanlistField(banlist.semilimited),
-          unlimited: parseBanlistField(banlist.unlimited),
+          banned: await parseBanlistField(banlist.banned),
+          limited: await parseBanlistField(banlist.limited),
+          semilimited: await parseBanlistField(banlist.semilimited),
+          unlimited: await parseBanlistField(banlist.unlimited),
         }
       : undefined;
 

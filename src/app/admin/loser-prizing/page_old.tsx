@@ -3,34 +3,21 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
+  Button,
   Typography,
+  Alert,
+  CircularProgress,
   Paper,
   List,
   ListItem,
   ListItemText,
   Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from '@mui/material';
-import {
-  LoadingBox,
-  ErrorAlert,
-  SuccessAlert,
-  PrimaryButton,
-} from '@/src/components';
 import CasinoIcon from '@mui/icons-material/Casino';
 import EventWheel from '@components/EventWheel';
-import LoserPrizingResultModal from '@components/LoserPrizingResultModal';
+import EventResultModal from '@components/EventResultModal';
 import { WheelConfigSection } from '@components/WheelConfigSection';
-import {
-  getLoserPrizingEntries as getLoserPrizingStatus,
-  getPublicLoserPrizingEntries,
-  spinLoserPrizingWheel,
-  applyLoserPrizingResult,
-  type LoserPrizingStatusResult,
-} from './actions';
+import { getLoserPrizingEntries as getLoserPrizingStatus, getPublicLoserPrizingEntries, spinLoserPrizingWheel, LoserPrizingStatusResult } from './actions';
 import {
   getLoserPrizingEntries as getLoserPrizingConfigEntries,
   createLoserPrizingEntry,
@@ -41,11 +28,6 @@ import {
   type LoserPrizingEntry as ConfigEntry,
 } from '../loser-prizing-config/actions';
 
-interface Player {
-  id: number;
-  name: string;
-}
-
 export default function LoserPrizingPage() {
   const [status, setStatus] = useState<LoserPrizingStatusResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,26 +35,17 @@ export default function LoserPrizingPage() {
   const [targetIndex, setTargetIndex] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [selectedResult, setSelectedResult] = useState<{
-    id: number;
     name: string;
     description: string;
-    automationType: string | null;
-    requiresPlayerSelection: boolean;
-    requiresInput: boolean;
-    allowsRespin: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [configEntries, setConfigEntries] = useState<ConfigEntry[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
-  const [selectedPlayerWalletBalance, setSelectedPlayerWalletBalance] = useState<number>(0);
 
   useEffect(() => {
     loadEntries();
     loadConfigEntries();
-    loadPlayers();
   }, []);
 
   const loadEntries = async () => {
@@ -80,12 +53,15 @@ export default function LoserPrizingPage() {
       setLoading(true);
       setError(null);
 
+      // Try admin action first
       const adminResult = await getLoserPrizingStatus();
 
       if (adminResult.success) {
+        // User is admin
         setIsAdmin(true);
         setStatus(adminResult);
       } else if (adminResult.error === 'Admin access required') {
+        // User is not admin, use public action
         setIsAdmin(false);
         const publicResult = await getPublicLoserPrizingEntries();
         setStatus(publicResult);
@@ -93,6 +69,7 @@ export default function LoserPrizingPage() {
           setError(publicResult.error);
         }
       } else {
+        // Other error
         setError(adminResult.error || null);
       }
     } catch (err) {
@@ -107,34 +84,11 @@ export default function LoserPrizingPage() {
       const result = await getLoserPrizingConfigEntries();
       if (result.success && result.entries) {
         setConfigEntries(result.entries);
+      } else {
+        setError(result.error || 'Failed to load config entries');
       }
     } catch (err) {
-      console.error('Failed to load config entries:', err);
-    }
-  };
-
-  const loadPlayers = async () => {
-    try {
-      const response = await fetch('/api/players');
-      if (response.ok) {
-        const data = await response.json();
-        setPlayers(data.players || []);
-      }
-    } catch (err) {
-      console.error('Failed to load players:', err);
-    }
-  };
-
-  const loadPlayerWalletBalance = async (playerId: number) => {
-    try {
-      const response = await fetch(`/api/wallet/${playerId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedPlayerWalletBalance(data.amount || 0);
-      }
-    } catch (err) {
-      console.error('Failed to load player wallet balance:', err);
-      setSelectedPlayerWalletBalance(0);
+      setError(err instanceof Error ? err.message : 'Failed to load config entries');
     }
   };
 
@@ -157,9 +111,9 @@ export default function LoserPrizingPage() {
 
       setSelectedResult(result.selectedEntry || null);
 
-      if (result.selectedEntry && result.selectedEntry.id !== -1) {
+      if (result.selectedEntry) {
         const index = status?.entries.findIndex(
-          (e) => e.id === result.selectedEntry!.id
+          (e) => e.name === result.selectedEntry!.name
         );
         if (index !== undefined && index >= 0) {
           setTargetIndex(index);
@@ -177,17 +131,14 @@ export default function LoserPrizingPage() {
     }
   };
 
-  const handleSpinComplete = async () => {
-    if (selectedPlayerId) {
-      await loadPlayerWalletBalance(selectedPlayerId);
-    }
+  const handleSpinComplete = () => {
     setShowResult(true);
+    setSuccess('Loser prizing wheel spun successfully!');
     setSpinning(false);
   };
 
   const handleCloseResult = () => {
     setShowResult(false);
-    setSuccess(null);
   };
 
   const handleSpinAgain = () => {
@@ -197,37 +148,19 @@ export default function LoserPrizingPage() {
     handleSpin();
   };
 
-  const handleApplyResult = async (targetPlayerId?: number, investmentAmount?: number, vendorAction?: 'sell' | 'buyback') => {
-    if (!selectedResult || selectedResult.id === -1) {
-      setError('No result to apply');
-      return;
-    }
-
-    if (!selectedPlayerId) {
-      setError('Please select a player to receive the loser prizing');
-      return;
-    }
-
-    const result = await applyLoserPrizingResult(
-      selectedPlayerId,
-      selectedResult.id,
-      targetPlayerId,
-      investmentAmount,
-      vendorAction
-    );
-
-    if (result.success) {
-      setSuccess(result.message || 'Result applied successfully');
-      if (result.requiresRespin) {
-        handleSpinAgain();
-      }
-    } else {
-      setError(result.error || 'Failed to apply result');
-    }
-  };
-
   if (loading) {
-    return <LoadingBox minHeight="400px" />;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '400px',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
   }
 
   const wheelSegments = status?.entries
@@ -259,8 +192,17 @@ export default function LoserPrizingPage() {
         Loser Prizing Wheel
       </Typography>
 
-      <ErrorAlert message={error} onClose={() => setError(null)} />
-      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
+          {success}
+        </Alert>
+      )}
 
       {/* Loser Prizing Wheel Section */}
       <Paper
@@ -282,7 +224,7 @@ export default function LoserPrizingPage() {
               variant="body2"
               sx={{ color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 600 }}
             >
-              The loser prizing wheel is a required step before completing a session. It can only be spun after the moderator has chosen the winning banlist.
+              This wheel can be spun multiple times. Award prizes to players who didn&apos;t make top placements.
             </Typography>
           ) : (
             <Typography
@@ -291,35 +233,6 @@ export default function LoserPrizingPage() {
             >
               View the possible consolation prizes below. Only admins can spin this wheel.
             </Typography>
-          )}
-
-          {isAdmin && (
-            <FormControl fullWidth sx={{ maxWidth: 400, mb: 2 }}>
-              <InputLabel sx={{ color: 'var(--text-secondary)' }}>
-                Select Player for Loser Prizing
-              </InputLabel>
-              <Select
-                value={selectedPlayerId || ''}
-                onChange={(e) => setSelectedPlayerId(Number(e.target.value))}
-                label="Select Player for Loser Prizing"
-                sx={{
-                  backgroundColor: 'var(--input-bg)',
-                  color: 'var(--text-bright)',
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: 'var(--input-border)',
-                  },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: 'var(--accent-primary)',
-                  },
-                }}
-              >
-                {players.map((player) => (
-                  <MenuItem key={player.id} value={player.id}>
-                    {player.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
           )}
 
           {wheelSegments.length > 0 && (
@@ -332,15 +245,31 @@ export default function LoserPrizingPage() {
           )}
 
           {isAdmin && (
-            <PrimaryButton
+            <Button
+              variant="contained"
               size="large"
-              startIcon={<CasinoIcon />}
+              startIcon={spinning ? <CircularProgress size={20} /> : <CasinoIcon />}
               onClick={handleSpin}
-              disabled={spinning || wheelSegments.length === 0 || !selectedPlayerId}
-              sx={{ px: 4, py: 1.5 }}
+              disabled={spinning || wheelSegments.length === 0}
+              sx={{
+                backgroundColor: wheelSegments.length > 0
+                  ? 'var(--accent-primary)'
+                  : 'var(--grey-300)',
+                '&:hover': {
+                  backgroundColor: wheelSegments.length > 0
+                    ? 'var(--accent-blue-hover)'
+                    : 'var(--grey-300)',
+                },
+                '&:disabled': {
+                  backgroundColor: 'var(--grey-300)',
+                  color: 'var(--text-secondary)',
+                },
+                px: 4,
+                py: 1.5,
+              }}
             >
-              {spinning ? 'Spinning...' : selectedPlayerId ? 'Spin the Wheel' : 'Select Player First'}
-            </PrimaryButton>
+              {spinning ? 'Spinning...' : 'Spin the Wheel'}
+            </Button>
           )}
         </Box>
       </Paper>
@@ -374,22 +303,6 @@ export default function LoserPrizingPage() {
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
                             {entry.name}
-                            {entry.automationType && entry.automationType !== 'MANUAL' && (
-                              <Typography
-                                component="span"
-                                sx={{
-                                  ml: 1,
-                                  fontSize: '0.75rem',
-                                  color: 'var(--success)',
-                                  backgroundColor: 'rgba(78, 201, 176, 0.1)',
-                                  px: 1,
-                                  py: 0.25,
-                                  borderRadius: 1,
-                                }}
-                              >
-                                AUTO
-                              </Typography>
-                            )}
                           </Typography>
                           <Typography
                             sx={{
@@ -470,15 +383,13 @@ export default function LoserPrizingPage() {
         />
       )}
 
-      {/* Result Modal with automation */}
-      <LoserPrizingResultModal
+      {/* Result Modal - always allow respin for loser prizing */}
+      <EventResultModal
         open={showResult}
         onClose={handleCloseResult}
         onSpinAgain={handleSpinAgain}
-        onApply={handleApplyResult}
         result={selectedResult}
-        players={players}
-        playerWalletBalance={selectedPlayerWalletBalance}
+        alreadySpun={false}
       />
     </Box>
   );

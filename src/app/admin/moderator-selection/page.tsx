@@ -3,16 +3,21 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Alert,
-  CircularProgress,
   Paper,
   FormGroup,
   FormControlLabel,
   Checkbox,
   Chip,
 } from '@mui/material';
+import {
+  LoadingBox,
+  ErrorAlert,
+  SuccessAlert,
+  InfoAlert,
+  WarningAlert,
+  PrimaryButton,
+} from '@/src/components';
 import CasinoIcon from '@mui/icons-material/Casino';
 import EventWheel from '@components/EventWheel';
 import EventResultModal from '@components/EventResultModal';
@@ -181,18 +186,7 @@ export default function ModeratorSelectionPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   // Prepare wheel segments from eligible players
@@ -214,35 +208,20 @@ export default function ModeratorSelectionPage() {
         Moderator Selection
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
       {/* Already Selected State */}
       {status?.alreadySelected && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Moderator has already been selected for Session #{status.activeSessionNumber}
-          {status.selectedModeratorName && (
-            <Typography component="span" sx={{ fontWeight: 'bold', ml: 1 }}>
-              - {status.selectedModeratorName}
-            </Typography>
-          )}
-        </Alert>
+        <SuccessAlert
+          message={`Moderator has already been selected for Session #${status.activeSessionNumber}${status.selectedModeratorName ? ` - ${status.selectedModeratorName}` : ''}`}
+          onClose={() => {}}
+        />
       )}
 
       {/* Not Ready State */}
       {!status?.canSpin && !status?.alreadySelected && status?.reason && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          {status.reason}
-        </Alert>
+        <WarningAlert message={status.reason} onClose={() => {}} />
       )}
 
       {/* Player Selection Section */}
@@ -324,34 +303,21 @@ export default function ModeratorSelectionPage() {
               {status?.activeSessionNumber && `Session #${status.activeSessionNumber} - RNG Moderation`}
             </Typography>
 
-            <Alert severity="info" sx={{ width: '100%', maxWidth: 600 }}>
-              RNG Moderation is active! No moderator will be selected. Instead, a random banlist
-              suggestion with 2+ votes will be chosen automatically.
-            </Alert>
+            <InfoAlert
+              message="RNG Moderation is active! No moderator will be selected. Instead, a random banlist suggestion with 2+ votes will be chosen automatically."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
 
-            <Button
-              variant="contained"
+            <PrimaryButton
               size="large"
               startIcon={<CasinoIcon />}
               onClick={handleRandomBanlist}
               disabled={!status?.canSpin || loading}
-              sx={{
-                backgroundColor: status?.canSpin ? 'var(--accent-primary)' : 'var(--grey-300)',
-                '&:hover': {
-                  backgroundColor: status?.canSpin
-                    ? 'var(--accent-blue-hover)'
-                    : 'var(--grey-300)',
-                },
-                '&:disabled': {
-                  backgroundColor: 'var(--grey-300)',
-                  color: 'var(--text-secondary)',
-                },
-                px: 4,
-                py: 1.5,
-              }}
+              sx={{ px: 4, py: 1.5 }}
             >
               {loading ? 'Selecting...' : 'Choose Random Suggestion'}
-            </Button>
+            </PrimaryButton>
           </Box>
         </Paper>
       )}
@@ -372,36 +338,29 @@ export default function ModeratorSelectionPage() {
               {status?.activeSessionNumber && `Session #${status.activeSessionNumber} - True Democracy`}
             </Typography>
 
-            <Alert severity="info" sx={{ width: '100%', maxWidth: 600 }}>
-              True Democracy is active! No moderator will be selected. Instead, the banlist
-              suggestion with the most votes will be chosen automatically. In case of a tie,
-              one will be randomly selected.
-            </Alert>
+            <InfoAlert
+              message="True Democracy is active! No moderator will be selected. Instead, the banlist suggestion with the most votes will be chosen automatically. In case of a tie, one will be randomly selected."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
 
-            <Button
-              variant="contained"
+            <PrimaryButton
               size="large"
               startIcon={<CasinoIcon />}
               onClick={handleTrueDemocracy}
               disabled={!status?.canSpin || loading}
               sx={{
-                backgroundColor: status?.canSpin ? 'var(--success)' : 'var(--grey-300)',
-                '&:hover': {
-                  backgroundColor: status?.canSpin
-                    ? 'var(--success)'
-                    : 'var(--grey-300)',
-                  filter: status?.canSpin ? 'brightness(1.2)' : 'none',
-                },
-                '&:disabled': {
-                  backgroundColor: 'var(--grey-300)',
-                  color: 'var(--text-secondary)',
-                },
                 px: 4,
                 py: 1.5,
+                backgroundColor: status?.canSpin ? 'var(--success)' : undefined,
+                '&:hover': {
+                  backgroundColor: status?.canSpin ? 'var(--success)' : undefined,
+                  filter: status?.canSpin ? 'brightness(1.2)' : 'none',
+                },
               }}
             >
               {loading ? 'Selecting...' : 'Choose Most Voted Suggestion'}
-            </Button>
+            </PrimaryButton>
           </Box>
         </Paper>
       )}
@@ -433,37 +392,19 @@ export default function ModeratorSelectionPage() {
             )}
 
             {/* Spin Button */}
-            <Button
-              variant="contained"
+            <PrimaryButton
               size="large"
-              startIcon={spinning ? <CircularProgress size={20} /> : <CasinoIcon />}
+              startIcon={<CasinoIcon />}
               onClick={handleSpin}
               disabled={!status?.canSpin || spinning || selectedPlayers.size === 0}
-              sx={{
-                backgroundColor:
-                  status?.canSpin && selectedPlayers.size > 0
-                    ? 'var(--accent-primary)'
-                    : 'var(--grey-300)',
-                '&:hover': {
-                  backgroundColor:
-                    status?.canSpin && selectedPlayers.size > 0
-                      ? 'var(--accent-blue-hover)'
-                      : 'var(--grey-300)',
-                },
-                '&:disabled': {
-                  backgroundColor: 'var(--grey-300)',
-                  color: 'var(--text-secondary)',
-                },
-                px: 4,
-                py: 1.5,
-              }}
+              sx={{ px: 4, py: 1.5 }}
             >
               {spinning
                 ? 'Spinning...'
                 : selectedPlayers.size === 0
                 ? 'Select Players First'
                 : 'Spin the Wheel'}
-            </Button>
+            </PrimaryButton>
           </Box>
         </Paper>
       )}

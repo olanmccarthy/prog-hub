@@ -1,8 +1,10 @@
 'use server';
 
 import { prisma } from '@lib/prisma';
-import { Prisma } from '@prisma/client';
-import { getCurrentUser } from '@lib/auth';
+import { requireAuth, requireAdmin } from '@lib/serverUtils';
+import { getActiveSession, requireActiveSession } from '@lib/sessionHelpers';
+import { selectWeightedRandom } from '@lib/randomHelpers';
+import { mergeSessionModifiers } from '@lib/sessionModifierHelpers';
 import { revalidatePath } from 'next/cache';
 import type { EventWheelEntry } from '@prisma/client';
 
@@ -40,6 +42,7 @@ export interface SessionModifiers {
   allowMultipleEventSpins: boolean;
   skipModeratorRandomBanlist: boolean;
   trueDemocracyBanlist: boolean;
+  gamblingEnabled: boolean;
   halvedPlayerIds: number[] | null;
 }
 
@@ -55,11 +58,11 @@ export interface GetActiveModifiersResult {
  */
 export async function getPublicEventWheelEntries(): Promise<EventWheelStatusResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
+    const authResult = await requireAuth();
+    if (!authResult.success) {
       return {
         success: false,
-        error: 'Authentication required',
+        error: authResult.error,
         canSpin: false,
         entries: [],
         alreadySpun: false,
@@ -67,9 +70,7 @@ export async function getPublicEventWheelEntries(): Promise<EventWheelStatusResu
     }
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       // Return empty state if no active session
@@ -114,31 +115,28 @@ export async function getPublicEventWheelEntries(): Promise<EventWheelStatusResu
  */
 export async function getEventWheelStatus(): Promise<EventWheelStatusResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return {
         success: false,
-        error: 'Admin access required',
+        error: authResult.error,
         canSpin: false,
         entries: [],
         alreadySpun: false,
       };
     }
 
-    // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
-
-    if (!activeSession) {
+    const sessionResult = await requireActiveSession();
+    if (!sessionResult.success) {
       return {
         success: false,
-        error: 'No active session found',
+        error: sessionResult.error,
         canSpin: false,
         entries: [],
         alreadySpun: false,
       };
     }
+    const activeSession = sessionResult.data;
 
     // Check if already spun (allow re-spin in dev or if allowMultipleEventSpins is active)
     const currentModifiers = await prisma.sessionModifier.findUnique({
@@ -214,25 +212,22 @@ export async function getEventWheelStatus(): Promise<EventWheelStatusResult> {
  */
 export async function spinEventWheel(): Promise<SpinWheelResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return {
         success: false,
-        error: 'Admin access required',
+        error: authResult.error,
       };
     }
 
-    // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
-
-    if (!activeSession) {
+    const sessionResult = await requireActiveSession();
+    if (!sessionResult.success) {
       return {
         success: false,
-        error: 'No active session found',
+        error: sessionResult.error,
       };
     }
+    const activeSession = sessionResult.data;
 
     // Check if already spun (allow re-spin in dev or if allowMultipleEventSpins is active)
     const currentModifiers = await prisma.sessionModifier.findUnique({
@@ -285,39 +280,8 @@ export async function spinEventWheel(): Promise<SpinWheelResult> {
       };
     }
 
-    // Calculate total chance
-    const totalChance = entries.reduce((sum, entry) => sum + entry.chance, 0);
-
-    // Normalize if over 100%, otherwise add "no event" option
-    let normalizedEntries: Array<{ entry: EventWheelEntry | null; weight: number }>;
-
-    if (totalChance >= 100) {
-      // Normalize to 100%
-      normalizedEntries = entries.map(entry => ({
-        entry,
-        weight: (entry.chance / totalChance) * 100,
-      }));
-    } else {
-      // Add "no event" with remaining percentage
-      const noEventChance = 100 - totalChance;
-      normalizedEntries = [
-        ...entries.map(entry => ({ entry, weight: entry.chance })),
-        { entry: null, weight: noEventChance },
-      ];
-    }
-
     // Select a random entry based on weighted probabilities
-    const random = Math.random() * 100;
-    let cumulative = 0;
-    let selectedEntry: EventWheelEntry | null = null;
-
-    for (const { entry, weight } of normalizedEntries) {
-      cumulative += weight;
-      if (random <= cumulative) {
-        selectedEntry = entry;
-        break;
-      }
-    }
+    const selectedEntry = selectWeightedRandom(entries);
 
     // Apply event modifiers to session if an event was selected
     if (selectedEntry) {
@@ -326,44 +290,67 @@ export async function spinEventWheel(): Promise<SpinWheelResult> {
         where: { sessionId: activeSession.id },
       });
 
-      // Merge modifiers using OR logic (if ANY event enables it, it's active)
-      const mergedModifiers = {
-        doubleWalletPoints:
-          (existingModifiers?.doubleWalletPoints || false) || selectedEntry.doubleWalletPoints,
-        awardTwoVictoryPoints:
-          (existingModifiers?.awardTwoVictoryPoints || false) || selectedEntry.awardTwoVictoryPoints,
-        oddPlacementBonus:
-          (existingModifiers?.oddPlacementBonus || false) || selectedEntry.oddPlacementBonus,
-        evenPlacementBonus:
-          (existingModifiers?.evenPlacementBonus || false) || selectedEntry.evenPlacementBonus,
-        reverseVpOrder:
-          (existingModifiers?.reverseVpOrder || false) || selectedEntry.reverseVpOrder,
-        matchWinBonus:
-          (existingModifiers?.matchWinBonus || false) || selectedEntry.matchWinBonus,
-        adminHalveWallet:
-          (existingModifiers?.adminHalveWallet || false) || selectedEntry.adminHalveWallet,
-        equalSplitWallet:
-          (existingModifiers?.equalSplitWallet || false) || selectedEntry.equalSplitWallet,
-        halveAllWalletPoints:
-          (existingModifiers?.halveAllWalletPoints || false) || selectedEntry.halveAllWalletPoints,
-        bountyHunter:
-          (existingModifiers?.bountyHunter || false) || selectedEntry.bountyHunter,
-        earlyDecklistPublic:
-          (existingModifiers?.earlyDecklistPublic || false) || selectedEntry.earlyDecklistPublic,
-        allowMultipleEventSpins:
-          (existingModifiers?.allowMultipleEventSpins || false) || selectedEntry.allowMultipleEventSpins,
-        skipModeratorRandomBanlist:
-          (existingModifiers?.skipModeratorRandomBanlist || false) || selectedEntry.skipModeratorRandomBanlist,
-        trueDemocracyBanlist:
-          (existingModifiers?.trueDemocracyBanlist || false) || selectedEntry.trueDemocracyBanlist,
-        halvedPlayerIds: selectedEntry.halvedPlayerIds || existingModifiers?.halvedPlayerIds || Prisma.JsonNull,
-      };
+      // Parse halvedPlayerIds from JsonValue
+      const halvedPlayerIds = Array.isArray(selectedEntry.halvedPlayerIds)
+        ? (selectedEntry.halvedPlayerIds as number[])
+        : null;
 
-      // Upsert session modifiers
+      // Merge modifiers using OR logic (if ANY event enables it, it's active)
+      const mergedModifiers = mergeSessionModifiers(
+        existingModifiers ? {
+          doubleWalletPoints: existingModifiers.doubleWalletPoints,
+          awardTwoVictoryPoints: existingModifiers.awardTwoVictoryPoints,
+          oddPlacementBonus: existingModifiers.oddPlacementBonus,
+          evenPlacementBonus: existingModifiers.evenPlacementBonus,
+          reverseVpOrder: existingModifiers.reverseVpOrder,
+          matchWinBonus: existingModifiers.matchWinBonus,
+          adminHalveWallet: existingModifiers.adminHalveWallet,
+          equalSplitWallet: existingModifiers.equalSplitWallet,
+          halveAllWalletPoints: existingModifiers.halveAllWalletPoints,
+          bountyHunter: existingModifiers.bountyHunter,
+          earlyDecklistPublic: existingModifiers.earlyDecklistPublic,
+          allowMultipleEventSpins: existingModifiers.allowMultipleEventSpins,
+          skipModeratorRandomBanlist: existingModifiers.skipModeratorRandomBanlist,
+          trueDemocracyBanlist: existingModifiers.trueDemocracyBanlist,
+          gamblingEnabled: existingModifiers.gamblingEnabled,
+          halvedPlayerIds: Array.isArray(existingModifiers.halvedPlayerIds)
+            ? (existingModifiers.halvedPlayerIds as number[])
+            : null,
+        } : null,
+        {
+          doubleWalletPoints: selectedEntry.doubleWalletPoints,
+          awardTwoVictoryPoints: selectedEntry.awardTwoVictoryPoints,
+          oddPlacementBonus: selectedEntry.oddPlacementBonus,
+          evenPlacementBonus: selectedEntry.evenPlacementBonus,
+          reverseVpOrder: selectedEntry.reverseVpOrder,
+          matchWinBonus: selectedEntry.matchWinBonus,
+          adminHalveWallet: selectedEntry.adminHalveWallet,
+          equalSplitWallet: selectedEntry.equalSplitWallet,
+          halveAllWalletPoints: selectedEntry.halveAllWalletPoints,
+          bountyHunter: selectedEntry.bountyHunter,
+          earlyDecklistPublic: selectedEntry.earlyDecklistPublic,
+          allowMultipleEventSpins: selectedEntry.allowMultipleEventSpins,
+          skipModeratorRandomBanlist: selectedEntry.skipModeratorRandomBanlist,
+          trueDemocracyBanlist: selectedEntry.trueDemocracyBanlist,
+          gamblingEnabled: selectedEntry.gamblingEnabled,
+          halvedPlayerIds: halvedPlayerIds,
+        }
+      );
+
+      // Upsert session modifiers with proper JSON handling
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { halvedPlayerIds: _, ...modifiersWithoutHalvedPlayerIds } = mergedModifiers;
       await prisma.sessionModifier.upsert({
         where: { sessionId: activeSession.id },
-        create: { sessionId: activeSession.id, ...mergedModifiers },
-        update: mergedModifiers,
+        create: {
+          sessionId: activeSession.id,
+          ...modifiersWithoutHalvedPlayerIds,
+          halvedPlayerIds: mergedModifiers.halvedPlayerIds ? mergedModifiers.halvedPlayerIds : undefined,
+        },
+        update: {
+          ...modifiersWithoutHalvedPlayerIds,
+          halvedPlayerIds: mergedModifiers.halvedPlayerIds ? mergedModifiers.halvedPlayerIds : undefined,
+        },
       });
     }
 
@@ -419,25 +406,22 @@ export async function manuallyApplyEventEntry(entryId: number): Promise<SpinWhee
       };
     }
 
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return {
         success: false,
-        error: 'Admin access required',
+        error: authResult.error,
       };
     }
 
-    // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
-
-    if (!activeSession) {
+    const sessionResult = await requireActiveSession();
+    if (!sessionResult.success) {
       return {
         success: false,
-        error: 'No active session found',
+        error: sessionResult.error,
       };
     }
+    const activeSession = sessionResult.data;
 
     // Get the selected entry
     const selectedEntry = await prisma.eventWheelEntry.findUnique({
@@ -457,44 +441,67 @@ export async function manuallyApplyEventEntry(entryId: number): Promise<SpinWhee
       where: { sessionId: activeSession.id },
     });
 
-    // Merge modifiers using OR logic (if ANY event enables it, it's active)
-    const mergedModifiers = {
-      doubleWalletPoints:
-        (existingModifiers?.doubleWalletPoints || false) || selectedEntry.doubleWalletPoints,
-      awardTwoVictoryPoints:
-        (existingModifiers?.awardTwoVictoryPoints || false) || selectedEntry.awardTwoVictoryPoints,
-      oddPlacementBonus:
-        (existingModifiers?.oddPlacementBonus || false) || selectedEntry.oddPlacementBonus,
-      evenPlacementBonus:
-        (existingModifiers?.evenPlacementBonus || false) || selectedEntry.evenPlacementBonus,
-      reverseVpOrder:
-        (existingModifiers?.reverseVpOrder || false) || selectedEntry.reverseVpOrder,
-      matchWinBonus:
-        (existingModifiers?.matchWinBonus || false) || selectedEntry.matchWinBonus,
-      adminHalveWallet:
-        (existingModifiers?.adminHalveWallet || false) || selectedEntry.adminHalveWallet,
-      equalSplitWallet:
-        (existingModifiers?.equalSplitWallet || false) || selectedEntry.equalSplitWallet,
-      halveAllWalletPoints:
-        (existingModifiers?.halveAllWalletPoints || false) || selectedEntry.halveAllWalletPoints,
-      bountyHunter:
-        (existingModifiers?.bountyHunter || false) || selectedEntry.bountyHunter,
-      earlyDecklistPublic:
-        (existingModifiers?.earlyDecklistPublic || false) || selectedEntry.earlyDecklistPublic,
-      allowMultipleEventSpins:
-        (existingModifiers?.allowMultipleEventSpins || false) || selectedEntry.allowMultipleEventSpins,
-      skipModeratorRandomBanlist:
-        (existingModifiers?.skipModeratorRandomBanlist || false) || selectedEntry.skipModeratorRandomBanlist,
-      trueDemocracyBanlist:
-        (existingModifiers?.trueDemocracyBanlist || false) || selectedEntry.trueDemocracyBanlist,
-      halvedPlayerIds: selectedEntry.halvedPlayerIds || existingModifiers?.halvedPlayerIds || Prisma.JsonNull,
-    };
+    // Parse halvedPlayerIds from JsonValue
+    const halvedPlayerIds = Array.isArray(selectedEntry.halvedPlayerIds)
+      ? (selectedEntry.halvedPlayerIds as number[])
+      : null;
 
-    // Upsert session modifiers
+    // Merge modifiers using OR logic (if ANY event enables it, it's active)
+    const mergedModifiers = mergeSessionModifiers(
+      existingModifiers ? {
+        doubleWalletPoints: existingModifiers.doubleWalletPoints,
+        awardTwoVictoryPoints: existingModifiers.awardTwoVictoryPoints,
+        oddPlacementBonus: existingModifiers.oddPlacementBonus,
+        evenPlacementBonus: existingModifiers.evenPlacementBonus,
+        reverseVpOrder: existingModifiers.reverseVpOrder,
+        matchWinBonus: existingModifiers.matchWinBonus,
+        adminHalveWallet: existingModifiers.adminHalveWallet,
+        equalSplitWallet: existingModifiers.equalSplitWallet,
+        halveAllWalletPoints: existingModifiers.halveAllWalletPoints,
+        bountyHunter: existingModifiers.bountyHunter,
+        earlyDecklistPublic: existingModifiers.earlyDecklistPublic,
+        allowMultipleEventSpins: existingModifiers.allowMultipleEventSpins,
+        skipModeratorRandomBanlist: existingModifiers.skipModeratorRandomBanlist,
+        trueDemocracyBanlist: existingModifiers.trueDemocracyBanlist,
+        gamblingEnabled: existingModifiers.gamblingEnabled,
+        halvedPlayerIds: Array.isArray(existingModifiers.halvedPlayerIds)
+          ? (existingModifiers.halvedPlayerIds as number[])
+          : null,
+      } : null,
+      {
+        doubleWalletPoints: selectedEntry.doubleWalletPoints,
+        awardTwoVictoryPoints: selectedEntry.awardTwoVictoryPoints,
+        oddPlacementBonus: selectedEntry.oddPlacementBonus,
+        evenPlacementBonus: selectedEntry.evenPlacementBonus,
+        reverseVpOrder: selectedEntry.reverseVpOrder,
+        matchWinBonus: selectedEntry.matchWinBonus,
+        adminHalveWallet: selectedEntry.adminHalveWallet,
+        equalSplitWallet: selectedEntry.equalSplitWallet,
+        halveAllWalletPoints: selectedEntry.halveAllWalletPoints,
+        bountyHunter: selectedEntry.bountyHunter,
+        earlyDecklistPublic: selectedEntry.earlyDecklistPublic,
+        allowMultipleEventSpins: selectedEntry.allowMultipleEventSpins,
+        skipModeratorRandomBanlist: selectedEntry.skipModeratorRandomBanlist,
+        trueDemocracyBanlist: selectedEntry.trueDemocracyBanlist,
+        gamblingEnabled: selectedEntry.gamblingEnabled,
+        halvedPlayerIds: halvedPlayerIds,
+      }
+    );
+
+    // Upsert session modifiers with proper JSON handling
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { halvedPlayerIds: _, ...modifiersWithoutHalvedPlayerIds } = mergedModifiers;
     await prisma.sessionModifier.upsert({
       where: { sessionId: activeSession.id },
-      create: { sessionId: activeSession.id, ...mergedModifiers },
-      update: mergedModifiers,
+      create: {
+        sessionId: activeSession.id,
+        ...modifiersWithoutHalvedPlayerIds,
+        halvedPlayerIds: mergedModifiers.halvedPlayerIds ? mergedModifiers.halvedPlayerIds : undefined,
+      },
+      update: {
+        ...modifiersWithoutHalvedPlayerIds,
+        halvedPlayerIds: mergedModifiers.halvedPlayerIds ? mergedModifiers.halvedPlayerIds : undefined,
+      },
     });
 
     // Parse existing selected events (JSON array)
@@ -545,25 +552,12 @@ export async function resetSessionModifiers(): Promise<{ success: boolean; error
       };
     }
 
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
-      return {
-        success: false,
-        error: 'Admin access required',
-      };
-    }
+    const authResult = await requireAdmin();
+    if (!authResult.success) return authResult;
 
-    // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
-
-    if (!activeSession) {
-      return {
-        success: false,
-        error: 'No active session found',
-      };
-    }
+    const sessionResult = await requireActiveSession();
+    if (!sessionResult.success) return sessionResult;
+    const activeSession = sessionResult.data;
 
     // Delete session modifiers
     await prisma.sessionModifier.deleteMany({
@@ -596,25 +590,22 @@ export async function resetSessionModifiers(): Promise<{ success: boolean; error
  */
 export async function getActiveSessionModifiers(): Promise<GetActiveModifiersResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return {
         success: false,
-        error: 'Admin access required',
+        error: authResult.error,
       };
     }
 
-    // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
-
-    if (!activeSession) {
+    const sessionResult = await requireActiveSession();
+    if (!sessionResult.success) {
       return {
         success: false,
-        error: 'No active session found',
+        error: sessionResult.error,
       };
     }
+    const activeSession = sessionResult.data;
 
     // Get session modifiers
     const modifiers = await prisma.sessionModifier.findUnique({
@@ -644,6 +635,7 @@ export async function getActiveSessionModifiers(): Promise<GetActiveModifiersRes
             allowMultipleEventSpins: modifiers.allowMultipleEventSpins,
             skipModeratorRandomBanlist: modifiers.skipModeratorRandomBanlist,
             trueDemocracyBanlist: modifiers.trueDemocracyBanlist,
+            gamblingEnabled: modifiers.gamblingEnabled,
             halvedPlayerIds: modifiers.halvedPlayerIds as number[] | null,
           }
         : null,

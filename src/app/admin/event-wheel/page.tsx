@@ -3,10 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Alert,
-  CircularProgress,
   Paper,
   List,
   ListItem,
@@ -21,6 +18,14 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import EventWheel from '@components/EventWheel';
 import EventResultModal from '@components/EventResultModal';
 import { WheelConfigSection } from '@components/WheelConfigSection';
+import {
+  LoadingBox,
+  ErrorAlert,
+  SuccessAlert,
+  InfoAlert,
+  WarningAlert,
+  PrimaryButton,
+} from '@/src/components';
 import {
   getEventWheelStatus,
   getPublicEventWheelEntries,
@@ -224,18 +229,7 @@ export default function EventWheelPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   const wheelSegments = status?.entries
@@ -267,17 +261,8 @@ export default function EventWheelPage() {
         Event Wheel
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
       {/* Active Modifiers Section */}
       {isAdmin && activeModifiers && (
@@ -313,9 +298,11 @@ export default function EventWheelPage() {
             </Box>
           )}
 
-          <Alert severity="info" sx={{ mb: 2 }}>
-            These modifiers were applied by the spun event(s) and will affect this session.
-          </Alert>
+          <InfoAlert
+            message="These modifiers were applied by the spun event(s) and will affect this session."
+            onClose={() => {}}
+            sx={{ mb: 2 }}
+          />
 
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {activeModifiers.doubleWalletPoints && (
@@ -381,14 +368,14 @@ export default function EventWheelPage() {
             </Typography>
           </Box>
 
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            These controls allow you to manually apply event modifiers for testing. This section is
-            only visible in non-production environments.
-          </Alert>
+          <WarningAlert
+            message="These controls allow you to manually apply event modifiers for testing. This section is only visible in non-production environments."
+            onClose={() => {}}
+            sx={{ mb: 2 }}
+          />
 
           <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-            <Button
-              variant="contained"
+            <PrimaryButton
               startIcon={<RefreshIcon />}
               onClick={handleReset}
               sx={{
@@ -400,7 +387,7 @@ export default function EventWheelPage() {
               }}
             >
               Reset All Modifiers
-            </Button>
+            </PrimaryButton>
           </Box>
 
           <Divider sx={{ borderColor: 'var(--border-color)', mb: 2 }} />
@@ -524,21 +511,29 @@ export default function EventWheelPage() {
           </Typography>
 
           {!isAdmin ? (
-            <Alert severity="info" sx={{ width: '100%', maxWidth: 600 }}>
-              View the possible events below. Only admins can spin this wheel.
-            </Alert>
+            <InfoAlert
+              message="View the possible events below. Only admins can spin this wheel."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
           ) : status?.alreadySpun ? (
-            <Alert severity="info" sx={{ width: '100%', maxWidth: 600 }}>
-              The event wheel has already been spun for this session.
-            </Alert>
+            <InfoAlert
+              message="The event wheel has already been spun for this session."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
           ) : status?.canSpin ? (
-            <Alert severity="success" sx={{ width: '100%', maxWidth: 600 }}>
-              All players have submitted their decklists. Ready to spin!
-            </Alert>
+            <SuccessAlert
+              message="All players have submitted their decklists. Ready to spin!"
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
           ) : status?.reason ? (
-            <Alert severity="warning" sx={{ width: '100%', maxWidth: 600 }}>
-              {status.reason}
-            </Alert>
+            <WarningAlert
+              message={status.reason}
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
           ) : null}
 
           {wheelSegments.length > 0 && (
@@ -551,31 +546,15 @@ export default function EventWheelPage() {
           )}
 
           {isAdmin && (
-            <Button
-              variant="contained"
+            <PrimaryButton
               size="large"
-              startIcon={spinning ? <CircularProgress size={20} /> : <CasinoIcon />}
+              startIcon={<CasinoIcon />}
               onClick={handleSpin}
               disabled={!status?.canSpin || spinning || status?.alreadySpun}
-              sx={{
-                backgroundColor: status?.canSpin && !status?.alreadySpun
-                  ? 'var(--accent-primary)'
-                  : 'var(--grey-300)',
-                '&:hover': {
-                  backgroundColor: status?.canSpin && !status?.alreadySpun
-                    ? 'var(--accent-blue-hover)'
-                    : 'var(--grey-300)',
-                },
-                '&:disabled': {
-                  backgroundColor: 'var(--grey-300)',
-                  color: 'var(--text-secondary)',
-                },
-                px: 4,
-                py: 1.5,
-              }}
+              sx={{ px: 4, py: 1.5 }}
             >
               {spinning ? 'Spinning...' : status?.alreadySpun ? 'Already Spun' : 'Spin the Wheel'}
-            </Button>
+            </PrimaryButton>
           )}
         </Box>
       </Paper>

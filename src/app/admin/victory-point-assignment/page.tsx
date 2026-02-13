@@ -3,10 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Alert,
-  CircularProgress,
   Paper,
   Table,
   TableBody,
@@ -16,6 +13,14 @@ import {
   TableRow,
   Chip,
 } from '@mui/material';
+import {
+  LoadingBox,
+  ErrorAlert,
+  SuccessAlert,
+  InfoAlert,
+  PrimaryButton,
+  SecondaryButton,
+} from '@/src/components';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import {
   getVictoryPointStatus,
@@ -109,18 +114,7 @@ export default function VictoryPointAssignmentPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -134,28 +128,18 @@ export default function VictoryPointAssignmentPage() {
         )}
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
       {!status?.canAssign && status?.reason && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          {status.reason}
-        </Alert>
+        <InfoAlert message={status.reason} onClose={() => {}} />
       )}
 
       {status?.alreadyAssigned && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Victory points have already been assigned for this session.
-        </Alert>
+        <SuccessAlert
+          message="Victory points have already been assigned for this session."
+          onClose={() => {}}
+        />
       )}
 
       {/* Instructions */}
@@ -284,42 +268,25 @@ export default function VictoryPointAssignmentPage() {
                         <TableCell align="center">
                           {isCurrentOffer ? (
                             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                              <Button
-                                variant="contained"
+                              <PrimaryButton
                                 size="small"
-                                startIcon={assigning ? <CircularProgress size={16} /> : <EmojiEventsIcon />}
+                                startIcon={<EmojiEventsIcon />}
                                 onClick={handleTakeVictoryPoint}
                                 disabled={assigning}
-                                sx={{
-                                  backgroundColor: 'var(--accent-primary)',
-                                  '&:hover': {
-                                    backgroundColor: 'var(--accent-blue-hover)',
-                                  },
-                                }}
                               >
                                 {isForcedToTake
                                   ? (status.awardTwoVictoryPoints ? 'Assign 2 VP' : 'Assign VP')
                                   : (status.awardTwoVictoryPoints ? 'Take 2 VP' : 'Take VP')
                                 }
-                              </Button>
+                              </PrimaryButton>
                               {!isForcedToTake && (
-                                <Button
-                                  variant="outlined"
+                                <SecondaryButton
                                   size="small"
                                   onClick={handlePassVictoryPoint}
                                   disabled={assigning}
-                                  sx={{
-                                    borderColor: 'var(--text-secondary)',
-                                    color: 'var(--text-secondary)',
-                                    '&:hover': {
-                                      borderColor: 'var(--text-primary)',
-                                      color: 'var(--text-primary)',
-                                      backgroundColor: 'var(--hover-light-grey)',
-                                    },
-                                  }}
                                 >
                                   Pass
-                                </Button>
+                                </SecondaryButton>
                               )}
                             </Box>
                           ) : (() => {

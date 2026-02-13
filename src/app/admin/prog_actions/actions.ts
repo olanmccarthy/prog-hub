@@ -2,7 +2,9 @@
 
 import { prisma } from '@lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@lib/auth';
+import { requireAdmin } from '@lib/serverUtils';
+import { getActiveSession } from '@lib/sessionHelpers';
+import { parseBanlistField } from '@lib/banlistHelpers';
 import { parseYdkFromFile } from '@lib/ydkParser';
 import { validateDeckAgainstBanlist } from '@lib/deckValidator';
 
@@ -43,12 +45,14 @@ export interface SessionStatusResult {
     suggestionsSubmitted: RequirementStatus;
     nextBanlistExists: RequirementStatus;
     eventWheelSpun: RequirementStatus;
+    bettingDecisions: RequirementStatus;
     pairingsGenerated: RequirementStatus;
     victoryPointsAssigned: RequirementStatus;
     walletPointsAssigned: RequirementStatus;
     votesSubmitted: RequirementStatus;
     moderatorSelected: RequirementStatus;
     moderatorVoted: RequirementStatus;
+    loserPrizingSpun: RequirementStatus;
   };
 }
 
@@ -69,11 +73,11 @@ export interface CompleteSessionResult {
  */
 export async function getSessionStatus(): Promise<SessionStatusResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return {
         success: false,
-        error: 'Unauthorized',
+        error: authResult.error,
         activeSession: null,
         nextSession: null,
         canStartSession: false,
@@ -83,17 +87,19 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         startReasons: [],
         completeReasons: [],
         requirements: {
-          placementsFilled: { met: false, message: 'Unauthorized' },
-          decklistsSubmitted: { met: false, message: 'Unauthorized' },
-          suggestionsSubmitted: { met: false, message: 'Unauthorized' },
-          nextBanlistExists: { met: false, message: 'Unauthorized' },
-          eventWheelSpun: { met: false, message: 'Unauthorized' },
-          pairingsGenerated: { met: false, message: 'Unauthorized' },
-          victoryPointsAssigned: { met: false, message: 'Unauthorized' },
-          walletPointsAssigned: { met: false, message: 'Unauthorized' },
-          votesSubmitted: { met: false, message: 'Unauthorized' },
-          moderatorSelected: { met: false, message: 'Unauthorized' },
-          moderatorVoted: { met: false, message: 'Unauthorized' },
+          placementsFilled: { met: false, message: authResult.error },
+          decklistsSubmitted: { met: false, message: authResult.error },
+          suggestionsSubmitted: { met: false, message: authResult.error },
+          nextBanlistExists: { met: false, message: authResult.error },
+          eventWheelSpun: { met: false, message: authResult.error },
+          bettingDecisions: { met: false, message: authResult.error },
+          loserPrizingSpun: { met: false, message: authResult.error },
+          pairingsGenerated: { met: false, message: authResult.error },
+          victoryPointsAssigned: { met: false, message: authResult.error },
+          walletPointsAssigned: { met: false, message: authResult.error },
+          votesSubmitted: { met: false, message: authResult.error },
+          moderatorSelected: { met: false, message: authResult.error },
+          moderatorVoted: { met: false, message: authResult.error },
         },
       };
     }
@@ -121,6 +127,8 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
       suggestionsSubmitted: { met: false, message: '' },
       nextBanlistExists: { met: false, message: '' },
       eventWheelSpun: { met: false, message: '' },
+      bettingDecisions: { met: false, message: '' },
+      loserPrizingSpun: { met: false, message: '' },
       pairingsGenerated: { met: false, message: '' },
       victoryPointsAssigned: { met: false, message: '' },
       walletPointsAssigned: { met: false, message: '' },
@@ -205,6 +213,52 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
       };
       if (!activeSession.eventWheelSpun) {
         completeReasons.push(requirements.eventWheelSpun.message);
+      }
+
+      // Step 3.5: Check if gambling is enabled and all betting decisions are made
+      const modifiers = await prisma.sessionModifier.findUnique({
+        where: { sessionId: activeSession.id },
+      });
+
+      if (modifiers?.gamblingEnabled) {
+        const { checkAllBettingDecisions } = await import('../../play/betting/actions');
+        const bettingStatus = await checkAllBettingDecisions(activeSession.id);
+
+        const allPlayers = await prisma.player.findMany({
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        });
+
+        const playersWithBets = await prisma.playerBet.findMany({
+          where: { sessionId: activeSession.id },
+          select: { bettorId: true },
+        });
+
+        const betPlayerIds = new Set(playersWithBets.map(b => b.bettorId));
+
+        const bettingPlayerStatuses: PlayerStatus[] = allPlayers.map(player => ({
+          id: player.id,
+          name: player.name,
+          completed: betPlayerIds.has(player.id),
+        }));
+
+        requirements.bettingDecisions = {
+          met: bettingStatus.allDecided,
+          message: bettingStatus.allDecided
+            ? `All ${playerCount} players made betting decisions`
+            : `Not all players have made betting decisions (${bettingStatus.decided}/${bettingStatus.total})`,
+          playerStatuses: bettingPlayerStatuses,
+        };
+
+        if (!bettingStatus.allDecided) {
+          completeReasons.push(requirements.bettingDecisions.message);
+        }
+      } else {
+        // Gambling not enabled, mark as not applicable
+        requirements.bettingDecisions = {
+          met: true,
+          message: 'Gambling not enabled (N/A)',
+        };
       }
 
       // Step 4: Check if pairings have been generated
@@ -384,6 +438,17 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         completeReasons.push(requirements.moderatorVoted.message);
       }
 
+      // Step 15: Check if loser prizing wheel has been spun
+      requirements.loserPrizingSpun = {
+        met: !!activeSession.loserPrizingSpun,
+        message: activeSession.loserPrizingSpun
+          ? 'Loser prizing wheel has been spun'
+          : 'Loser prizing wheel must be spun before completing session',
+      };
+      if (!activeSession.loserPrizingSpun) {
+        completeReasons.push(requirements.loserPrizingSpun.message);
+      }
+
       canCompleteSession = completeReasons.length === 0;
     }
 
@@ -445,6 +510,8 @@ export async function getSessionStatus(): Promise<SessionStatusResult> {
         suggestionsSubmitted: { met: false, message: 'Validation failed' },
         nextBanlistExists: { met: false, message: 'Validation failed' },
         eventWheelSpun: { met: false, message: 'Validation failed' },
+        bettingDecisions: { met: false, message: 'Validation failed' },
+        loserPrizingSpun: { met: false, message: 'Validation failed' },
         pairingsGenerated: { met: false, message: 'Validation failed' },
         victoryPointsAssigned: { met: false, message: 'Validation failed' },
         walletPointsAssigned: { met: false, message: 'Validation failed' },
@@ -514,10 +581,8 @@ function generateRoundRobinPairings(playerIds: number[]): { round: number; playe
  */
 export async function startSession(): Promise<StartSessionResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
-      return { success: false, error: 'Unauthorized' };
-    }
+    const authResult = await requireAdmin();
+    if (!authResult.success) return authResult;
 
     // Validate first
     const status = await getSessionStatus();
@@ -570,15 +635,11 @@ export interface GeneratePairingsResult {
  */
 export async function generatePairings(): Promise<GeneratePairingsResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
-      return { success: false, error: 'Unauthorized' };
-    }
+    const authResult = await requireAdmin();
+    if (!authResult.success) return authResult;
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -590,6 +651,23 @@ export async function generatePairings(): Promise<GeneratePairingsResult> {
         success: false,
         error: 'Event wheel must be spun before generating pairings',
       };
+    }
+
+    // Check if gambling is enabled and all betting decisions are made
+    const modifiers = await prisma.sessionModifier.findUnique({
+      where: { sessionId: activeSession.id },
+    });
+
+    if (modifiers?.gamblingEnabled) {
+      const { checkAllBettingDecisions } = await import('../../play/betting/actions');
+      const bettingStatus = await checkAllBettingDecisions(activeSession.id);
+
+      if (!bettingStatus.allDecided) {
+        return {
+          success: false,
+          error: `Cannot generate pairings: Only ${bettingStatus.decided}/${bettingStatus.total} players have made betting decisions`,
+        };
+      }
     }
 
     // Check if pairings already exist
@@ -661,10 +739,8 @@ export async function generatePairings(): Promise<GeneratePairingsResult> {
  */
 export async function completeSession(): Promise<CompleteSessionResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
-      return { success: false, error: 'Unauthorized' };
-    }
+    const authResult = await requireAdmin();
+    if (!authResult.success) return authResult;
 
     // Validate first
     const status = await getSessionStatus();
@@ -724,15 +800,13 @@ export interface AutoCreateSuggestionsResult {
  */
 export async function autoVoteAllPlayers(): Promise<AutoVoteResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can use this test function' };
     }
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -816,15 +890,13 @@ export async function autoVoteAllPlayers(): Promise<AutoVoteResult> {
  */
 export async function autoCreateSuggestions(): Promise<AutoCreateSuggestionsResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can use this test function' };
     }
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -975,15 +1047,13 @@ export interface AutoSubmitDecklistsResult {
 
 export async function autoSubmitDecklists(): Promise<AutoSubmitDecklistsResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can use this test function' };
     }
 
     // Get active session
-    const session = await prisma.session.findFirst({
-      where: { active: true }
-    })
+    const session = await getActiveSession();
 
     if (!session) {
       return { success: false, error: 'No session found!'}
@@ -1064,15 +1134,13 @@ export interface ResetSessionResult {
  */
 export async function resetSession(): Promise<ResetSessionResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can reset sessions' };
     }
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -1170,6 +1238,7 @@ export async function resetSession(): Promise<ResetSessionResult> {
         eventWheelSpun: false,
         victoryPointsAssigned: false,
         walletPointsAssigned: false,
+        loserPrizingSpun: false,
       },
     });
 
@@ -1208,15 +1277,13 @@ export interface AutoModeratorVoteResult {
  */
 export async function autoModeratorVote(): Promise<AutoModeratorVoteResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can use this test function' };
     }
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -1404,15 +1471,13 @@ export interface SimulateEventWheelResult {
  */
 export async function simulateEventWheelSpin(): Promise<SimulateEventWheelResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can use this test function' };
     }
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -1454,15 +1519,13 @@ export interface SimulateMatchScoresResult {
  */
 export async function simulateMatchScores(): Promise<SimulateMatchScoresResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can use this test function' };
     }
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -1549,8 +1612,8 @@ export interface ResetEntireProgResult {
  */
 export async function resetEntireProg(): Promise<ResetEntireProgResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return { success: false, error: 'Only admins can reset the entire prog' };
     }
 
@@ -1598,6 +1661,7 @@ export async function resetEntireProg(): Promise<ResetEntireProgResult> {
           eventWheelSpun: false,
           victoryPointsAssigned: false,
           walletPointsAssigned: false,
+          loserPrizingSpun: false,
         },
       });
 
@@ -1638,15 +1702,11 @@ export async function resetEntireProg(): Promise<ResetEntireProgResult> {
  */
 export async function uploadPlayerDecklist(playerId: number, formData: FormData): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
-      return { success: false, error: 'Unauthorized' };
-    }
+    const authResult = await requireAdmin();
+    if (!authResult.success) return authResult;
 
     // Get active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -1681,10 +1741,10 @@ export async function uploadPlayerDecklist(playerId: number, formData: FormData)
       sidedeck,
       extradeck,
       {
-        banned: typeof banlist.banned === 'string' ? JSON.parse(banlist.banned) : banlist.banned,
-        limited: typeof banlist.limited === 'string' ? JSON.parse(banlist.limited) : banlist.limited,
-        semilimited: typeof banlist.semilimited === 'string' ? JSON.parse(banlist.semilimited) : banlist.semilimited,
-        unlimited: typeof banlist.unlimited === 'string' ? JSON.parse(banlist.unlimited) : banlist.unlimited,
+        banned: await parseBanlistField(banlist.banned),
+        limited: await parseBanlistField(banlist.limited),
+        semilimited: await parseBanlistField(banlist.semilimited),
+        unlimited: await parseBanlistField(banlist.unlimited),
       }
     );
 
@@ -1749,20 +1809,10 @@ export async function uploadPlayerDecklist(playerId: number, formData: FormData)
         let banlistForImage = undefined;
         if (banlist) {
           try {
-            const parseBanlistField = (field: string | number[] | unknown): number[] => {
-              if (!field) return [];
-              if (typeof field === 'string') {
-                if (field.trim() === '') return [];
-                return JSON.parse(field) as number[];
-              }
-              if (Array.isArray(field)) return field;
-              return [];
-            };
-
             banlistForImage = {
-              banned: parseBanlistField(banlist.banned),
-              limited: parseBanlistField(banlist.limited),
-              semilimited: parseBanlistField(banlist.semilimited),
+              banned: await parseBanlistField(banlist.banned),
+              limited: await parseBanlistField(banlist.limited),
+              semilimited: await parseBanlistField(banlist.semilimited),
             };
           } catch (parseError) {
             console.warn(`Failed to parse banlist for image generation, generating without banlist indicators:`, parseError);
@@ -1803,10 +1853,8 @@ export async function uploadPlayerDecklist(playerId: number, formData: FormData)
  */
 export async function getPlayersForUpload(): Promise<{ success: boolean; players?: { id: number; name: string }[]; error?: string }> {
   try {
-    const user = await getCurrentUser();
-    if (!user || !user.isAdmin) {
-      return { success: false, error: 'Unauthorized' };
-    }
+    const authResult = await requireAdmin();
+    if (!authResult.success) return authResult;
 
     const players = await prisma.player.findMany({
       select: {

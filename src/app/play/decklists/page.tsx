@@ -14,15 +14,14 @@ import {
   AccordionSummary,
   AccordionDetails,
   Chip,
-  Alert,
   SelectChangeEvent,
   Divider,
   TextField,
   IconButton,
   ToggleButtonGroup,
   ToggleButton,
+  Grid,
 } from "@mui/material";
-import { Grid } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
@@ -30,7 +29,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import ImageIcon from "@mui/icons-material/Image";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { Button } from "@mui/material";
+import { ErrorAlert, InfoAlert, PrimaryButton } from '@/src/components';
 import {
   getDecklists,
   getSessions,
@@ -274,18 +273,14 @@ export default function DecklistsPage() {
       </Box>
 
       {/* Error Message */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => {}} />
 
       {/* Warning for current session */}
       {isCurrentSession && decklists.length > 0 && !decklists[0].standingsFinalized && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          You can only view your own decklist for the current session. All decklists will be
-          visible once standings are finalized.
-        </Alert>
+        <InfoAlert
+          message="You can only view your own decklist for the current session. All decklists will be visible once standings are finalized."
+          onClose={() => {}}
+        />
       )}
 
       {/* Loading State */}
@@ -297,7 +292,7 @@ export default function DecklistsPage() {
 
       {/* No Decklists */}
       {!loading && decklists.length === 0 && (
-        <Alert severity="info">No decklists found with the selected filters.</Alert>
+        <InfoAlert message="No decklists found with the selected filters." onClose={() => {}} />
       )}
 
       {/* Decklists Grid - Grouped by Session when viewing all sessions */}
@@ -491,22 +486,13 @@ export default function DecklistsPage() {
                               </Box>
                               {currentUser?.isAdmin && (
                                 <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
-                                  <Button
-                                    variant="outlined"
+                                  <PrimaryButton
                                     startIcon={<RefreshIcon />}
                                     onClick={() => handleRegenerateDeck(decklist.id)}
                                     disabled={regeneratingDeckId === decklist.id}
-                                    sx={{
-                                      color: "var(--accent-primary)",
-                                      borderColor: "var(--accent-primary)",
-                                      "&:hover": {
-                                        borderColor: "var(--accent-secondary)",
-                                        backgroundColor: "var(--hover-light-grey)",
-                                      },
-                                    }}
                                   >
                                     {regeneratingDeckId === decklist.id ? "Regenerating..." : "Regenerate Image"}
-                                  </Button>
+                                  </PrimaryButton>
                                 </Box>
                               )}
                             </>

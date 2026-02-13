@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@lib/prisma";
-import { getCurrentUser } from "@lib/auth";
+import { requireAuth } from "@lib/serverUtils";
 
 export interface ShopSet {
   id: number;
@@ -195,13 +195,14 @@ export async function getShopSets(showUnavailable = false): Promise<GetShopSetsR
  */
 export async function getWalletBalance(): Promise<GetWalletBalanceResult> {
   try {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
+    const authResult = await requireAuth();
+    if (!authResult.success) {
       return {
         success: false,
-        error: "Not authenticated",
+        error: authResult.error,
       };
     }
+    const currentUser = authResult.user;
 
     const wallet = await prisma.wallet.findUnique({
       where: { playerId: currentUser.playerId },
@@ -235,13 +236,14 @@ export async function getWalletBalance(): Promise<GetWalletBalanceResult> {
  */
 export async function purchaseSet(setId: number, quantity: number = 1): Promise<PurchaseSetResult> {
   try {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
+    const authResult = await requireAuth();
+    if (!authResult.success) {
       return {
         success: false,
-        error: "Not authenticated",
+        error: authResult.error,
       };
     }
+    const currentUser = authResult.user;
 
     // Verify player exists
     const player = await prisma.player.findUnique({
@@ -297,8 +299,30 @@ export async function purchaseSet(setId: number, quantity: number = 1): Promise<
       };
     }
 
-    // Check if player has enough balance
-    const purchaseCostPerBox = set.price;
+    // Check for Fire Sale! modifier (half price shop)
+    let purchaseCostPerBox = set.price;
+
+    // Get next session to check for loser prizing modifiers and availability
+    const nextSession = await prisma.session.findFirst({
+      where: { complete: false },
+      orderBy: { number: 'asc' },
+      include: {
+        modifiers: true,
+        set: {
+          select: {
+            tcgDate: true,
+          },
+        },
+      },
+    });
+
+    if (
+      nextSession?.modifiers?.loserPrizingHalfPriceShop &&
+      nextSession.modifiers.loserPrizingPlayerId === currentUser.playerId
+    ) {
+      purchaseCostPerBox = Math.floor(purchaseCostPerBox / 2);
+    }
+
     const totalCost = purchaseCostPerBox * quantity;
     if (player.wallet.amount < totalCost) {
       return {
@@ -308,18 +332,6 @@ export async function purchaseSet(setId: number, quantity: number = 1): Promise<
     }
 
     // Check if set is available for the current session
-    const nextSession = await prisma.session.findFirst({
-      where: { complete: false },
-      orderBy: { number: 'asc' },
-      include: {
-        set: {
-          select: {
-            tcgDate: true,
-          },
-        },
-      },
-    });
-
     if (!nextSession || !nextSession.set) {
       return {
         success: false,

@@ -9,22 +9,22 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Typography,
   Checkbox,
-  Alert,
-  CircularProgress,
   TextField,
   InputAdornment,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Paper,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import {
+  LoadingBox,
+  StyledDialog,
+  ErrorAlert,
+  PrimaryButton,
+  SecondaryButton,
+} from '@/src/components';
 import { getAllSets, updateSetBooleans, updateSetPrice, createSet, updateSet, type SetData } from './actions';
 
 export default function SetManagerPage() {
@@ -280,18 +280,7 @@ export default function SetManagerPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -331,19 +320,12 @@ export default function SetManagerPage() {
               ),
             }}
           />
-          <Button
-            variant="contained"
+          <PrimaryButton
             startIcon={<AddIcon />}
             onClick={() => setCreateDialogOpen(true)}
-            sx={{
-              backgroundColor: 'var(--accent-primary)',
-              '&:hover': {
-                backgroundColor: 'var(--accent-blue-hover)',
-              },
-            }}
           >
             Add New Set
-          </Button>
+          </PrimaryButton>
         </Box>
       </Box>
 
@@ -351,11 +333,7 @@ export default function SetManagerPage() {
         Showing {filteredSets.length} of {sets.length} sets
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
 
       <TableContainer
         component={Paper}
@@ -495,19 +473,13 @@ export default function SetManagerPage() {
                     />
                   </TableCell>
                   <TableCell align="center">
-                    <Button
+                    <SecondaryButton
                       size="small"
                       startIcon={<EditIcon />}
                       onClick={() => handleOpenEditDialog(set)}
-                      sx={{
-                        color: 'var(--text-primary)',
-                        '&:hover': {
-                          backgroundColor: 'var(--hover-light-grey)',
-                        },
-                      }}
                     >
                       Edit
-                    </Button>
+                    </SecondaryButton>
                   </TableCell>
                 </TableRow>
               ))
@@ -517,22 +489,21 @@ export default function SetManagerPage() {
       </TableContainer>
 
       {/* Create Set Dialog */}
-      <Dialog
+      <StyledDialog
         open={createDialogOpen}
         onClose={() => !creating && setCreateDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-          },
-        }}
+        title="Add New Set"
+        actions={
+          <>
+            <SecondaryButton onClick={() => setCreateDialogOpen(false)} disabled={creating}>
+              Cancel
+            </SecondaryButton>
+            <PrimaryButton onClick={handleCreateSet} disabled={creating}>
+              Create Set
+            </PrimaryButton>
+          </>
+        }
       >
-        <DialogTitle sx={{ color: 'var(--text-bright)' }}>
-          Add New Set
-        </DialogTitle>
-        <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
               label="Set Name"
@@ -681,54 +652,25 @@ export default function SetManagerPage() {
               </Box>
             </Box>
           </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button
-            onClick={() => setCreateDialogOpen(false)}
-            disabled={creating}
-            sx={{
-              color: 'var(--text-secondary)',
-              '&:hover': {
-                backgroundColor: 'var(--hover-light-grey)',
-              },
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateSet}
-            disabled={creating}
-            variant="contained"
-            sx={{
-              backgroundColor: 'var(--accent-primary)',
-              '&:hover': {
-                backgroundColor: 'var(--accent-blue-hover)',
-              },
-            }}
-          >
-            {creating ? <CircularProgress size={24} /> : 'Create Set'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      </StyledDialog>
 
       {/* Edit Set Dialog */}
       {editingSet && (
-        <Dialog
+        <StyledDialog
           open={editDialogOpen}
           onClose={() => !editing && setEditDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-            },
-          }}
+          title="Edit Set"
+          actions={
+            <>
+              <SecondaryButton onClick={() => setEditDialogOpen(false)} disabled={editing}>
+                Cancel
+              </SecondaryButton>
+              <PrimaryButton onClick={handleUpdateSet} disabled={editing}>
+                Update Set
+              </PrimaryButton>
+            </>
+          }
         >
-          <DialogTitle sx={{ color: 'var(--text-bright)' }}>
-            Edit Set
-          </DialogTitle>
-          <DialogContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
               <TextField
                 label="Set Name"
@@ -877,38 +819,7 @@ export default function SetManagerPage() {
                 </Box>
               </Box>
             </Box>
-          </DialogContent>
-          <DialogActions sx={{ p: 2 }}>
-            <Button
-              onClick={() => {
-                setEditDialogOpen(false);
-                setEditingSet(null);
-              }}
-              disabled={editing}
-              sx={{
-                color: 'var(--text-secondary)',
-                '&:hover': {
-                  backgroundColor: 'var(--hover-light-grey)',
-                },
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdateSet}
-              disabled={editing}
-              variant="contained"
-              sx={{
-                backgroundColor: 'var(--accent-primary)',
-                '&:hover': {
-                  backgroundColor: 'var(--accent-blue-hover)',
-                },
-              }}
-            >
-              {editing ? <CircularProgress size={24} /> : 'Update Set'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        </StyledDialog>
       )}
     </Box>
   );

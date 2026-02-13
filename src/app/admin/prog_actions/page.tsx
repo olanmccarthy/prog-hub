@@ -4,9 +4,8 @@ import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Alert,
-  CircularProgress,
 } from '@mui/material';
+import { LoadingBox, ErrorAlert, SuccessAlert } from '@/src/components';
 import { getSessionStatus, startSession, completeSession, generatePairings, autoVoteAllPlayers, autoCreateSuggestions, autoSubmitDecklists, autoModeratorVote, resetSession, resetEntireProg, uploadPlayerDecklist, getPlayersForUpload, simulateEventWheelSpin, simulateMatchScores, SessionStatusResult } from './actions';
 import { ActiveSessionSection } from './components/ActiveSessionSection';
 import { StartSessionSection } from './components/StartSessionSection';
@@ -329,18 +328,7 @@ export default function ProgActionsPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -349,21 +337,8 @@ export default function ProgActionsPage() {
         Session Management
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert
-          severity="success"
-          sx={{ mb: 2 }}
-          onClose={() => setSuccess(null)}
-        >
-          {success}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
       {/* Active Session Section */}
       {status?.activeSession && (

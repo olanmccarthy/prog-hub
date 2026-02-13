@@ -3,23 +3,8 @@
 import { prisma } from '@lib/prisma';
 import { getCurrentUser } from '@lib/auth';
 import { getCardEntriesFromIds } from '@lib/cardLookup';
+import { parseBanlistField } from '@lib/banlistHelpers';
 
-/**
- * Helper function to parse banlist field (handles both string and array)
- */
-function parseBanlistField(field: unknown): number[] {
-  if (!field) return [];
-  if (typeof field === 'string') {
-    if (field.trim() === '') return [];
-    try {
-      return JSON.parse(field) as number[];
-    } catch {
-      return [];
-    }
-  }
-  if (Array.isArray(field)) return field;
-  return [];
-}
 
 export interface CreateSuggestionInput {
   banlistId: number;
@@ -147,10 +132,10 @@ export async function getExistingSuggestion(banlistId: number): Promise<GetExist
       success: true,
       suggestion: {
         id: suggestion.id,
-        banned: parseBanlistField(suggestion.banned),
-        limited: parseBanlistField(suggestion.limited),
-        semilimited: parseBanlistField(suggestion.semilimited),
-        unlimited: parseBanlistField(suggestion.unlimited),
+        banned: await parseBanlistField(suggestion.banned),
+        limited: await parseBanlistField(suggestion.limited),
+        semilimited: await parseBanlistField(suggestion.semilimited),
+        unlimited: await parseBanlistField(suggestion.unlimited),
         comment: suggestion.comment || undefined,
       },
     };
