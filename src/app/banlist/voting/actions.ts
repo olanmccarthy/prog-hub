@@ -3,7 +3,7 @@
 import { prisma } from '@lib/prisma';
 import { requireAuth } from '@lib/serverUtils';
 import { getActiveSession } from '@lib/sessionHelpers';
-import { parseBanlistField } from '@lib/banlistHelpers';
+import { parseBanlistField, mergeBanlists } from '@lib/banlistHelpers';
 import { getMostRecentBanlist } from '../actions';
 import { revalidatePath } from 'next/cache';
 
@@ -234,152 +234,29 @@ async function createBanlistFromWinningSuggestion(
       return { success: false, error: 'Current banlist not found' };
     }
 
-    // Parse current lists and create Sets for lookup
-    // Ensure we're working with arrays of numbers, not strings
-    const currentBannedArray = await parseBanlistField(currentBanlist.banned);
-    const currentLimitedArray = await parseBanlistField(currentBanlist.limited);
-    const currentSemilimitedArray = await parseBanlistField(currentBanlist.semilimited);
-    const currentUnlimitedArray = await parseBanlistField(currentBanlist.unlimited);
-
-    // Double-check these are arrays (defensive programming)
-    if (!Array.isArray(currentBannedArray) || !Array.isArray(currentLimitedArray) ||
-        !Array.isArray(currentSemilimitedArray) || !Array.isArray(currentUnlimitedArray)) {
-      console.error('Current banlist fields are not arrays after parsing:', {
-        banned: currentBanlist.banned,
-        limited: currentBanlist.limited,
-        semilimited: currentBanlist.semilimited,
-        unlimited: currentBanlist.unlimited,
-      });
-      return { success: false, error: 'Current banlist data is corrupted' };
-    }
-
-    const currentBanned = new Set(currentBannedArray.filter(id => typeof id === 'number'));
-    const currentLimited = new Set(currentLimitedArray.filter(id => typeof id === 'number'));
-    const currentSemilimited = new Set(currentSemilimitedArray.filter(id => typeof id === 'number'));
-    const currentUnlimited = new Set(currentUnlimitedArray.filter(id => typeof id === 'number'));
-
-    // Build map of card locations from winning suggestion
-    // Ensure winning suggestion fields are arrays of numbers
-    const cardLocations = new Map<
-      number,
-      'banned' | 'limited' | 'semilimited' | 'unlimited'
-    >();
-
-    // Filter out non-number values from suggestions (defensive)
-    const suggestionBanned = Array.isArray(winningSuggestion.banned)
-      ? winningSuggestion.banned.filter(id => typeof id === 'number')
-      : [];
-    const suggestionLimited = Array.isArray(winningSuggestion.limited)
-      ? winningSuggestion.limited.filter(id => typeof id === 'number')
-      : [];
-    const suggestionSemilimited = Array.isArray(winningSuggestion.semilimited)
-      ? winningSuggestion.semilimited.filter(id => typeof id === 'number')
-      : [];
-    const suggestionUnlimited = Array.isArray(winningSuggestion.unlimited)
-      ? winningSuggestion.unlimited.filter(id => typeof id === 'number')
-      : [];
-
-    suggestionBanned.forEach((id) => cardLocations.set(id, 'banned'));
-    suggestionLimited.forEach((id) => cardLocations.set(id, 'limited'));
-    suggestionSemilimited.forEach((id) => cardLocations.set(id, 'semilimited'));
-    suggestionUnlimited.forEach((id) => cardLocations.set(id, 'unlimited'));
-
-    // Create new lists by merging
-    const newBanned: number[] = [];
-    const newLimited: number[] = [];
-    const newSemilimited: number[] = [];
-    const newUnlimited: number[] = [];
-
-    // Helper to add card to appropriate list
-    const addToList = (cardId: number, category: string) => {
-      // Extra safety: only add if it's actually a number
-      if (typeof cardId !== 'number' || isNaN(cardId)) {
-        console.warn(`Skipping invalid cardId: ${cardId} (type: ${typeof cardId})`);
-        return;
-      }
-
-      switch (category) {
-        case 'banned':
-          newBanned.push(cardId);
-          break;
-        case 'limited':
-          newLimited.push(cardId);
-          break;
-        case 'semilimited':
-          newSemilimited.push(cardId);
-          break;
-        case 'unlimited':
-          newUnlimited.push(cardId);
-          break;
-      }
+    // Parse current banlist
+    const current = {
+      banned: await parseBanlistField(currentBanlist.banned),
+      limited: await parseBanlistField(currentBanlist.limited),
+      semilimited: await parseBanlistField(currentBanlist.semilimited),
+      unlimited: await parseBanlistField(currentBanlist.unlimited),
     };
 
-    // Get all unique card IDs from current banlist
-    const allCurrentCards = new Set([
-      ...currentBanned,
-      ...currentLimited,
-      ...currentSemilimited,
-      ...currentUnlimited,
-    ]);
-
-    // Process each card from current banlist
-    allCurrentCards.forEach((cardId) => {
-      // If card is mentioned in suggestion, use new location; otherwise keep current
-      if (cardLocations.has(cardId)) {
-        addToList(cardId, cardLocations.get(cardId)!);
-      } else {
-        // Keep in current category
-        if (currentBanned.has(cardId)) addToList(cardId, 'banned');
-        else if (currentLimited.has(cardId)) addToList(cardId, 'limited');
-        else if (currentSemilimited.has(cardId))
-          addToList(cardId, 'semilimited');
-        else if (currentUnlimited.has(cardId)) addToList(cardId, 'unlimited');
-      }
-    });
-
-    // Add any new cards from suggestion that weren't in current banlist
-    cardLocations.forEach((category, cardId) => {
-      if (!allCurrentCards.has(cardId)) {
-        addToList(cardId, category);
-      }
-    });
-
-    // Final validation: ensure all arrays contain only numbers
-    const validateArray = (arr: unknown, name: string): boolean => {
-      if (!Array.isArray(arr)) {
-        console.error(`${name} is not an array:`, arr);
-        return false;
-      }
-      const nonNumbers = arr.filter(item => typeof item !== 'number' || isNaN(item));
-      if (nonNumbers.length > 0) {
-        console.error(`${name} contains non-number values:`, nonNumbers);
-        return false;
-      }
-      return true;
-    };
-
-    if (!validateArray(newBanned, 'newBanned') ||
-        !validateArray(newLimited, 'newLimited') ||
-        !validateArray(newSemilimited, 'newSemilimited') ||
-        !validateArray(newUnlimited, 'newUnlimited')) {
-      return { success: false, error: 'Generated banlist contains invalid data' };
-    }
+    // Merge banlists using shared helper
+    const merged = await mergeBanlists(current, winningSuggestion);
 
     console.log('Creating new banlist for session', currentBanlist.sessionId + 1, {
-      banned: newBanned.length,
-      limited: newLimited.length,
-      semilimited: newSemilimited.length,
-      unlimited: newUnlimited.length,
+      banned: merged.banned.length,
+      limited: merged.limited.length,
+      semilimited: merged.semilimited.length,
+      unlimited: merged.unlimited.length,
     });
 
     // Create new banlist for next session
     await prisma.banlist.create({
       data: {
         sessionId: currentBanlist.sessionId + 1,
-        banned: newBanned,
-        limited: newLimited,
-        semilimited: newSemilimited,
-        unlimited: newUnlimited,
+        ...merged,
       },
     });
 

@@ -3,6 +3,7 @@
 import { prisma } from '@lib/prisma';
 import { getCurrentUser } from '@lib/auth';
 import { revalidatePath } from 'next/cache';
+import { parseBanlistField, mergeBanlists } from '@lib/banlistHelpers';
 
 export interface PlayerForModeratorSelection {
   id: number;
@@ -354,71 +355,29 @@ export async function selectRandomBanlistSuggestion(): Promise<RandomBanlistResu
       data: { chosen: true },
     });
 
-    // Create new banlist for next session (merge with current)
-    const currentBanned = activeBanlist.banned as number[] | string;
-    const currentLimited = activeBanlist.limited as number[] | string;
-    const currentSemilimited = activeBanlist.semilimited as number[] | string;
-    const currentUnlimited = activeBanlist.unlimited as number[] | string;
-
-    const suggestionBanned = selectedSuggestion.banned as number[] | string;
-    const suggestionLimited = selectedSuggestion.limited as number[] | string;
-    const suggestionSemilimited = selectedSuggestion.semilimited as number[] | string;
-    const suggestionUnlimited = selectedSuggestion.unlimited as number[] | string;
-
-    // Parse JSON if needed
-    const parseCardList = (list: number[] | string): number[] => {
-      if (typeof list === 'string') {
-        return JSON.parse(list);
-      }
-      return list;
+    // Parse current banlist and suggestion
+    const currentBanlist = {
+      banned: await parseBanlistField(activeBanlist.banned),
+      limited: await parseBanlistField(activeBanlist.limited),
+      semilimited: await parseBanlistField(activeBanlist.semilimited),
+      unlimited: await parseBanlistField(activeBanlist.unlimited),
     };
 
-    const currentBannedList = parseCardList(currentBanned);
-    const currentLimitedList = parseCardList(currentLimited);
-    const currentSemilimitedList = parseCardList(currentSemilimited);
-    const currentUnlimitedList = parseCardList(currentUnlimited);
+    const suggestion = {
+      banned: await parseBanlistField(selectedSuggestion.banned),
+      limited: await parseBanlistField(selectedSuggestion.limited),
+      semilimited: await parseBanlistField(selectedSuggestion.semilimited),
+      unlimited: await parseBanlistField(selectedSuggestion.unlimited),
+    };
 
-    const suggestionBannedList = parseCardList(suggestionBanned);
-    const suggestionLimitedList = parseCardList(suggestionLimited);
-    const suggestionSemilimitedList = parseCardList(suggestionSemilimited);
-    const suggestionUnlimitedList = parseCardList(suggestionUnlimited);
-
-    // Create merged lists (suggestion cards move to their new categories, others stay)
-    const allAffectedCards = new Set([
-      ...suggestionBannedList,
-      ...suggestionLimitedList,
-      ...suggestionSemilimitedList,
-      ...suggestionUnlimitedList,
-    ]);
-
-    const newBanned = [
-      ...currentBannedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionBannedList,
-    ];
-
-    const newLimited = [
-      ...currentLimitedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionLimitedList,
-    ];
-
-    const newSemilimited = [
-      ...currentSemilimitedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionSemilimitedList,
-    ];
-
-    const newUnlimited = [
-      ...currentUnlimitedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionUnlimitedList,
-    ];
+    // Merge banlists using shared helper
+    const merged = await mergeBanlists(currentBanlist, suggestion);
 
     // Create banlist for next session
     await prisma.banlist.create({
       data: {
         sessionId: activeSession.number + 1,
-        banned: newBanned,
-        limited: newLimited,
-        semilimited: newSemilimited,
-        unlimited: newUnlimited,
+        ...merged,
       },
     });
 
@@ -520,71 +479,29 @@ export async function selectMostVotedBanlistSuggestion(): Promise<RandomBanlistR
       data: { chosen: true },
     });
 
-    // Create new banlist for next session (merge with current)
-    const currentBanned = activeBanlist.banned as number[] | string;
-    const currentLimited = activeBanlist.limited as number[] | string;
-    const currentSemilimited = activeBanlist.semilimited as number[] | string;
-    const currentUnlimited = activeBanlist.unlimited as number[] | string;
-
-    const suggestionBanned = selectedSuggestion.banned as number[] | string;
-    const suggestionLimited = selectedSuggestion.limited as number[] | string;
-    const suggestionSemilimited = selectedSuggestion.semilimited as number[] | string;
-    const suggestionUnlimited = selectedSuggestion.unlimited as number[] | string;
-
-    // Parse JSON if needed
-    const parseCardList = (list: number[] | string): number[] => {
-      if (typeof list === 'string') {
-        return JSON.parse(list);
-      }
-      return list;
+    // Parse current banlist and suggestion
+    const currentBanlist = {
+      banned: await parseBanlistField(activeBanlist.banned),
+      limited: await parseBanlistField(activeBanlist.limited),
+      semilimited: await parseBanlistField(activeBanlist.semilimited),
+      unlimited: await parseBanlistField(activeBanlist.unlimited),
     };
 
-    const currentBannedList = parseCardList(currentBanned);
-    const currentLimitedList = parseCardList(currentLimited);
-    const currentSemilimitedList = parseCardList(currentSemilimited);
-    const currentUnlimitedList = parseCardList(currentUnlimited);
+    const suggestion = {
+      banned: await parseBanlistField(selectedSuggestion.banned),
+      limited: await parseBanlistField(selectedSuggestion.limited),
+      semilimited: await parseBanlistField(selectedSuggestion.semilimited),
+      unlimited: await parseBanlistField(selectedSuggestion.unlimited),
+    };
 
-    const suggestionBannedList = parseCardList(suggestionBanned);
-    const suggestionLimitedList = parseCardList(suggestionLimited);
-    const suggestionSemilimitedList = parseCardList(suggestionSemilimited);
-    const suggestionUnlimitedList = parseCardList(suggestionUnlimited);
-
-    // Create merged lists (suggestion cards move to their new categories, others stay)
-    const allAffectedCards = new Set([
-      ...suggestionBannedList,
-      ...suggestionLimitedList,
-      ...suggestionSemilimitedList,
-      ...suggestionUnlimitedList,
-    ]);
-
-    const newBanned = [
-      ...currentBannedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionBannedList,
-    ];
-
-    const newLimited = [
-      ...currentLimitedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionLimitedList,
-    ];
-
-    const newSemilimited = [
-      ...currentSemilimitedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionSemilimitedList,
-    ];
-
-    const newUnlimited = [
-      ...currentUnlimitedList.filter((id) => !allAffectedCards.has(id)),
-      ...suggestionUnlimitedList,
-    ];
+    // Merge banlists using shared helper
+    const merged = await mergeBanlists(currentBanlist, suggestion);
 
     // Create banlist for next session
     await prisma.banlist.create({
       data: {
         sessionId: activeSession.number + 1,
-        banned: newBanned,
-        limited: newLimited,
-        semilimited: newSemilimited,
-        unlimited: newUnlimited,
+        ...merged,
       },
     });
 
