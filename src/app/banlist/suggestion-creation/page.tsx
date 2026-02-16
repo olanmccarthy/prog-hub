@@ -190,7 +190,10 @@ function useSuggestionFields(initialValue: CardEntry[] = []) {
   };
 
   const getCardIds = () => {
-    return cards.filter(card => card.id !== null && card.id > 0).map(card => card.id as number);
+    return cards
+      .filter(card => card.id !== null && card.id > 0)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(card => card.id as number);
   };
 
   return { cards, addCard, removeCard, updateCard, hasErrors, getCardIds, setCards };
