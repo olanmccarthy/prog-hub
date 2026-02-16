@@ -2,15 +2,15 @@ import { Box, Typography } from '@mui/material';
 
 export function CategoryCard({ title, cards }: { title: string; cards: string[] | number[] }) {
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box sx={{ mb: 3 }}>
       <Typography
-        variant="subtitle1"
+        variant="h6"
         sx={{ color: 'var(--text-bright)', fontWeight: 'bold', mb: 1 }}
       >
         {title} ({cards.length})
       </Typography>
       {cards.length > 0 ? (
-        <Box sx={{ pl: 2 }}>
+        <Box>
           {cards.map((card, idx) => (
             <Typography
               key={idx}
@@ -22,7 +22,7 @@ export function CategoryCard({ title, cards }: { title: string; cards: string[] 
           ))}
         </Box>
       ) : (
-        <Typography variant="body1" sx={{ color: 'var(--text-secondary)' }}>
+        <Typography variant="body1" sx={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
           No cards
         </Typography>
       )}

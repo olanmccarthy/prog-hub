@@ -1,9 +1,4 @@
-import {
-  Box,
-  Typography,
-  Chip,
-  IconButton,
-} from '@mui/material';
+import { Box, Typography, Chip, IconButton, Divider } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
@@ -21,6 +16,7 @@ interface VotingBanlistCardProps {
   showModeratorControls: boolean;
   isChosen: boolean;
   onSelectWinner: (id: number) => void;
+  number: number;
 }
 
 /**
@@ -39,86 +35,99 @@ export function VotingBanlistCard({
   showModeratorControls,
   isChosen,
   onSelectWinner,
+  number,
 }: VotingBanlistCardProps) {
-
   return (
     <>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          mb: 3,
-        }}
-      >
-        <Typography variant="h5" sx={{ color: 'var(--text-bright)', flex: 1 }}>
-          Session {suggestion.sessionNumber}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {isOwnSuggestion && (
-            <Chip label="Your Suggestion" color="primary" size="small" />
-          )}
-          {hasSubmitted && isVoted && (
-            <Chip
-              icon={<CheckCircleIcon />}
-              label="Voted"
-              color="success"
-              size="small"
-            />
-          )}
-        </Box>
-      </Box>
-
-      <CategoryCard title="Banned" cards={suggestion.bannedNames} />
-      <CategoryCard title="Limited" cards={suggestion.limitedNames} />
-      <CategoryCard title="Semi-Limited" cards={suggestion.semilimitedNames} />
-      <CategoryCard title="Unlimited" cards={suggestion.unlimitedNames} />
-
-      {suggestion.comment && (
+      <Box sx={{ flex: 1 }}>
         <Box
           sx={{
-            mt: 2,
-            p: 2,
-            backgroundColor: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 1,
+            position: 'relative',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            mb: 1,
+            minHeight: 32,
           }}
         >
           <Typography
-            variant="subtitle2"
-            sx={{ color: 'var(--text-secondary)', mb: 1, fontWeight: 'bold' }}
+            variant="h5"
+            sx={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}
           >
-            Player&apos;s Comment:
+            Suggestion {number}
           </Typography>
-          <Typography
-            variant="body2"
+          <Box sx={{ display: 'flex', gap: 1, position: 'absolute', right: 0 }}>
+            {isOwnSuggestion && (
+              <Chip label="Your Suggestion" color="primary" size="small" />
+            )}
+            {hasSubmitted && isVoted && (
+              <Chip
+                icon={<CheckCircleIcon />}
+                label="Voted"
+                color="success"
+                size="small"
+              />
+            )}
+          </Box>
+        </Box>
+        <Divider
+          sx={{
+            borderColor: 'var(--border-color)',
+            borderBottomWidth: 2,
+            my: 2,
+          }}
+        />
+
+        <CategoryCard title="Banned" cards={suggestion.bannedNames} />
+        <CategoryCard title="Limited" cards={suggestion.limitedNames} />
+        <CategoryCard
+          title="Semi-Limited"
+          cards={suggestion.semilimitedNames}
+        />
+        <CategoryCard title="Unlimited" cards={suggestion.unlimitedNames} />
+
+        {suggestion.comment && (
+          <Box
             sx={{
-              color: 'var(--text-primary)',
-              fontStyle: 'italic',
-              whiteSpace: 'pre-wrap',
+              mt: 2,
+              p: 2,
+              backgroundColor: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 1,
             }}
           >
-            &quot;{suggestion.comment}&quot;
-          </Typography>
-        </Box>
-      )}
+            <Typography
+              variant="subtitle2"
+              sx={{ color: 'var(--text-secondary)', mb: 1, fontWeight: 'bold' }}
+            >
+              Player&apos;s Comment:
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                color: 'var(--text-primary)',
+                fontStyle: 'italic',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              &quot;{suggestion.comment}&quot;
+            </Typography>
+          </Box>
+        )}
+      </Box>
 
       {!isOwnSuggestion && !hasSubmitted && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-          <IconButton
-            onClick={() => onToggleVote(suggestion.id)}
-            sx={{
-              color: isSelected
-                ? 'var(--accent-primary)'
-                : 'var(--text-secondary)',
-              '&:hover': {
-                color: 'var(--accent-primary)',
-                backgroundColor: 'var(--hover-light-grey)',
-              },
-            }}
-          >
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            mt: 'auto',
+            pt: 2,
+          }}
+        >
+          <IconButton onClick={() => onToggleVote(suggestion.id)}>
             {isSelected ? (
-              <ThumbUpIcon sx={{ fontSize: 40 }} />
+              <ThumbUpIcon sx={{ fontSize: 40, color: '#4caf50' }} />
             ) : (
               <ThumbUpOutlinedIcon sx={{ fontSize: 40 }} />
             )}
@@ -127,21 +136,17 @@ export function VotingBanlistCard({
       )}
 
       {showModeratorControls && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-          <IconButton
-            onClick={() => onSelectWinner(suggestion.id)}
-            sx={{
-              color: isChosen
-                ? '#4caf50'
-                : 'var(--text-secondary)',
-              '&:hover': {
-                color: '#4caf50',
-                backgroundColor: 'var(--hover-light-grey)',
-              },
-            }}
-          >
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            mt: 'auto',
+            pt: 2,
+          }}
+        >
+          <IconButton onClick={() => onSelectWinner(suggestion.id)}>
             {isChosen ? (
-              <CheckCircleIcon sx={{ fontSize: 40 }} />
+              <CheckCircleIcon sx={{ fontSize: 40, color: '#4caf50' }} />
             ) : (
               <CheckCircleOutlineIcon sx={{ fontSize: 40 }} />
             )}

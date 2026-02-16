@@ -1,6 +1,6 @@
 import { Paper, Typography, Box, Button } from '@mui/material';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
-import { VotingBanlistCard } from './VotingBanlistCard';
+import { SuggestionGrid } from './SuggestionGrid';
 import type { BanlistSuggestionForVoting } from '../actions';
 
 interface PlayerVotingViewProps {
@@ -52,36 +52,14 @@ export function PlayerVotingView({
         </Typography>
       </Paper>
 
-      {suggestions.map((suggestion) => {
-        const isOwnSuggestion = suggestion.playerId === currentUserId;
-        const isSelected = selectedVotes.has(suggestion.id);
-
-        return (
-          <Paper
-            key={suggestion.id}
-            sx={{
-              mb: 3,
-              p: 3,
-              backgroundColor: 'var(--bg-secondary)',
-              border: isSelected
-                ? '2px solid var(--accent-primary)'
-                : '1px solid var(--border-color)',
-            }}
-          >
-            <VotingBanlistCard
-              suggestion={suggestion}
-              isOwnSuggestion={isOwnSuggestion}
-              isSelected={isSelected}
-              hasSubmitted={false}
-              isVoted={false}
-              onToggleVote={onToggleVote}
-              showModeratorControls={false}
-              isChosen={false}
-              onSelectWinner={() => {}}
-            />
-          </Paper>
-        );
-      })}
+      <SuggestionGrid
+        suggestions={suggestions}
+        currentUserId={currentUserId}
+        userVotedIds={[]}
+        mode="voting"
+        selectedVotes={selectedVotes}
+        onToggleVote={onToggleVote}
+      />
 
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
         <Button

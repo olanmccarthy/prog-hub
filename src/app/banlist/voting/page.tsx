@@ -143,12 +143,7 @@ export default function BanlistVotingPage() {
   const randomizedSuggestions = useMemo(() => {
     if (suggestions.length === 0) return [];
 
-    const allPlayersVoted = votedPlayerCount >= totalPlayerCount;
-    const filtered = allPlayersVoted
-      ? suggestions.filter((s) => s.voteCount >= 2)
-      : suggestions;
-
-    const shuffled = [...filtered];
+    const shuffled = [...suggestions];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const seed = shuffled[i].id + shuffled[0].id;
       const j = Math.floor((seed % 1000) / 1000 * (i + 1));
@@ -160,7 +155,7 @@ export default function BanlistVotingPage() {
 
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, sm: 3, md: 4 } }}>
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress />
         </Box>
@@ -173,7 +168,7 @@ export default function BanlistVotingPage() {
     isModerator && hasVoted && allPlayersVoted && !confirmedWinner;
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" sx={{ mb: 3, color: 'var(--text-bright)' }}>
         Banlist Voting
         {sessionNumber && ` - Session ${sessionNumber}`}
@@ -190,6 +185,10 @@ export default function BanlistVotingPage() {
           isModerator={isModerator}
           onChangeSelection={handleClearWinner}
           isChanging={submitting}
+          suggestions={randomizedSuggestions}
+          confirmedWinnerId={confirmedWinner}
+          currentUserId={currentUserId}
+          userVotedIds={userVotedIds}
         />
       ) : submissionCount < totalPlayerCount ? (
         <WaitingForSubmissions
@@ -219,8 +218,6 @@ export default function BanlistVotingPage() {
         <PostVotingView
           votedPlayerCount={votedPlayerCount}
           totalPlayerCount={totalPlayerCount}
-          isModerator={isModerator}
-          selectedWinner={selectedWinner}
           suggestions={randomizedSuggestions}
           currentUserId={currentUserId}
           userVotedIds={userVotedIds}
