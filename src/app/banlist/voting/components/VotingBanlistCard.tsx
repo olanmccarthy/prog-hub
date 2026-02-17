@@ -134,7 +134,7 @@ export function VotingBanlistCard({
         >
           <IconButton onClick={() => onToggleVote(suggestion.id)}>
             {isSelected ? (
-              <ThumbUpIcon sx={{ fontSize: 40, color: '#4caf50' }} />
+              <ThumbUpIcon sx={{ fontSize: 40, color: 'var(--success-green)' }} />
             ) : (
               <ThumbUpOutlinedIcon sx={{ fontSize: 40 }} />
             )}
@@ -153,7 +153,7 @@ export function VotingBanlistCard({
         >
           <IconButton onClick={() => onSelectWinner(suggestion.id)}>
             {isChosen ? (
-              <CheckCircleIcon sx={{ fontSize: 40, color: '#4caf50' }} />
+              <CheckCircleIcon sx={{ fontSize: 40, color: 'var(--success-green)' }} />
             ) : (
               <CheckCircleOutlineIcon sx={{ fontSize: 40 }} />
             )}

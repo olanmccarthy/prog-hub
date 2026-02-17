@@ -304,7 +304,7 @@ export default function BanlistSuggestionHistoryPage() {
                     p: 3,
                     backgroundColor: 'var(--bg-secondary)',
                     border: suggestion.chosen
-                      ? '2px solid #4caf50'
+                      ? '2px solid var(--success-green)'
                       : '2px solid var(--border-color)',
                     display: 'flex',
                     flexDirection: 'column',

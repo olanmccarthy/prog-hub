@@ -94,7 +94,7 @@ export function SuggestionGrid({
         if (isSelected || isChosen) {
           borderColor = 'var(--accent-primary)';
         } else if (isWinner) {
-          borderColor = '#ffd700';
+          borderColor = 'var(--gold)';
         }
 
         // Opacity: grayed out when ineligible (except winners are always full opacity)
