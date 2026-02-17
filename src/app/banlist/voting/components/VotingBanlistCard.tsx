@@ -3,19 +3,29 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
-import { CategoryCard } from '@components/CategoryCard';
+import { CategoryCard, zipCards } from '@components/CategoryCard';
 import type { BanlistSuggestionForVoting } from '../actions';
 
 interface VotingBanlistCardProps {
+  /** The banlist suggestion data including card IDs, names, and vote count */
   suggestion: BanlistSuggestionForVoting;
+  /** Whether this suggestion belongs to the current user (shows "Your Suggestion" chip) */
   isOwnSuggestion: boolean;
+  /** Whether the player has selected this suggestion to vote for (voting mode) */
   isSelected: boolean;
+  /** Whether voting is closed — hides the thumbs-up button and shows "Voted" chip instead */
   hasSubmitted: boolean;
+  /** Whether the current user voted for this suggestion (shows "Voted" chip) */
   isVoted: boolean;
+  /** Callback when player toggles their vote on this suggestion */
   onToggleVote: (id: number) => void;
+  /** Whether to show the moderator's tick icon for selecting a winner */
   showModeratorControls: boolean;
+  /** Whether the moderator has selected this suggestion as the winner */
   isChosen: boolean;
+  /** Callback when moderator selects this suggestion as the winner */
   onSelectWinner: (id: number) => void;
+  /** Display number for this suggestion (1-indexed) */
   number: number;
 }
 
@@ -78,13 +88,10 @@ export function VotingBanlistCard({
           }}
         />
 
-        <CategoryCard title="Banned" cards={suggestion.bannedNames} />
-        <CategoryCard title="Limited" cards={suggestion.limitedNames} />
-        <CategoryCard
-          title="Semi-Limited"
-          cards={suggestion.semilimitedNames}
-        />
-        <CategoryCard title="Unlimited" cards={suggestion.unlimitedNames} />
+        <CategoryCard title="Banned" cards={zipCards(suggestion.banned, suggestion.bannedNames)} />
+        <CategoryCard title="Limited" cards={zipCards(suggestion.limited, suggestion.limitedNames)} />
+        <CategoryCard title="Semi-Limited" cards={zipCards(suggestion.semilimited, suggestion.semilimitedNames)} />
+        <CategoryCard title="Unlimited" cards={zipCards(suggestion.unlimited, suggestion.unlimitedNames)} />
 
         {suggestion.comment && (
           <Box
