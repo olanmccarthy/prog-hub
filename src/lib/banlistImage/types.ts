@@ -17,6 +17,8 @@ export interface BanlistImageConfig {
   cardSpacing: number;
   /** Maximum cards per row */
   cardsPerRow: number;
+  /** Scale factor for exclamation badge relative to card width (default: 0.30) */
+  exclamationBadgeScale?: number;
 }
 
 export interface CardPosition {
@@ -41,4 +43,6 @@ export interface BanlistForImage {
   semilimited: number[];
   /** Recently unlimited cards */
   unlimited: number[];
+  /** Optional: Cards that are new (newly added or moved categories) */
+  newCards?: Set<number>;
 }

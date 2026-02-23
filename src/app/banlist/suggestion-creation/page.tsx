@@ -18,7 +18,8 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { getMostRecentBanlist } from '@/src/app/banlist/actions';
-import { createBanlistSuggestion, CreateSuggestionInput, canSubmitSuggestions, searchCardNames, CardOption, getExistingSuggestion, getCardEntriesFromIds } from './actions';
+import { getActiveSession } from '@/src/lib/sessionHelpers';
+import { createBanlistSuggestion, CreateSuggestionInput, canSubmitSuggestions, searchCardNames, CardOption, getExistingSuggestion, getCardEntriesFromIds, getPreviouslyUsedCards, doesCardHaveProtection } from './actions';
 
 interface CardEntry {
   name: string;
@@ -208,6 +209,7 @@ export default function BanlistSuggestionCreationPage() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [canSubmit, setCanSubmit] = useState(true);
   const [comment, setComment] = useState('');
+  const [sessionId, setSessionId] = useState<number | null>(null);
 
   const banned = useSuggestionFields();
   const limited = useSuggestionFields();
@@ -223,6 +225,12 @@ export default function BanlistSuggestionCreationPage() {
     try {
       setLoading(true);
       setError('');
+      const activeSession = await getActiveSession();
+      if (!activeSession) {
+        setError('There is no currently active session');
+      } else {
+        setSessionId(activeSession.id);
+      }
       const banlistResult = await getMostRecentBanlist();
       if (banlistResult.success && banlistResult.banlist && banlistResult.banlist.id) {
         setBanlistId(banlistResult.banlist.id);
@@ -274,9 +282,17 @@ export default function BanlistSuggestionCreationPage() {
     }
   };
 
-  const validateBanlistSuggestion = (
+  const validateBanlistSuggestion = async (
     banlist: CreateSuggestionInput,
-  ): { isValid: boolean; error?: string } => {
+  ): Promise<{ isValid: boolean; error?: string }> => {
+    // Validate sessionId is present
+    if (!sessionId) {
+      return {
+        isValid: false,
+        error: 'No active session found',
+      };
+    }
+
     const cardToList = new Map<number, string>();
 
     const lists = {
@@ -285,6 +301,26 @@ export default function BanlistSuggestionCreationPage() {
       'semi-limited': banlist.semilimited,
       unlimited: banlist.unlimited,
     };
+
+    const cards = [...banned.cards, ...limited.cards, ...semilimited.cards];
+
+    // Get previously used cards once (outside loop for performance)
+    const previouslyUsedCards = await getPreviouslyUsedCards(sessionId);
+
+    // Collect all unique card IDs to check protection status
+    const allCardIds = [...new Set([...banlist.banned, ...banlist.limited, ...banlist.semilimited, ...banlist.unlimited])];
+
+    // Batch check protection status for all cards
+    const protectionChecks = await Promise.all(
+      allCardIds.map(async (cardId) => {
+        const hasProtection = await doesCardHaveProtection(cardId, previouslyUsedCards);
+        return { cardId, hasProtection };
+      })
+    );
+
+    const protectionMap = new Map(
+      protectionChecks.map(({ cardId, hasProtection }) => [cardId, hasProtection])
+    );
 
     for (const [listName, cardIds] of Object.entries(lists)) {
       const seenInList = new Set<number>();
@@ -311,6 +347,16 @@ export default function BanlistSuggestionCreationPage() {
           return {
             isValid: false,
             error: `Card appears in both ${otherList} and ${listName}`,
+          };
+        }
+
+        // Check protection status
+        if (protectionMap.get(cardId)) {
+          const card = cards.find((c) => c.id === cardId);
+          const cardName = card?.name || `Card #${cardId}`;
+          return {
+            isValid: false,
+            error: `${cardName} cannot be added because it has protection (not previously used in the series)`,
           };
         }
 
@@ -347,7 +393,7 @@ export default function BanlistSuggestionCreationPage() {
         existingSuggestionId: existingSuggestionId ?? undefined,
       };
 
-      const validation = validateBanlistSuggestion(banlistSuggestion);
+      const validation = await validateBanlistSuggestion(banlistSuggestion);
       if (validation.isValid) {
         const result = await createBanlistSuggestion(banlistSuggestion);
         if (result.success) {

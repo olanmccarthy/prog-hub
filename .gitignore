@@ -44,3 +44,4 @@ next-env.d.ts
 /public/deck-images/*.png
 /public/banlist-images/*.png
 /public/card-images/*
+/card-images/

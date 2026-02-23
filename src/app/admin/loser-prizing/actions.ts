@@ -271,6 +271,17 @@ export async function spinLoserPrizingWheel(): Promise<SpinLoserPrizingResult> {
     // Select a random entry based on weighted probabilities
     const selectedEntry = selectWeightedRandom(entries);
 
+    // If no entry selected (Normal Prizing), mark loserPrizingSpun as true immediately
+    if (!selectedEntry) {
+      await prisma.session.update({
+        where: { id: activeSession.id },
+        data: { loserPrizingSpun: true },
+      });
+
+      revalidatePath('/admin/loser-prizing');
+      revalidatePath('/admin/prog_actions');
+    }
+
     return {
       success: true,
       selectedEntry: selectedEntry

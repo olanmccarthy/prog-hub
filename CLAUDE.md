@@ -120,7 +120,8 @@ The application uses Prisma models defined in `prisma/schema.prisma`. The data m
 
 **Core Models** (in `prisma/schema.prisma`):
 - **Player**: Tournament participants with authentication (name, password, isAdmin)
-- **Session**: A progression tournament event. Pre-populated from sets marked as is_a_session. Fields: number (unique), date (nullable, set when activated), setId (FK to Set), complete (boolean), active (boolean), eventWheelSpun (boolean), victoryPointsAssigned (boolean), walletPointsAssigned (boolean), moderatorId (nullable integer), placements (first-sixth as nullable integers)
+- **Session**: A progression tournament event. Pre-populated from sets marked as is_a_session. Fields: number (unique), date (nullable, set when activated), setId (FK to Set), complete (boolean), active (boolean), eventWheelSpun (boolean), victoryPointsAssigned (boolean), walletPointsAssigned (boolean), loserPrizingSpun (boolean), moderatorId (nullable integer), placements (first-sixth as nullable integers), selectedEvents (TEXT, stores JSON array of event names)
+- **SessionModifier**: Tracks modifiers applied to a session from event wheel spins. One record per session (optional). Contains 15+ boolean flags for various modifiers (doubleWalletPoints, gamblingEnabled, earlyDecklistPublic, etc.), plus loser prizing state tracking and metadata (halvedPlayerIds as JSON)
 - **Decklist**: Player's deck for a session (maindeck, sidedeck, extradeck as JSON string arrays, submittedAt timestamp)
 - **Banlist**: Card restrictions for a session (sessionId stores session number, not id; banned, limited, semilimited, unlimited as JSON arrays of card IDs)
 - **BanlistSuggestion**: Player-submitted banlist changes for voting (banned, limited, semilimited, unlimited as JSON arrays of card IDs; includes moderatorId and chosen flag)
@@ -128,24 +129,30 @@ The application uses Prisma models defined in `prisma/schema.prisma`. The data m
 - **Pairing**: Match pairings for each round of a session with win counts
 - **VictoryPoint**: Victory points awarded to players per session
 - **Wallet**: Player wallet tracking funds (playerId unique FK, amount integer; automatically created/deleted with player)
-- **WalletTransaction**: Detailed transaction log for wallets (walletId, sessionId, amount, type, description, createdAt) - tracks VICTORY_POINT_AWARD, SHOP_PURCHASE, MANUAL_ADJUSTMENT types
+- **WalletTransaction**: Detailed transaction log for wallets (walletId, sessionId, amount, type, description, createdAt) - tracks VICTORY_POINT_AWARD, SHOP_PURCHASE, MANUAL_ADJUSTMENT, GAMBLING_BET, GAMBLING_PAYOUT, LOSER_PRIZING types
 - **WalletPointBreakdown**: Defines wallet point distribution for top 6 placements (first through sixth as integers, active boolean) - only one breakdown can be active at a time
-- **Transaction**: Player spending history (playerId, setId, amount, date with default now()) - legacy/simplified transaction tracking
-- **EventWheelEntry**: Event wheel outcomes (name, description, chance) - configurable events that can occur at the start of a session
-- **LoserPrizingEntry**: Loser prizing outcomes (name, description, chance) - configurable consolation prizes for lower placements
-- **Card**: Yu-Gi-Oh card data (11,316 cards with name, type, attribute, property, types, level, atk, def, link, pendulumScale)
-- **Set**: Yu-Gi-Oh set/product data (1,004 sets with setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo; indexed on setCode and tcgDate)
+- **Transaction**: Player spending history (playerId, setId, sessionId optional, amount, date with default now()) - legacy/simplified transaction tracking
+- **PlayerBet**: Betting system records (sessionId, bettorId, targetPlayerId, betAmount, odds, payout, status, placedAt) - one bet per player per session. Status: 'pending', 'won', 'lost', 'void'
+- **EventWheelEntry**: Event wheel outcomes (name, description, chance, 15+ modifier boolean fields) - configurable events that can occur at the start of a session
+- **LoserPrizingEntry**: Loser prizing outcomes (name, description, chance, automation metadata) - configurable consolation prizes for lower placements. Includes automationType (IMMEDIATE_WALLET, IMMEDIATE_VP, SESSION_MODIFIER, MANUAL), wallet/VP change amounts, and session modifier flags
+- **LoserPrizingResult**: Tracks loser prizing outcomes awarded to players (sessionId, playerId, entryId, entryName, entryDescription, targetPlayerId optional, additionalData JSON, automatedResult boolean, appliedAt timestamp)
+- **Card**: Yu-Gi-Oh card data (11,316 cards with name, type, attribute, property, types, level, atk, def, link, pendulumScale, hasProtection - boolean defaulting to true)
+- **Set**: Yu-Gi-Oh set/product data (1,004 sets with setName, setCode, numOfCards, tcgDate, setImage, isASession, isPurchasable, isPromo, price, useDBImage; indexed on setCode and tcgDate)
+- **SynergyExcludedCard**: Cards excluded from synergy calculations in stats (cardId unique, addedAt timestamp)
 
 **Key Relationships**:
 - **Sessions**: Pre-populated from Sets where is_a_session=true. Link to Set via setId. Only one session can be active at a time
 - **Sessions → Players**: Store top 6 placements as nullable integer foreign keys (not Prisma relations)
+- **Sessions → SessionModifier**: One-to-one optional relationship. Created when event wheel is spun and modifiers need tracking
 - **Decklists**: Belong to both a Player and a Session with a submittedAt timestamp
 - **Banlists**: Reference Sessions via sessionId which stores the session **number** (not id), with no foreign key constraint. This allows banlists to be created for future sessions before they are activated
 - **BanlistSuggestions**: Have both a submitting player and an optional moderator
 - **Pairings**: Link two players (player1, player2) with win counts for a specific session/round
 - **Wallets**: One-to-one relationship with Player. Automatically created when player is created (with amount=0), automatically deleted when player is deleted (onDelete: Cascade)
 - **WalletTransactions**: Many-to-one with Wallet and optional Session. Cascade delete with wallet. Tracks all wallet balance changes
-- **Transactions**: Many-to-one with both Player and Set. Tracks player spending on sets with timestamp (legacy system)
+- **Transactions**: Many-to-one with both Player, Set, and optional Session. Tracks player spending on sets with timestamp (legacy system)
+- **PlayerBets**: Many-to-one with Session (bettor), Player (bettor), and Player (target). Unique constraint on (sessionId, bettorId) - one bet per player per session
+- **LoserPrizingResults**: Many-to-one with Session, Player (recipient), LoserPrizingEntry, and optional Player (target)
 
 **Important Prisma Notes**:
 - All models use camelCase in the schema but map to snake_case in the database via `@map`
@@ -175,7 +182,12 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
     - `victory-point-assignment/`: Victory point passdown system
     - `loser-prizing/`: Loser prizing wheel for consolation prizes
     - `moderator-selection/`: Random moderator selection with eligibility controls
-  - `src/app/play/`: Player pages (pairings, standings, decklist submission)
+  - `src/app/play/`: Player pages
+    - `pairings/`: View and update match results
+    - `standings/`: View ranked standings with tiebreakers
+    - `decklist-submission/`: Upload .ydk files with validation
+    - `decklists/`: View submitted decklists with filters
+    - `betting/`: Betting system (when gambling enabled for session)
   - `src/app/banlist/`: Banlist management (suggestions, voting, history)
   - `src/app/shop/`: Browse and purchase sets with wallet points
   - `src/app/leaderboard/`: View Victory Point and Wallet rankings
@@ -191,11 +203,25 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
   - `auth.ts`: Session-based authentication using cookies
   - `ydkParser.ts`: Yu-Gi-Oh .ydk deck file parser and validator
   - `deckValidator.ts`: Deck validation against banlist restrictions
+  - `serverUtils.ts`: Server action helpers (requireAuth, requireAdmin)
+  - `sessionHelpers.ts`: Session query helpers (getActiveSession, requireActiveSession, areStandingsFinalized, getNextIncompleteSession)
+  - `banlistHelpers.ts`: Banlist parsing and merging utilities (parseBanlistField, mergeBanlists)
+  - `randomHelpers.ts`: Weighted random selection (selectWeightedRandom)
+  - `sessionModifierHelpers.ts`: Session modifier merging for event wheel
+  - `loserPrizing.ts`: Loser prizing automation helpers (wallet updates, steal operations, session modifiers)
+  - `discordClient.ts`: Discord SQS client for asynchronous notifications
 - **`src/components/`**: Shared React components
   - `AppHeader.tsx`: Navigation header with authentication
   - `YdkUploadBox.tsx`: Reusable deck upload and validation component
   - `EventWheel.tsx`: Canvas-based spinning wheel component with animation
   - `EventResultModal.tsx`: Modal for displaying wheel spin results
+  - `LoserPrizingResultModal.tsx`: Modal for displaying loser prizing spin results
+  - `StatusAlert.tsx`: Reusable status alert component (error/success/info/warning)
+  - `StyledDialog.tsx`: Reusable dialog with consistent styling
+  - `StyledTable.tsx`: Reusable table with consistent styling
+  - `WheelConfigSection.tsx`: Reusable wheel configuration component for event/loser prizing management
+  - `buttons/StyledButton.tsx`: Styled button components (PrimaryButton, SecondaryButton, DangerButton, TextButton)
+  - `index.ts`: Component exports barrel file
 - **`src/discord/`**: Discord bot service
   - `index.ts`: Bot entry point and service runner
   - `bot.ts`: Discord client initialization and management
@@ -208,6 +234,9 @@ This separation allows for flexible type usage in frontend code. Prisma types ar
   - `yugioh_sessions.sql`: Pre-populates 27 sessions from sets marked as is_a_session (auto-loaded on MySQL init)
   - `wallet_point_breakdowns.sql`: Pre-populates wallet point distribution schemes (auto-loaded on MySQL init)
   - `testdata.sql`: Test data (6 players: olan as admin, coog, costello, jason, kris, vlad - all password "123"; empty banlist for session 1) (auto-loaded on MySQL init)
+  - `06_schema_migrations.sql`: Schema migrations for PR #16 (SessionModifier, PlayerBet, LoserPrizingResult tables and enhancements) - run manually on existing databases, auto-loaded on fresh init
+  - `event_wheel_entries.sql`: Pre-populates event wheel entries with automation metadata (if exists)
+  - `loser_prizing_entries.sql`: Pre-populates loser prizing entries with automation metadata (if exists)
   - `card_sets.json`: Source JSON for set data
   - `testdeck.ydk`, `testdeck2.ydk`: Example deck files for testing
 - **`architecture/`**: Architecture documentation
@@ -238,11 +267,12 @@ The dev configuration (`docker-compose.dev.yml`) mounts the entire project direc
 **Database Initialization**: Both Docker Compose files mount data files to `/docker-entrypoint-initdb.d/` which MySQL automatically executes on first database initialization in alphabetical order:
 1. `01_yugioh_cards.sql`: Populates cards table with 11,316 Yu-Gi-Oh cards
 2. `02_yugioh_sets.sql` (or `02_new_sets.sql`): Populates sets table with 1,004+ sets (27 marked as is_a_session=true)
-3. `03_yugioh_sessions.sql`: Pre-populates all 27 sessions from sets marked as is_a_session (all start as complete=false, active=false, eventWheelSpun=false, victoryPointsAssigned=false, walletPointsAssigned=false)
+3. `03_yugioh_sessions.sql`: Pre-populates all 27 sessions from sets marked as is_a_session (all start as complete=false, active=false, eventWheelSpun=false, victoryPointsAssigned=false, walletPointsAssigned=false, loserPrizingSpun=false)
 4. `04_wallet_point_breakdowns.sql`: Pre-populates wallet point distribution schemes
 5. `05_testdata.sql`: Test data (6 players, empty banlist for session 1)
+6. `06_schema_migrations.sql`: Schema migrations (SessionModifier, PlayerBet, LoserPrizingResult tables and field additions)
 
-This ensures all data is ready when starting with fresh volumes.
+This ensures all data is ready when starting with fresh volumes. For existing production databases, see `MIGRATION.md` for manual migration steps.
 
 **Connecting to containers**:
 ```bash
