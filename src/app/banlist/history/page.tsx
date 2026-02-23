@@ -18,7 +18,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageIcon from '@mui/icons-material/Image';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
-import { getBanlistHistory, regenerateBanlistImage, type BanlistHistoryItem } from './actions';
+import { getBanlistHistory, regenerateBanlistImage, checkIsAdmin, type BanlistHistoryItem } from './actions';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { Button } from '@mui/material';
 
@@ -227,12 +227,11 @@ export default function BanlistHistoryPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    // Check if user is admin from cookie/auth
+    // Check if user is admin
     const checkAdmin = async () => {
       try {
-        const response = await fetch('/api/auth/me');
-        const data = await response.json();
-        setIsAdmin(data.isAdmin || false);
+        const result = await checkIsAdmin();
+        setIsAdmin(result.isAdmin);
       } catch {
         setIsAdmin(false);
       }

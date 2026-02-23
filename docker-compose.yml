@@ -21,7 +21,9 @@ services:
       - ./data/yugioh_sets.sql:/docker-entrypoint-initdb.d/02_yugioh_sets.sql
       - ./data/yugioh_sessions.sql:/docker-entrypoint-initdb.d/03_yugioh_sessions.sql
       - ./data/wallet_point_breakdowns.sql:/docker-entrypoint-initdb.d/04_wallet_point_breakdowns.sql
-      - ./data/testdata.sql:/docker-entrypoint-initdb.d/05_testdata.sql
+      - ./data/event_wheel_entries.sql:/docker-entrypoint-initdb.d/05_event_wheel_entries.sql
+      - ./data/loser_prizing_entries.sql:/docker-entrypoint-initdb.d/06_loser_prizing_entries.sql
+      - ./data/testdata.sql:/docker-entrypoint-initdb.d/07_testdata.sql
     networks:
       - app-network
     healthcheck:

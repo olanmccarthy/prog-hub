@@ -30,6 +30,12 @@ export class BanlistImageGenerator {
   async generateBanlistImage(banlist: BanlistForImage): Promise<Buffer> {
     const { cardWidth, cardHeight, cardSpacing, backgroundColor, cardsPerRow } = this.config;
 
+    // Calculate new cards if not provided
+    let newCards = banlist.newCards;
+    if (!newCards) {
+      newCards = await this.calculateNewCards(banlist);
+    }
+
     // Calculate sections
     const sections = [
       { title: 'Banned', cards: banlist.banned, color: '#DC143C' },
@@ -98,7 +104,8 @@ export class BanlistImageGenerator {
         section.cards,
         50,
         currentY,
-        section.color
+        section.color,
+        newCards
       );
       compositeOperations.push(...cardOps);
 
@@ -121,7 +128,8 @@ export class BanlistImageGenerator {
     cards: number[],
     startX: number,
     startY: number,
-    borderColor: string
+    borderColor: string,
+    newCards: Set<number>
   ): Promise<sharp.OverlayOptions[]> {
     const { cardWidth, cardHeight, cardSpacing, cardsPerRow } = this.config;
 
@@ -142,11 +150,13 @@ export class BanlistImageGenerator {
         );
 
         // Add colored border to indicate category
+        const isNew = newCards.has(cardId);
         const borderedCard = await this.addColoredBorder(
           cardImage,
           borderColor,
           cardWidth,
-          cardHeight
+          cardHeight,
+          isNew
         );
 
         return {
@@ -167,13 +177,14 @@ export class BanlistImageGenerator {
   }
 
   /**
-   * Add a colored border around a card image
+   * Add a colored border around a card image with exclamation mark indicator
    */
   private async addColoredBorder(
     cardImage: Buffer,
     color: string,
     width: number,
-    height: number
+    height: number,
+    isNew: boolean
   ): Promise<Buffer> {
     // Create a border SVG overlay
     const borderSvg = `
@@ -190,15 +201,149 @@ export class BanlistImageGenerator {
       </svg>
     `;
 
+    const composites = [
+      {
+        input: Buffer.from(borderSvg),
+        top: 0,
+        left: 0,
+      },
+    ];
+
+    // Only add exclamation mark badge for new cards
+    if (isNew) {
+      const badgeScale = this.config.exclamationBadgeScale ?? 0.30;
+      const badgeSize = Math.floor(width * badgeScale);
+      const badgeSvg = this.createExclamationBadgeSvg(badgeSize, color);
+      composites.push({
+        input: Buffer.from(badgeSvg),
+        top: 2,
+        left: 2,
+      });
+    }
+
     return sharp(cardImage)
-      .composite([
-        {
-          input: Buffer.from(borderSvg),
-          top: 0,
-          left: 0,
-        },
-      ])
+      .composite(composites)
       .toBuffer();
+  }
+
+  /**
+   * Calculate which cards are new compared to the previous session's banlist
+   * A card is "new" if:
+   * 1. It wasn't in the previous banlist at all (newly added)
+   * 2. It moved categories (was in a different restriction level)
+   */
+  private async calculateNewCards(banlist: BanlistForImage): Promise<Set<number>> {
+    const newCards = new Set<number>();
+
+    // If this is session 1, all cards are "new"
+    if (banlist.sessionNumber <= 1) {
+      [...banlist.banned, ...banlist.limited, ...banlist.semilimited, ...banlist.unlimited].forEach(
+        (cardId) => newCards.add(cardId)
+      );
+      return newCards;
+    }
+
+    try {
+      // Import prisma dynamically to avoid circular dependencies
+      const { prisma } = await import('@lib/prisma');
+      const { parseBanlistField } = await import('@lib/banlistHelpers');
+
+      // Fetch previous session's banlist
+      const prevBanlist = await prisma.banlist.findFirst({
+        where: { sessionId: banlist.sessionNumber - 1 },
+      });
+
+      if (!prevBanlist) {
+        // If no previous banlist found, treat all cards as new
+        [...banlist.banned, ...banlist.limited, ...banlist.semilimited, ...banlist.unlimited].forEach(
+          (cardId) => newCards.add(cardId)
+        );
+        return newCards;
+      }
+
+      // Parse previous banlist
+      const prevBanned = new Set(await parseBanlistField(prevBanlist.banned));
+      const prevLimited = new Set(await parseBanlistField(prevBanlist.limited));
+      const prevSemilimited = new Set(await parseBanlistField(prevBanlist.semilimited));
+      const prevUnlimited = new Set(await parseBanlistField(prevBanlist.unlimited));
+      const prevAllCards = new Set([
+        ...prevBanned,
+        ...prevLimited,
+        ...prevSemilimited,
+        ...prevUnlimited,
+      ]);
+
+      // Check banned cards
+      banlist.banned.forEach((cardId) => {
+        if (!prevAllCards.has(cardId) || !prevBanned.has(cardId)) {
+          newCards.add(cardId);
+        }
+      });
+
+      // Check limited cards
+      banlist.limited.forEach((cardId) => {
+        if (!prevAllCards.has(cardId) || !prevLimited.has(cardId)) {
+          newCards.add(cardId);
+        }
+      });
+
+      // Check semi-limited cards
+      banlist.semilimited.forEach((cardId) => {
+        if (!prevAllCards.has(cardId) || !prevSemilimited.has(cardId)) {
+          newCards.add(cardId);
+        }
+      });
+
+      // Check unlimited cards
+      banlist.unlimited.forEach((cardId) => {
+        if (!prevAllCards.has(cardId) || !prevUnlimited.has(cardId)) {
+          newCards.add(cardId);
+        }
+      });
+
+      return newCards;
+    } catch (error) {
+      console.error('Error calculating new cards:', error);
+      // If error occurs, treat no cards as new (safer than all cards)
+      return newCards;
+    }
+  }
+
+  /**
+   * Create an SVG badge with a circular background and exclamation mark
+   */
+  private createExclamationBadgeSvg(size: number, color: string): string {
+    const radius = size / 2;
+    const fontSize = Math.floor(size * 0.75);
+
+    return `
+      <svg width="${size}" height="${size}">
+        <defs>
+          <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.4"/>
+          </filter>
+        </defs>
+        <circle
+          cx="${radius}"
+          cy="${radius}"
+          r="${radius - 0.5}"
+          fill="${color}"
+          stroke="#000000"
+          stroke-width="0.5"
+          filter="url(#shadow)"
+        />
+        <text
+          x="${radius}"
+          y="${radius}"
+          text-anchor="middle"
+          dominant-baseline="central"
+          font-family="Arial, sans-serif"
+          font-size="${fontSize}px"
+          font-weight="bold"
+          fill="#ffffff"
+        >!</text>
+      </svg>
+    `;
   }
 
   /**

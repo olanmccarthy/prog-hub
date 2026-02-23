@@ -320,6 +320,7 @@ model Card {
   def           Int?
   link          Int?
   pendulumScale Int?    @map("pendulum_scale")
+  hasProtection Boolean @default(true) @map("has_protection")
 
   @@map("cards")
 }

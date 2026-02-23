@@ -65,6 +65,66 @@ export async function canSubmitSuggestions(banlistId: number): Promise<CanSubmit
   }
 }
 
+/**
+ * Get a Set of each unique card played in a decklist not in this session
+ */
+export async function getPreviouslyUsedCards(sessionId: number): Promise<Set<number>> {
+  const decks = await prisma.decklist.findMany({
+    where: {
+      sessionId: {
+        not: sessionId,
+      },
+    },
+    select: {
+      maindeck: true,
+      sidedeck: true,
+      extradeck: true,
+    },
+  });
+
+  // One large unique set of all card ids
+  const allCardIds = new Set<number>();
+
+  for (const d of decks) {
+    const maindeck = (Array.isArray(d.maindeck) ? d.maindeck : []) as number[];
+    const sidedeck = (Array.isArray(d.sidedeck) ? d.sidedeck : []) as number[];
+    const extradeck = (Array.isArray(d.extradeck) ? d.extradeck : []) as number[];
+
+    for (const id of maindeck) allCardIds.add(id);
+    for (const id of sidedeck) allCardIds.add(id);
+    for (const id of extradeck) allCardIds.add(id);
+  }
+
+  return allCardIds;
+}
+
+
+/**
+ * Check if card can be added to banlist suggestion or if it has protection
+ * Returns true if card has protection AND has not been used in previous sessions
+ */
+export async function doesCardHaveProtection(cardId: number, previouslyUsedCards: Set<number>): Promise<boolean> {
+  const card = await prisma.card.findFirst({ where: { id: cardId } });
+
+  // If card doesn't exist in database, treat as protected (shouldn't happen)
+  if (!card) {
+    return true;
+  }
+
+  // If card does not have protection, it can always be added
+  if (!card.hasProtection) {
+    return false;
+  }
+
+  // If card has appeared in any decklist in a previous session, it loses protection
+  if (previouslyUsedCards.has(cardId)) {
+    return false;
+  }
+
+  // Card has protection and hasn't been used before
+  return true;
+}
+
 export interface CreateSuggestionResult {
   success: boolean;
   id?: number;
