@@ -14,8 +14,8 @@ export const DEFAULT_CONFIG: BanlistImageConfig = {
   cardsPerRow: 10,
 };
 
-// Local card images path (mounted in Docker container)
-export const CARD_IMAGE_LOCAL_PATH = '/app/card-images';
+// Local card images path (in public directory)
+export const CARD_IMAGE_LOCAL_PATH = '/app/public/card-images';
 
 // Fallback to remote URLs if local images not available
 export const CARD_IMAGE_BASE_URL = 'https://images.ygoprodeck.com/images/cards/';

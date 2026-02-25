@@ -48,7 +48,7 @@ services:
     volumes:
       - ./public/deck-images:/app/public/deck-images  # persist deck images
       - ./public/banlist-images:/app/public/banlist-images  # persist banlist images
-      - ./card-images:/app/card-images:ro  # read-only mount of local card images
+      - ./public/card-images:/app/public/card-images:ro  # read-only mount of card images
     networks:
       - app-network
 

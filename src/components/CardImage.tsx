@@ -51,7 +51,7 @@ function CardImagePlaceholder({ text }: { text: string }) {
 const TRANSPARENT_CARD_SVG = '/card-placeholder.svg';
 
 /**
- * Renders a card image from the public/card-images directory.
+ * Renders a card image from /card-images/ (served from public/card-images directory).
  * Falls back to a CardPlaceholder overlay if the image fails to load.
  * The <img> always remains in the DOM to define the container size,
  * so the placeholder exactly matches the dimensions of a real card.
