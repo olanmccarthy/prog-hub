@@ -15,15 +15,19 @@ model Player {
   isAdmin  Boolean  @default(false) @map("is_admin")
 
   // Relations
-  decklists              Decklist[]
-  suggestions            BanlistSuggestion[]
-  votes                  BanlistSuggestionVote[]
-  pairingsAsPlayer1      Pairing[]               @relation("Player1Pairings")
-  pairingsAsPlayer2      Pairing[]               @relation("Player2Pairings")
-  victoryPoints          VictoryPoint[]
-  moderatedSuggestions   BanlistSuggestion[]     @relation("ModeratedSuggestions")
-  wallet                 Wallet?
-  transactions           Transaction[]
+  decklists                   Decklist[]
+  suggestions                 BanlistSuggestion[]
+  votes                       BanlistSuggestionVote[]
+  pairingsAsPlayer1           Pairing[]               @relation("Player1Pairings")
+  pairingsAsPlayer2           Pairing[]               @relation("Player2Pairings")
+  victoryPoints               VictoryPoint[]
+  moderatedSuggestions        BanlistSuggestion[]     @relation("ModeratedSuggestions")
+  wallet                      Wallet?
+  transactions                Transaction[]
+  betsPlaced                  PlayerBet[]             @relation("BettorBets")
+  betsReceived                PlayerBet[]             @relation("TargetBets")
+  loserPrizingResultsReceived LoserPrizingResult[]    @relation("LoserPrizingRecipient")
+  loserPrizingResultsTargeted LoserPrizingResult[]    @relation("LoserPrizingTarget")
 
   @@map("players")
 }
@@ -38,6 +42,7 @@ model Session {
   eventWheelSpun        Boolean   @default(false) @map("event_wheel_spun")
   victoryPointsAssigned Boolean   @default(false) @map("victory_points_assigned")
   walletPointsAssigned  Boolean   @default(false) @map("wallet_points_assigned")
+  loserPrizingSpun      Boolean   @default(false) @map("loser_prizing_spun")
   moderatorId           Int?      @map("moderator_id")
 
   // Top placements (stored as nullable integers, not relations)
@@ -48,18 +53,76 @@ model Session {
   fifth  Int?
   sixth  Int?
 
+  // Event tracking (array of event names for multiple spins)
+  selectedEvents String? @map("selected_events") @db.Text
+
   // Relations
-  set                Set?                @relation(fields: [setId], references: [id])
-  decklists          Decklist[]
-  pairings           Pairing[]
-  victoryPoints      VictoryPoint[]
-  walletTransactions WalletTransaction[]
-  transactions       Transaction[]
+  set                 Set?                   @relation(fields: [setId], references: [id])
+  decklists           Decklist[]
+  pairings            Pairing[]
+  victoryPoints       VictoryPoint[]
+  walletTransactions  WalletTransaction[]
+  transactions        Transaction[]
+  modifiers           SessionModifier?
+  playerBets          PlayerBet[]
+  loserPrizingResults LoserPrizingResult[]
 
   @@index([active], map: "idx_active")
   @@index([complete], map: "idx_complete")
   @@index([moderatorId], map: "idx_moderator_id")
   @@map("sessions")
+}
+
+model SessionModifier {
+  id        Int @id @default(autoincrement())
+  sessionId Int @unique @map("session_id")
+
+  // Wallet & Victory Point Modifiers (merged from all spun events)
+  doubleWalletPoints    Boolean @default(false) @map("double_wallet_points")
+  awardTwoVictoryPoints Boolean @default(false) @map("award_two_victory_points")
+  oddPlacementBonus     Boolean @default(false) @map("odd_placement_bonus")
+  evenPlacementBonus    Boolean @default(false) @map("even_placement_bonus")
+  reverseVpOrder        Boolean @default(false) @map("reverse_vp_order")
+  matchWinBonus         Boolean @default(false) @map("match_win_bonus")
+  adminHalveWallet      Boolean @default(false) @map("admin_halve_wallet")
+  equalSplitWallet      Boolean @default(false) @map("equal_split_wallet")
+  halveAllWalletPoints  Boolean @default(false) @map("halve_all_wallet_points")
+  bountyHunter          Boolean @default(false) @map("bounty_hunter")
+
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic   Boolean @default(false) @map("early_decklist_public")
+
+  // Event Wheel Modifiers
+  allowMultipleEventSpins Boolean @default(false) @map("allow_multiple_event_spins")
+
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist Boolean @default(false) @map("skip_moderator_random_banlist")
+  trueDemocracyBanlist       Boolean @default(false) @map("true_democracy_banlist")
+
+  // Gambling Modifier
+  gamblingEnabled Boolean @default(false) @map("gambling_enabled")
+
+  // Metadata for admin halve wallet feature (stores array of player IDs)
+  halvedPlayerIds Json? @map("halved_player_ids")
+
+  // Loser prizing modifiers (single player per session)
+  loserPrizingPlayerId       Int?    @map("loser_prizing_player_id")
+  loserPrizingTargetPlayerId Int?    @map("loser_prizing_target_player_id") // For Dead Weight
+
+  loserPrizingDoublePoints    Boolean @default(false) @map("loser_prizing_double_points")
+  loserPrizingHalfPriceShop   Boolean @default(false) @map("loser_prizing_half_price_shop")
+  loserPrizingTakeVpAndWallet Boolean @default(false) @map("loser_prizing_take_vp_and_wallet")
+  loserPrizingAllWinsTwoZeros Boolean @default(false) @map("loser_prizing_all_wins_two_zeros")
+  loserPrizingSharedPoints    Boolean @default(false) @map("loser_prizing_shared_points") // Dead Weight
+
+  // Investment tracking (The Market is Going to go Up)
+  loserPrizingInvestment Int? @map("loser_prizing_investment")
+
+  // Relations
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId], map: "idx_session_modifier_session_id")
+  @@map("session_modifiers")
 }
 
 model Decklist {
@@ -201,6 +264,30 @@ model WalletTransaction {
   @@map("wallet_transactions")
 }
 
+model PlayerBet {
+  id             Int      @id @default(autoincrement())
+  sessionId      Int      @map("session_id")
+  bettorId       Int      @map("bettor_id")
+  targetPlayerId Int      @map("target_player_id")
+  betAmount      Int      @map("bet_amount")
+  odds           Float    // Multiplier (e.g., 1.5x, 2.0x, 3.5x)
+  payout         Int?     // Calculated after resolution
+  status         String   @db.VarChar(20) @default("pending") // "pending", "won", "lost", "void"
+  placedAt       DateTime @default(now()) @map("placed_at")
+
+  // Relations
+  session      Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  bettor       Player  @relation("BettorBets", fields: [bettorId], references: [id], onDelete: Cascade)
+  targetPlayer Player  @relation("TargetBets", fields: [targetPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, bettorId]) // One bet per player per session
+  @@index([sessionId], map: "idx_player_bet_session_id")
+  @@index([bettorId], map: "idx_player_bet_bettor_id")
+  @@index([targetPlayerId], map: "idx_player_bet_target_player_id")
+  @@index([status], map: "idx_player_bet_status")
+  @@map("player_bets")
+}
+
 model Transaction {
   id        Int      @id @default(autoincrement())
   playerId  Int      @map("player_id")
@@ -233,6 +320,7 @@ model Card {
   def           Int?
   link          Int?
   pendulumScale Int?    @map("pendulum_scale")
+  hasProtection Boolean @default(true) @map("has_protection")
 
   @@map("cards")
 }
@@ -265,6 +353,34 @@ model EventWheelEntry {
   description String @db.Text
   chance      Int
 
+  // Wallet & Victory Point Modifiers
+  doubleWalletPoints    Boolean @default(false) @map("double_wallet_points")
+  awardTwoVictoryPoints Boolean @default(false) @map("award_two_victory_points")
+  oddPlacementBonus     Boolean @default(false) @map("odd_placement_bonus")
+  evenPlacementBonus    Boolean @default(false) @map("even_placement_bonus")
+  reverseVpOrder        Boolean @default(false) @map("reverse_vp_order")
+  matchWinBonus         Boolean @default(false) @map("match_win_bonus")
+  adminHalveWallet      Boolean @default(false) @map("admin_halve_wallet")
+  equalSplitWallet      Boolean @default(false) @map("equal_split_wallet")
+  halveAllWalletPoints  Boolean @default(false) @map("halve_all_wallet_points")
+  bountyHunter          Boolean @default(false) @map("bounty_hunter")
+
+  // Decklist Visibility Modifiers
+  earlyDecklistPublic   Boolean @default(false) @map("early_decklist_public")
+
+  // Event Wheel Modifiers
+  allowMultipleEventSpins Boolean @default(false) @map("allow_multiple_event_spins")
+
+  // Moderator & Banlist Modifiers
+  skipModeratorRandomBanlist Boolean @default(false) @map("skip_moderator_random_banlist")
+  trueDemocracyBanlist       Boolean @default(false) @map("true_democracy_banlist")
+
+  // Gambling Modifier
+  gamblingEnabled Boolean @default(false) @map("gambling_enabled")
+
+  // Metadata for admin halve wallet feature (stores array of player IDs)
+  halvedPlayerIds Json? @map("halved_player_ids")
+
   @@map("event_wheel_entries")
 }
 
@@ -274,7 +390,54 @@ model LoserPrizingEntry {
   description String @db.Text
   chance      Int
 
+  // Automation flags
+  automationType          String?  @db.VarChar(50) @map("automation_type")
+  // Values: 'IMMEDIATE_WALLET', 'IMMEDIATE_VP', 'SESSION_MODIFIER', 'MANUAL'
+
+  requiresPlayerSelection Boolean  @default(false) @map("requires_player_selection")
+  requiresInput           Boolean  @default(false) @map("requires_input")
+  allowsRespin            Boolean  @default(false) @map("allows_respin")
+
+  // Immediate wallet/VP effects
+  walletPointChange  Int? @map("wallet_point_change")  // +1, -2, etc.
+  victoryPointChange Int? @map("victory_point_change") // +1, -1, etc.
+
+  // Session modifiers
+  doublePointsNextSession    Boolean @default(false) @map("double_points_next_session")
+  halfPriceShopNextSession   Boolean @default(false) @map("half_price_shop_next_session")
+  takeVpAndWalletNextSession Boolean @default(false) @map("take_vp_and_wallet_next_session")
+  allWinsTwoZerosNextSession Boolean @default(false) @map("all_wins_two_zeros_next_session")
+
+  // Relations
+  results LoserPrizingResult[]
+
   @@map("loser_prizing_entries")
+}
+
+model LoserPrizingResult {
+  id               Int      @id @default(autoincrement())
+  sessionId        Int      @map("session_id")
+  playerId         Int      @map("player_id")
+  entryId          Int      @map("entry_id")
+  entryName        String   @db.VarChar(255) @map("entry_name")
+  entryDescription String   @db.Text @map("entry_description")
+
+  // Player selections (if needed)
+  targetPlayerId Int?    @map("target_player_id")
+  additionalData String? @db.Text @map("additional_data") // JSON for complex data
+
+  // Tracking
+  automatedResult Boolean  @default(false) @map("automated_result")
+  appliedAt       DateTime @default(now()) @map("applied_at")
+
+  // Relations
+  session      Session           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  player       Player            @relation("LoserPrizingRecipient", fields: [playerId], references: [id], onDelete: Cascade)
+  entry        LoserPrizingEntry @relation(fields: [entryId], references: [id])
+  targetPlayer Player?           @relation("LoserPrizingTarget", fields: [targetPlayerId], references: [id])
+
+  @@index([sessionId, playerId])
+  @@map("loser_prizing_results")
 }
 
 model WalletPointBreakdown {

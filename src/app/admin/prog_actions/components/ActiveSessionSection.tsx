@@ -22,6 +22,11 @@ interface Requirements {
     message: string;
     playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
   };
+  bettingDecisions: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
   pairingsGenerated: {
     met: boolean;
     message: string;
@@ -58,6 +63,11 @@ interface Requirements {
     playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
   };
   moderatorVoted: {
+    met: boolean;
+    message: string;
+    playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
+  };
+  loserPrizingSpun: {
     met: boolean;
     message: string;
     playerStatuses?: Array<{ id: number; name: string; completed: boolean }>;
@@ -163,6 +173,7 @@ export function ActiveSessionSection({
       <List dense>
         <RequirementItem {...requirements.decklistsSubmitted} />
         <RequirementItem {...requirements.eventWheelSpun} />
+        <RequirementItem {...requirements.bettingDecisions} />
         <RequirementItem {...requirements.pairingsGenerated} />
         <RequirementItem {...requirements.placementsFilled} />
         <RequirementItem {...requirements.victoryPointsAssigned} />
@@ -171,6 +182,7 @@ export function ActiveSessionSection({
         <RequirementItem {...requirements.votesSubmitted} />
         <RequirementItem {...requirements.moderatorSelected} />
         <RequirementItem {...requirements.moderatorVoted} />
+        <RequirementItem {...requirements.loserPrizingSpun} />
       </List>
     </Paper>
   );

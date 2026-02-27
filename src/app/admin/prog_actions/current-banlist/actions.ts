@@ -3,6 +3,7 @@
 import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 import { revalidatePath } from "next/cache";
+import { parseBanlistField } from "@lib/banlistHelpers";
 
 export interface CurrentBanlistData {
   activeSessionId: number | null;
@@ -163,25 +164,15 @@ export async function getCurrentBanlistData(): Promise<CurrentBanlistResult> {
       };
     }
 
-    const parseBanlistField = (field: string | number[] | unknown): number[] => {
-      if (!field) return [];
-      if (typeof field === 'string') {
-        if (field.trim() === '') return [];
-        return JSON.parse(field) as number[];
-      }
-      if (Array.isArray(field)) return field;
-      return [];
-    };
-
     return {
       success: true,
       data: {
         activeSessionId: activeSession.id,
         activeSessionNumber: activeSession.number,
-        banned: parseBanlistField(banlist.banned),
-        limited: parseBanlistField(banlist.limited),
-        semilimited: parseBanlistField(banlist.semilimited),
-        unlimited: parseBanlistField(banlist.unlimited),
+        banned: await parseBanlistField(banlist.banned),
+        limited: await parseBanlistField(banlist.limited),
+        semilimited: await parseBanlistField(banlist.semilimited),
+        unlimited: await parseBanlistField(banlist.unlimited),
       },
     };
   } catch (error) {

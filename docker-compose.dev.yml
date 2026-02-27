@@ -19,7 +19,9 @@ services:
       - ./data/yugioh_sets.sql:/docker-entrypoint-initdb.d/02_yugioh_sets.sql
       - ./data/yugioh_sessions.sql:/docker-entrypoint-initdb.d/03_yugioh_sessions.sql
       - ./data/wallet_point_breakdowns.sql:/docker-entrypoint-initdb.d/04_wallet_point_breakdowns.sql
-      - ./data/testdata.sql:/docker-entrypoint-initdb.d/05_testdata.sql
+      - ./data/event_wheel_entries.sql:/docker-entrypoint-initdb.d/05_event_wheel_entries.sql
+      - ./data/loser_prizing_entries.sql:/docker-entrypoint-initdb.d/06_loser_prizing_entries.sql
+      - ./data/testdata.sql:/docker-entrypoint-initdb.d/07_testdata.sql
 
   nextjs:
     build:
@@ -39,7 +41,7 @@ services:
       - /app/node_modules  # prevent node_modules on host from clashing
       - ./public/deck-images:/app/public/deck-images  # persist deck images
       - ./public/banlist-images:/app/public/banlist-images  # persist banlist images
-      - ./card-images:/app/card-images:ro  # read-only mount of local card images
+      - ./public/card-images:/app/public/card-images:ro  # read-only mount of card images
     command: sh -c "sleep 5 && npx prisma db push && npm run dev"
 
 volumes:

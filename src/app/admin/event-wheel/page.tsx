@@ -3,21 +3,39 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Alert,
-  CircularProgress,
   Paper,
   List,
   ListItem,
   ListItemText,
   Divider,
+  Chip,
+  Stack,
 } from '@mui/material';
 import CasinoIcon from '@mui/icons-material/Casino';
+import ScienceIcon from '@mui/icons-material/Science';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import EventWheel from '@components/EventWheel';
 import EventResultModal from '@components/EventResultModal';
 import { WheelConfigSection } from '@components/WheelConfigSection';
-import { getEventWheelStatus, spinEventWheel, EventWheelStatusResult } from './actions';
+import {
+  LoadingBox,
+  ErrorAlert,
+  SuccessAlert,
+  InfoAlert,
+  WarningAlert,
+  PrimaryButton,
+} from '@/src/components';
+import {
+  getEventWheelStatus,
+  getPublicEventWheelEntries,
+  spinEventWheel,
+  getActiveSessionModifiers,
+  manuallyApplyEventEntry,
+  resetSessionModifiers,
+  EventWheelStatusResult,
+} from './actions';
+import type { SessionModifiers } from '@/src/types/sessionModifiers';
 import {
   getEventWheelEntries,
   createEventWheelEntry,
@@ -41,20 +59,39 @@ export default function EventWheelPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [configEntries, setConfigEntries] = useState<ConfigEntry[]>([]);
+  const [activeModifiers, setActiveModifiers] = useState<SessionModifiers | null>(null);
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     loadStatus();
     loadConfigEntries();
+    loadActiveModifiers();
   }, []);
 
   const loadStatus = async () => {
     try {
       setLoading(true);
       setError(null);
-      const result = await getEventWheelStatus();
-      setStatus(result);
-      if (!result.success && result.error) {
-        setError(result.error);
+
+      // Try admin action first
+      const adminResult = await getEventWheelStatus();
+
+      if (adminResult.success) {
+        // User is admin
+        setIsAdmin(true);
+        setStatus(adminResult);
+      } else if (adminResult.error === 'Admin access required') {
+        // User is not admin, use public action
+        setIsAdmin(false);
+        const publicResult = await getPublicEventWheelEntries();
+        setStatus(publicResult);
+        if (!publicResult.success && publicResult.error) {
+          setError(publicResult.error);
+        }
+      } else {
+        // Other error
+        setError(adminResult.error || null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load status');
@@ -76,9 +113,22 @@ export default function EventWheelPage() {
     }
   };
 
+  const loadActiveModifiers = async () => {
+    try {
+      const result = await getActiveSessionModifiers();
+      if (result.success) {
+        setActiveModifiers(result.modifiers || null);
+        setSelectedEvents(result.selectedEvents || []);
+      }
+    } catch (err) {
+      console.error('Failed to load active modifiers:', err);
+    }
+  };
+
   const handleReload = async () => {
     await loadConfigEntries();
     await loadStatus();
+    await loadActiveModifiers();
   };
 
   const handleSpin = async () => {
@@ -120,6 +170,7 @@ export default function EventWheelPage() {
     setSuccess('Event wheel spun successfully!');
     setSpinning(false);
     loadStatus();
+    loadActiveModifiers();
   };
 
   const handleCloseResult = () => {
@@ -133,19 +184,52 @@ export default function EventWheelPage() {
     handleSpin();
   };
 
+  const handleManualApply = async (entryId: number) => {
+    try {
+      setError(null);
+      setSuccess(null);
+
+      const result = await manuallyApplyEventEntry(entryId);
+
+      if (!result.success) {
+        setError(result.error || 'Failed to apply event entry');
+        return;
+      }
+
+      setSuccess(`Event "${result.selectedEntry?.name}" applied successfully!`);
+      await loadStatus();
+      await loadActiveModifiers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply event entry');
+    }
+  };
+
+  const handleReset = async () => {
+    if (!confirm('Are you sure you want to reset all modifiers and event wheel state? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setError(null);
+      setSuccess(null);
+
+      const result = await resetSessionModifiers();
+
+      if (!result.success) {
+        setError(result.error || 'Failed to reset modifiers');
+        return;
+      }
+
+      setSuccess('Session modifiers and event wheel state reset successfully!');
+      await loadStatus();
+      await loadActiveModifiers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset modifiers');
+    }
+  };
+
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   const wheelSegments = status?.entries
@@ -177,16 +261,238 @@ export default function EventWheelPage() {
         Event Wheel
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
+
+      {/* Active Modifiers Section */}
+      {isAdmin && activeModifiers && (
+        <Paper
+          sx={{
+            p: 3,
+            mb: 3,
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+          }}
+        >
+          <Typography variant="h6" gutterBottom sx={{ color: 'var(--text-bright)' }}>
+            Active Session Modifiers
+          </Typography>
+
+          {selectedEvents.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 1 }}>
+                Selected Events:
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {selectedEvents.map((event, idx) => (
+                  <Chip
+                    key={idx}
+                    label={event}
+                    sx={{
+                      backgroundColor: 'var(--accent-primary)',
+                      color: 'var(--text-bright)',
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          )}
+
+          <InfoAlert
+            message="These modifiers were applied by the spun event(s) and will affect this session."
+            onClose={() => {}}
+            sx={{ mb: 2 }}
+          />
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {activeModifiers.doubleWalletPoints && (
+              <Chip label="Double Wallet Points" color="primary" />
+            )}
+            {activeModifiers.awardTwoVictoryPoints && (
+              <Chip label="Award 2 VP" color="primary" />
+            )}
+            {activeModifiers.oddPlacementBonus && (
+              <Chip label="Odd Placement Bonus" color="primary" />
+            )}
+            {activeModifiers.evenPlacementBonus && (
+              <Chip label="Even Placement Bonus" color="primary" />
+            )}
+            {activeModifiers.reverseVpOrder && (
+              <Chip label="Reverse VP Order" color="primary" />
+            )}
+            {activeModifiers.matchWinBonus && (
+              <Chip label="Match Win Bonus" color="primary" />
+            )}
+            {activeModifiers.adminHalveWallet && (
+              <Chip label="Admin Halve Wallet" color="primary" />
+            )}
+            {activeModifiers.equalSplitWallet && (
+              <Chip label="Equal Split Wallet" color="primary" />
+            )}
+            {activeModifiers.halveAllWalletPoints && (
+              <Chip label="Halve All Wallet Points" color="primary" />
+            )}
+            {activeModifiers.bountyHunter && (
+              <Chip label="Bounty Hunter" color="primary" />
+            )}
+            {activeModifiers.earlyDecklistPublic && (
+              <Chip label="Early Decklist Public" color="success" />
+            )}
+            {activeModifiers.allowMultipleEventSpins && (
+              <Chip label="Allow Multiple Spins" color="secondary" />
+            )}
+            {activeModifiers.skipModeratorRandomBanlist && (
+              <Chip label="Skip Moderator (Random Banlist)" color="secondary" />
+            )}
+            {activeModifiers.trueDemocracyBanlist && (
+              <Chip label="True Democracy (Most Votes)" color="secondary" />
+            )}
+          </Stack>
+        </Paper>
       )}
 
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
+      {/* Testing Controls Section (Non-Production Only) */}
+      {isAdmin && process.env.NODE_ENV !== 'production' && (
+        <Paper
+          sx={{
+            p: 3,
+            mb: 3,
+            backgroundColor: 'var(--bg-elevated)',
+            border: '2px solid var(--warning)',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <ScienceIcon sx={{ color: 'var(--warning)' }} />
+            <Typography variant="h6" sx={{ color: 'var(--warning)' }}>
+              Testing Controls (Non-Production Only)
+            </Typography>
+          </Box>
+
+          <WarningAlert
+            message="These controls allow you to manually apply event modifiers for testing. This section is only visible in non-production environments."
+            onClose={() => {}}
+            sx={{ mb: 2 }}
+          />
+
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+            <PrimaryButton
+              startIcon={<RefreshIcon />}
+              onClick={handleReset}
+              sx={{
+                backgroundColor: 'var(--error)',
+                '&:hover': {
+                  backgroundColor: 'var(--error)',
+                  filter: 'brightness(1.2)',
+                },
+              }}
+            >
+              Reset All Modifiers
+            </PrimaryButton>
+          </Box>
+
+          <Divider sx={{ borderColor: 'var(--border-color)', mb: 2 }} />
+
+          <Typography variant="subtitle1" sx={{ color: 'var(--text-bright)', mb: 2 }}>
+            Click an event to manually apply its modifiers:
+          </Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
+            {configEntries.map((entry) => {
+              // Count active modifiers
+              const modifierCount = [
+                entry.doubleWalletPoints,
+                entry.awardTwoVictoryPoints,
+                entry.oddPlacementBonus,
+                entry.evenPlacementBonus,
+                entry.reverseVpOrder,
+                entry.matchWinBonus,
+                entry.adminHalveWallet,
+                entry.equalSplitWallet,
+                entry.halveAllWalletPoints,
+                entry.bountyHunter,
+                entry.earlyDecklistPublic,
+                entry.allowMultipleEventSpins,
+                entry.skipModeratorRandomBanlist,
+                entry.trueDemocracyBanlist,
+              ].filter(Boolean).length;
+
+              return (
+                <Paper
+                  key={entry.id}
+                  sx={{
+                    p: 2,
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      backgroundColor: 'var(--bg-tertiary)',
+                      borderColor: 'var(--accent-primary)',
+                    },
+                  }}
+                  onClick={() => handleManualApply(entry.id)}
+                >
+                  <Typography variant="h6" sx={{ color: 'var(--text-bright)', mb: 1 }}>
+                    {entry.name}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 2 }}>
+                    {entry.description}
+                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Chip
+                      label={`${entry.chance}% chance`}
+                      size="small"
+                      sx={{
+                        backgroundColor: 'var(--accent-primary)',
+                        color: 'var(--text-bright)',
+                      }}
+                    />
+                    {modifierCount > 0 && (
+                      <Chip
+                        label={`${modifierCount} modifier${modifierCount !== 1 ? 's' : ''}`}
+                        size="small"
+                        sx={{
+                          backgroundColor: 'var(--success)',
+                          color: 'var(--text-bright)',
+                        }}
+                      />
+                    )}
+                  </Box>
+
+                  {modifierCount > 0 && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="caption" sx={{ color: 'var(--text-secondary)', display: 'block', mb: 0.5 }}>
+                        Active Modifiers:
+                      </Typography>
+                      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                        {entry.doubleWalletPoints && <Chip label="2x Wallet" size="small" />}
+                        {entry.awardTwoVictoryPoints && <Chip label="2 VP" size="small" />}
+                        {entry.oddPlacementBonus && <Chip label="Odd Bonus" size="small" />}
+                        {entry.evenPlacementBonus && <Chip label="Even Bonus" size="small" />}
+                        {entry.reverseVpOrder && <Chip label="Reverse" size="small" />}
+                        {entry.matchWinBonus && <Chip label="Match Wins" size="small" />}
+                        {entry.adminHalveWallet && <Chip label="Halve" size="small" />}
+                        {entry.equalSplitWallet && <Chip label="Equal Split" size="small" />}
+                        {entry.halveAllWalletPoints && <Chip label="Halve All" size="small" />}
+                        {entry.bountyHunter && <Chip label="Bounty Hunter" size="small" />}
+                        {entry.earlyDecklistPublic && <Chip label="Early Public" size="small" color="success" />}
+                        {entry.allowMultipleEventSpins && <Chip label="Multi-Spin" size="small" color="secondary" />}
+                        {entry.skipModeratorRandomBanlist && <Chip label="Random Banlist" size="small" color="secondary" />}
+                        {entry.trueDemocracyBanlist && <Chip label="True Democracy" size="small" color="secondary" />}
+                      </Stack>
+                    </Box>
+                  )}
+                </Paper>
+              );
+            })}
+          </Box>
+
+          {configEntries.length === 0 && (
+            <Typography sx={{ color: 'var(--text-secondary)', textAlign: 'center', py: 3 }}>
+              No event entries configured. Create entries in the Wheel Configuration section below.
+            </Typography>
+          )}
+        </Paper>
       )}
 
       {/* Event Wheel Section */}
@@ -204,18 +510,30 @@ export default function EventWheelPage() {
             {status?.activeSessionNumber && `Session #${status.activeSessionNumber} Event Wheel`}
           </Typography>
 
-          {status?.alreadySpun ? (
-            <Alert severity="info" sx={{ width: '100%', maxWidth: 600 }}>
-              The event wheel has already been spun for this session.
-            </Alert>
+          {!isAdmin ? (
+            <InfoAlert
+              message="View the possible events below. Only admins can spin this wheel."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
+          ) : status?.alreadySpun ? (
+            <InfoAlert
+              message="The event wheel has already been spun for this session."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
           ) : status?.canSpin ? (
-            <Alert severity="success" sx={{ width: '100%', maxWidth: 600 }}>
-              All players have submitted their decklists. Ready to spin!
-            </Alert>
+            <SuccessAlert
+              message="All players have submitted their decklists. Ready to spin!"
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
           ) : status?.reason ? (
-            <Alert severity="warning" sx={{ width: '100%', maxWidth: 600 }}>
-              {status.reason}
-            </Alert>
+            <WarningAlert
+              message={status.reason}
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
           ) : null}
 
           {wheelSegments.length > 0 && (
@@ -227,31 +545,17 @@ export default function EventWheelPage() {
             />
           )}
 
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={spinning ? <CircularProgress size={20} /> : <CasinoIcon />}
-            onClick={handleSpin}
-            disabled={!status?.canSpin || spinning || status?.alreadySpun}
-            sx={{
-              backgroundColor: status?.canSpin && !status?.alreadySpun
-                ? 'var(--accent-primary)'
-                : 'var(--grey-300)',
-              '&:hover': {
-                backgroundColor: status?.canSpin && !status?.alreadySpun
-                  ? 'var(--accent-blue-hover)'
-                  : 'var(--grey-300)',
-              },
-              '&:disabled': {
-                backgroundColor: 'var(--grey-300)',
-                color: 'var(--text-secondary)',
-              },
-              px: 4,
-              py: 1.5,
-            }}
-          >
-            {spinning ? 'Spinning...' : status?.alreadySpun ? 'Already Spun' : 'Spin the Wheel'}
-          </Button>
+          {isAdmin && (
+            <PrimaryButton
+              size="large"
+              startIcon={<CasinoIcon />}
+              onClick={handleSpin}
+              disabled={!status?.canSpin || spinning || status?.alreadySpun}
+              sx={{ px: 4, py: 1.5 }}
+            >
+              {spinning ? 'Spinning...' : status?.alreadySpun ? 'Already Spun' : 'Spin the Wheel'}
+            </PrimaryButton>
+          )}
         </Box>
       </Paper>
 
@@ -347,20 +651,22 @@ export default function EventWheelPage() {
         </Paper>
       )}
 
-      {/* Configuration Section */}
-      <WheelConfigSection
-        entries={configEntries}
-        onCreateEntry={createEventWheelEntry}
-        onUpdateEntry={updateEventWheelEntry}
-        onDeleteEntry={deleteEventWheelEntry}
-        onMassUpdate={(updates) => massUpdateEventWheelChances({ updates })}
-        onApplyMultiplier={(entryIds, multiplier) =>
-          applyMultiplierToEventWheelEntries({ entryIds, multiplier })
-        }
-        onSuccess={setSuccess}
-        onError={setError}
-        onReload={handleReload}
-      />
+      {/* Configuration Section (Admin Only) */}
+      {isAdmin && (
+        <WheelConfigSection
+          entries={configEntries}
+          onCreateEntry={createEventWheelEntry}
+          onUpdateEntry={updateEventWheelEntry}
+          onDeleteEntry={deleteEventWheelEntry}
+          onMassUpdate={(updates) => massUpdateEventWheelChances({ updates })}
+          onApplyMultiplier={(entryIds, multiplier) =>
+            applyMultiplierToEventWheelEntries({ entryIds, multiplier })
+          }
+          onSuccess={setSuccess}
+          onError={setError}
+          onReload={handleReload}
+        />
+      )}
 
       {/* Result Modal */}
       <EventResultModal

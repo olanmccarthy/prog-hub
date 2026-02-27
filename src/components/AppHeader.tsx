@@ -47,6 +47,14 @@ const allNavigationRoutes = [
     ],
   },
   {
+    label: 'Wheels',
+    nonAdminOnly: true,
+    subItems: [
+      { label: 'Event Wheel', path: '/admin/event-wheel' },
+      { label: 'Loser Prizing', path: '/admin/loser-prizing' },
+    ],
+  },
+  {
     label: 'Banlist',
     subItems: [
       { label: 'Current', path: '/banlist/current' },
@@ -88,9 +96,17 @@ interface AppHeaderProps {
 
 export default function AppHeader({ isAdmin }: AppHeaderProps) {
   // Filter navigation routes based on admin status
-  const navigationRoutes = allNavigationRoutes.filter(
-    (route) => !('adminOnly' in route) || route.adminOnly === isAdmin
-  );
+  const navigationRoutes = allNavigationRoutes.filter((route) => {
+    // Filter out admin-only routes if user is not admin
+    if ('adminOnly' in route && route.adminOnly && !isAdmin) {
+      return false;
+    }
+    // Filter out non-admin-only routes if user is admin
+    if ('nonAdminOnly' in route && route.nonAdminOnly && isAdmin) {
+      return false;
+    }
+    return true;
+  });
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();

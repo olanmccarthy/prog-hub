@@ -3,6 +3,7 @@
 import { Banlist } from '@/src/types';
 import { prisma } from '@lib/prisma';
 import { getCardEntriesFromIds } from '@lib/cardLookup';
+import { parseBanlistField } from '@lib/banlistHelpers';
 
 export interface BanlistCard {
   id: number;
@@ -40,18 +41,6 @@ interface GetMostRecentBanlistResult {
   error?: string;
 }
 
-/**
- * Helper function to parse banlist field (handles both string and array)
- */
-function parseBanlistField(field: unknown): number[] {
-  if (!field) return [];
-  if (typeof field === 'string') {
-    if (field.trim() === '') return [];
-    return JSON.parse(field) as number[];
-  }
-  if (Array.isArray(field)) return field;
-  return [];
-}
 
 /**
  * Gets the most recent banlist regardless of active status
@@ -75,10 +64,10 @@ export async function getMostRecentBanlistBySession(): Promise<GetMostRecentBanl
     const banlist: Banlist = {
       id: mostRecentBanlist.id,
       sessionId: mostRecentBanlist.sessionId,
-      banned: parseBanlistField(mostRecentBanlist.banned),
-      limited: parseBanlistField(mostRecentBanlist.limited),
-      semilimited: parseBanlistField(mostRecentBanlist.semilimited),
-      unlimited: parseBanlistField(mostRecentBanlist.unlimited),
+      banned: await parseBanlistField(mostRecentBanlist.banned),
+      limited: await parseBanlistField(mostRecentBanlist.limited),
+      semilimited: await parseBanlistField(mostRecentBanlist.semilimited),
+      unlimited: await parseBanlistField(mostRecentBanlist.unlimited),
     };
     return {
       success: true,
@@ -124,10 +113,10 @@ export async function getPreviousBanlist(
     return {
       success: true,
       banlist: {
-        banned: parseBanlistField(previousBanlist.banned),
-        limited: parseBanlistField(previousBanlist.limited),
-        semilimited: parseBanlistField(previousBanlist.semilimited),
-        unlimited: parseBanlistField(previousBanlist.unlimited),
+        banned: await parseBanlistField(previousBanlist.banned),
+        limited: await parseBanlistField(previousBanlist.limited),
+        semilimited: await parseBanlistField(previousBanlist.semilimited),
+        unlimited: await parseBanlistField(previousBanlist.unlimited),
       },
     };
   } catch (error) {

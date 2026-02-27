@@ -40,6 +40,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# generated deck images
+# generated images (production)
 /public/deck-images/*.png
 /public/banlist-images/*.png
+
+# generated images (staging)
+/public/deck-images-staging/
+/public/banlist-images-staging/
+
+# card images (static asset database, not tracked in git)
+/public/card-images/*
+!/public/card-images/.gitkeep

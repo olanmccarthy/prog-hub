@@ -3,29 +3,26 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
-  Table,
-  TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
   TableRow,
-  Paper,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   Typography,
-  Checkbox,
   FormControlLabel,
-  Alert,
-  CircularProgress,
+  Checkbox,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import {
+  LoadingBox,
+  StyledDialog,
+  ErrorAlert,
+  StyledTable,
+  PrimaryButton,
+  SecondaryButton,
+  DangerButton,
+} from '@/src/components';
 import {
   getPlayers,
   createPlayer,
@@ -163,18 +160,7 @@ export default function PlayerListPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -190,60 +176,28 @@ export default function PlayerListPage() {
         <Typography variant="h4" sx={{ color: 'var(--text-bright)' }}>
           Player Management
         </Typography>
-        <Button
-          variant="contained"
+        <PrimaryButton
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
-          sx={{
-            backgroundColor: 'var(--accent-primary)',
-            '&:hover': {
-              backgroundColor: 'var(--accent-hover)',
-            },
-          }}
         >
           Add Player
-        </Button>
+        </PrimaryButton>
       </Box>
 
-      {error && !openDialog && !openDeleteDialog && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
+      {!openDialog && !openDeleteDialog && (
+        <ErrorAlert message={error} onClose={() => setError(null)} />
       )}
 
-      <TableContainer
-        component={Paper}
-        sx={{
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-        }}
+      <StyledTable
+        columns={[
+          { label: 'Name', align: 'left' },
+          { label: 'Admin', align: 'left' },
+          { label: 'Actions', align: 'right' },
+        ]}
+        isEmpty={players.length === 0}
+        emptyMessage="No players found. Add your first player to get started."
       >
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
-                Name
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>
-                Admin
-              </TableCell>
-              <TableCell
-                align="right"
-                sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}
-              >
-                Actions
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {players.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={3} align="center" sx={{ color: 'var(--text-secondary)' }}>
-                  No players found. Add your first player to get started.
-                </TableCell>
-              </TableRow>
-            ) : (
-              players.map((player) => (
+        {players.map((player) => (
                 <TableRow
                   key={player.id}
                   sx={{
@@ -286,33 +240,26 @@ export default function PlayerListPage() {
                   </TableCell>
                 </TableRow>
               ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+        }
+      </StyledTable>
 
       {/* Add/Edit Dialog */}
-      <Dialog
+      <StyledDialog
         open={openDialog}
         onClose={handleCloseDialog}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-          },
-        }}
+        title={editingPlayer ? 'Edit Player' : 'Add New Player'}
+        actions={
+          <>
+            <SecondaryButton onClick={handleCloseDialog} disabled={submitting}>
+              Cancel
+            </SecondaryButton>
+            <PrimaryButton onClick={handleSubmit} disabled={submitting}>
+              {editingPlayer ? 'Update' : 'Create'}
+            </PrimaryButton>
+          </>
+        }
       >
-        <DialogTitle sx={{ color: 'var(--text-bright)' }}>
-          {editingPlayer ? 'Edit Player' : 'Add New Player'}
-        </DialogTitle>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-              {error}
-            </Alert>
-          )}
+        <ErrorAlert message={error} onClose={() => setError(null)} />
           <TextField
             autoFocus
             margin="dense"
@@ -365,91 +312,30 @@ export default function PlayerListPage() {
             label="Admin"
             sx={{ color: 'var(--text-primary)' }}
           />
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button
-            onClick={handleCloseDialog}
-            disabled={submitting}
-            sx={{
-              color: 'var(--text-primary)',
-              '&:hover': {
-                backgroundColor: 'var(--bg-tertiary)',
-              },
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={submitting}
-            sx={{
-              backgroundColor: 'var(--accent-primary)',
-              '&:hover': {
-                backgroundColor: 'var(--accent-hover)',
-              },
-            }}
-          >
-            {submitting ? <CircularProgress size={24} /> : editingPlayer ? 'Save Changes' : 'Add Player'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      </StyledDialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog
+      <StyledDialog
         open={openDeleteDialog}
         onClose={handleCloseDeleteDialog}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-          },
-        }}
+        title="Confirm Delete"
+        actions={
+          <>
+            <SecondaryButton onClick={handleCloseDeleteDialog} disabled={submitting}>
+              Cancel
+            </SecondaryButton>
+            <DangerButton onClick={handleDelete} disabled={submitting}>
+              Delete
+            </DangerButton>
+          </>
+        }
       >
-        <DialogTitle sx={{ color: 'var(--text-bright)' }}>
-          Confirm Delete
-        </DialogTitle>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-              {error}
-            </Alert>
-          )}
-          <Typography sx={{ color: 'var(--text-primary)' }}>
-            Are you sure you want to delete player &quot;{deletingPlayer?.name}&quot;?
-            This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button
-            onClick={handleCloseDeleteDialog}
-            disabled={submitting}
-            sx={{
-              color: 'var(--text-primary)',
-              '&:hover': {
-                backgroundColor: 'var(--bg-tertiary)',
-              },
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            variant="contained"
-            disabled={submitting}
-            sx={{
-              backgroundColor: '#ff4444',
-              '&:hover': {
-                backgroundColor: '#cc0000',
-              },
-            }}
-          >
-            {submitting ? <CircularProgress size={24} /> : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        <ErrorAlert message={error} onClose={() => setError(null)} />
+        <Typography sx={{ color: 'var(--text-primary)' }}>
+          Are you sure you want to delete player &quot;{deletingPlayer?.name}&quot;?
+          This action cannot be undone.
+        </Typography>
+      </StyledDialog>
     </Box>
   );
 }

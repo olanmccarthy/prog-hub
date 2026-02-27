@@ -18,7 +18,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
-            cd ~/prog-hub
+            cd ~/prog-hub-staging
 
             # Update .env.staging with secrets
             sed -i 's|DB_PASSWORD=REPLACE_WITH_SECRET|DB_PASSWORD=${{ secrets.DB_PASSWORD_STAGING }}|g' .env.staging

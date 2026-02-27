@@ -4,13 +4,16 @@ import { useState, useEffect } from "react";
 import {
   Box,
   Typography,
-  Button,
   Paper,
-  Alert,
-  CircularProgress,
   Chip,
   TextField,
 } from "@mui/material";
+import {
+  LoadingBox,
+  ErrorAlert,
+  SuccessAlert,
+  PrimaryButton,
+} from '@/src/components';
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { submitDecklist, getCurrentSession, getMyDecklist } from "./actions";
@@ -118,16 +121,7 @@ export default function DecklistSubmissionPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        minHeight="400px"
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -136,17 +130,8 @@ export default function DecklistSubmissionPage() {
         Decklist Submission
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
       <Paper
         sx={{
@@ -191,16 +176,9 @@ export default function DecklistSubmissionPage() {
             inputProps={{ maxLength: 255 }}
           />
 
-          <Button
-            variant="contained"
+          <PrimaryButton
             component="label"
             startIcon={<UploadFileIcon />}
-            sx={{
-              backgroundColor: "var(--accent-primary)",
-              "&:hover": {
-                backgroundColor: "var(--accent-hover)",
-              },
-            }}
           >
             Select .ydk File
             <input
@@ -209,7 +187,7 @@ export default function DecklistSubmissionPage() {
               accept=".ydk"
               onChange={handleFileChange}
             />
-          </Button>
+          </PrimaryButton>
 
           {fileName && (
             <Chip
@@ -243,36 +221,12 @@ export default function DecklistSubmissionPage() {
           </Box>
         )}
 
-        <Button
-          variant="contained"
+        <PrimaryButton
           onClick={handleSubmit}
           disabled={!parsedDeck || submitting}
-          sx={{
-            backgroundColor: parsedDeck
-              ? "var(--accent-primary)"
-              : "var(--grey-300)",
-            "&:hover": {
-              backgroundColor: parsedDeck
-                ? "var(--accent-hover)"
-                : "var(--grey-300)",
-            },
-            "&:disabled": {
-              backgroundColor: "var(--grey-300)",
-              color: "var(--text-secondary)",
-            },
-          }}
         >
-          {submitting ? (
-            <>
-              <CircularProgress size={20} sx={{ mr: 1 }} />
-              Submitting...
-            </>
-          ) : hasExistingDecklist ? (
-            "Update Decklist"
-          ) : (
-            "Submit Decklist"
-          )}
-        </Button>
+          {submitting ? "Submitting..." : hasExistingDecklist ? "Update Decklist" : "Submit Decklist"}
+        </PrimaryButton>
 
         <Box sx={{ mt: 3, pt: 2, borderTop: "1px solid var(--border-color)" }}>
           <Typography

@@ -3,23 +3,51 @@
 import { prisma } from '@lib/prisma';
 import { getCurrentUser } from '@lib/auth';
 import { saveBanlistImage } from '@lib/banlistImage/saveBanlistImage';
+import { parseBanlistField } from '@lib/banlistHelpers';
+
+// ============================================================================
+// AUTH CHECK
+// ============================================================================
+
+export interface CheckAdminResult {
+  success: boolean;
+  isAdmin: boolean;
+  authenticated: boolean;
+}
 
 /**
- * Helper function to parse banlist field (handles both string and array)
+ * Check if current user is authenticated and is admin
  */
-function parseBanlistField(field: unknown): number[] {
-  if (!field) return [];
-  if (typeof field === 'string') {
-    if (field.trim() === '') return [];
-    try {
-      return JSON.parse(field) as number[];
-    } catch {
-      return [];
+export async function checkIsAdmin(): Promise<CheckAdminResult> {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return {
+        success: true,
+        isAdmin: false,
+        authenticated: false,
+      };
     }
+
+    return {
+      success: true,
+      isAdmin: user.isAdmin || false,
+      authenticated: true,
+    };
+  } catch (error) {
+    console.error('Error checking admin status:', error);
+    return {
+      success: true,
+      isAdmin: false,
+      authenticated: false,
+    };
   }
-  if (Array.isArray(field)) return field;
-  return [];
 }
+
+// ============================================================================
+// BANLIST HISTORY
+// ============================================================================
 
 /**
  * Decode HTML apostrophe entities in card names
@@ -55,12 +83,12 @@ export async function getBanlistHistory(): Promise<GetBanlistHistoryResult> {
 
     // Collect all unique card IDs from all banlists
     const allCardIds = new Set<number>();
-    banlists.forEach(b => {
-      parseBanlistField(b.banned).forEach(id => allCardIds.add(id));
-      parseBanlistField(b.limited).forEach(id => allCardIds.add(id));
-      parseBanlistField(b.semilimited).forEach(id => allCardIds.add(id));
-      parseBanlistField(b.unlimited).forEach(id => allCardIds.add(id));
-    });
+    for (const b of banlists) {
+      (await parseBanlistField(b.banned)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(b.limited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(b.semilimited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(b.unlimited)).forEach(id => allCardIds.add(id));
+    }
 
     // Batch fetch all cards in one query
     const cards = await prisma.card.findMany({
@@ -81,11 +109,11 @@ export async function getBanlistHistory(): Promise<GetBanlistHistoryResult> {
       return ids.map(id => cardMap.get(id) || `[Unknown Card ${id}]`);
     };
 
-    const formattedBanlists: BanlistHistoryItem[] = banlists.map((b) => {
-      const banned = parseBanlistField(b.banned);
-      const limited = parseBanlistField(b.limited);
-      const semilimited = parseBanlistField(b.semilimited);
-      const unlimited = parseBanlistField(b.unlimited);
+    const formattedBanlists: BanlistHistoryItem[] = await Promise.all(banlists.map(async (b) => {
+      const banned = await parseBanlistField(b.banned);
+      const limited = await parseBanlistField(b.limited);
+      const semilimited = await parseBanlistField(b.semilimited);
+      const unlimited = await parseBanlistField(b.unlimited);
 
       return {
         id: b.id,
@@ -99,7 +127,7 @@ export async function getBanlistHistory(): Promise<GetBanlistHistoryResult> {
         semilimitedNames: getCardNames(semilimited),
         unlimitedNames: getCardNames(unlimited),
       };
-    });
+    }));
 
     return {
       success: true,
@@ -143,10 +171,10 @@ export async function regenerateBanlistImage(
 
     const banlistData = {
       sessionNumber,
-      banned: parseBanlistField(banlist.banned),
-      limited: parseBanlistField(banlist.limited),
-      semilimited: parseBanlistField(banlist.semilimited),
-      unlimited: parseBanlistField(banlist.unlimited),
+      banned: await parseBanlistField(banlist.banned),
+      limited: await parseBanlistField(banlist.limited),
+      semilimited: await parseBanlistField(banlist.semilimited),
+      unlimited: await parseBanlistField(banlist.unlimited),
     };
 
     // Generate and save image

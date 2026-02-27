@@ -3,6 +3,7 @@
 import { prisma } from '@lib/prisma';
 import { getCurrentUser } from '@lib/auth';
 import { revalidatePath } from 'next/cache';
+import { parseBanlistField, mergeBanlists } from '@lib/banlistHelpers';
 
 export interface PlayerForModeratorSelection {
   id: number;
@@ -20,6 +21,8 @@ export interface ModeratorSelectionStatusResult {
   alreadySelected: boolean;
   selectedModeratorId?: number;
   selectedModeratorName?: string;
+  useRandomBanlist?: boolean;
+  useTrueDemocracy?: boolean;
 }
 
 export interface SpinModeratorWheelResult {
@@ -28,6 +31,15 @@ export interface SpinModeratorWheelResult {
   selectedModerator?: {
     id: number;
     name: string;
+  };
+}
+
+export interface RandomBanlistResult {
+  success: boolean;
+  error?: string;
+  selectedSuggestion?: {
+    id: number;
+    playerName: string;
   };
 }
 
@@ -61,6 +73,14 @@ export async function getModeratorSelectionStatus(): Promise<ModeratorSelectionS
         alreadySelected: false,
       };
     }
+
+    // Check for skip moderator modifier
+    const modifiers = await prisma.sessionModifier.findUnique({
+      where: { sessionId: activeSession.id },
+    });
+
+    const useRandomBanlist = modifiers?.skipModeratorRandomBanlist || false;
+    const useTrueDemocracy = modifiers?.trueDemocracyBanlist || false;
 
     // Check if moderator already selected (but allow re-spinning)
     let currentModerator = null;
@@ -167,6 +187,8 @@ export async function getModeratorSelectionStatus(): Promise<ModeratorSelectionS
       activeSessionNumber: activeSession.number,
       selectedModeratorId: activeSession.moderatorId || undefined,
       selectedModeratorName: currentModerator?.name,
+      useRandomBanlist,
+      useTrueDemocracy,
     };
   } catch (error) {
     console.error('Error getting moderator selection status:', error);
@@ -262,6 +284,250 @@ export async function spinModeratorWheel(
     return {
       success: false,
       error: 'Failed to select moderator',
+    };
+  }
+}
+
+/**
+ * Select a random banlist suggestion (RNG Moderation mode)
+ * Randomly chooses a suggestion with 2+ votes and applies it as the chosen banlist
+ */
+export async function selectRandomBanlistSuggestion(): Promise<RandomBanlistResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      return {
+        success: false,
+        error: 'Admin access required',
+      };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return {
+        success: false,
+        error: 'No active session found',
+      };
+    }
+
+    // Get active banlist
+    const activeBanlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!activeBanlist) {
+      return {
+        success: false,
+        error: 'No active banlist found',
+      };
+    }
+
+    // Get all suggestions for this banlist with their vote counts
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      where: { banlistId: activeBanlist.id },
+      include: {
+        player: true,
+        votes: true,
+      },
+    });
+
+    // Filter to suggestions with 2+ votes
+    const eligibleSuggestions = suggestions.filter((s) => s.votes.length >= 2);
+
+    if (eligibleSuggestions.length === 0) {
+      return {
+        success: false,
+        error: 'No suggestions with 2+ votes found',
+      };
+    }
+
+    // Randomly select one
+    const randomIndex = Math.floor(Math.random() * eligibleSuggestions.length);
+    const selectedSuggestion = eligibleSuggestions[randomIndex];
+
+    // Mark as chosen
+    await prisma.banlistSuggestion.update({
+      where: { id: selectedSuggestion.id },
+      data: { chosen: true },
+    });
+
+    // Parse current banlist and suggestion
+    const currentBanlist = {
+      banned: await parseBanlistField(activeBanlist.banned),
+      limited: await parseBanlistField(activeBanlist.limited),
+      semilimited: await parseBanlistField(activeBanlist.semilimited),
+      unlimited: await parseBanlistField(activeBanlist.unlimited),
+    };
+
+    const suggestion = {
+      banned: await parseBanlistField(selectedSuggestion.banned),
+      limited: await parseBanlistField(selectedSuggestion.limited),
+      semilimited: await parseBanlistField(selectedSuggestion.semilimited),
+      unlimited: await parseBanlistField(selectedSuggestion.unlimited),
+    };
+
+    // Merge banlists using shared helper
+    const merged = await mergeBanlists(currentBanlist, suggestion);
+
+    // Create banlist for next session
+    await prisma.banlist.create({
+      data: {
+        sessionId: activeSession.number + 1,
+        ...merged,
+      },
+    });
+
+    // Mark session as having a moderator (skip actual moderator selection)
+    await prisma.session.update({
+      where: { id: activeSession.id },
+      data: {
+        moderatorId: -1, // Special value indicating "RNG Moderation" mode
+      },
+    });
+
+    revalidatePath('/admin/moderator-selection');
+    revalidatePath('/banlist/voting');
+
+    return {
+      success: true,
+      selectedSuggestion: {
+        id: selectedSuggestion.id,
+        playerName: selectedSuggestion.player.name,
+      },
+    };
+  } catch (error) {
+    console.error('Error selecting random banlist suggestion:', error);
+    return {
+      success: false,
+      error: 'Failed to select random banlist',
+    };
+  }
+}
+
+/**
+ * Select the most voted banlist suggestion (True Democracy mode)
+ * Chooses the suggestion with the most votes
+ * In case of a tie, randomly selects among the tied suggestions
+ */
+export async function selectMostVotedBanlistSuggestion(): Promise<RandomBanlistResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      return {
+        success: false,
+        error: 'Admin access required',
+      };
+    }
+
+    // Get active session
+    const activeSession = await prisma.session.findFirst({
+      where: { active: true },
+    });
+
+    if (!activeSession) {
+      return {
+        success: false,
+        error: 'No active session found',
+      };
+    }
+
+    // Get active banlist
+    const activeBanlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!activeBanlist) {
+      return {
+        success: false,
+        error: 'No active banlist found',
+      };
+    }
+
+    // Get all suggestions for this banlist with their vote counts
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      where: { banlistId: activeBanlist.id },
+      include: {
+        player: true,
+        votes: true,
+      },
+    });
+
+    if (suggestions.length === 0) {
+      return {
+        success: false,
+        error: 'No suggestions found',
+      };
+    }
+
+    // Find the maximum vote count
+    const maxVotes = Math.max(...suggestions.map((s) => s.votes.length));
+
+    // Filter to suggestions with the maximum vote count
+    const topSuggestions = suggestions.filter((s) => s.votes.length === maxVotes);
+
+    // Randomly select one if there's a tie
+    const randomIndex = Math.floor(Math.random() * topSuggestions.length);
+    const selectedSuggestion = topSuggestions[randomIndex];
+
+    // Mark as chosen
+    await prisma.banlistSuggestion.update({
+      where: { id: selectedSuggestion.id },
+      data: { chosen: true },
+    });
+
+    // Parse current banlist and suggestion
+    const currentBanlist = {
+      banned: await parseBanlistField(activeBanlist.banned),
+      limited: await parseBanlistField(activeBanlist.limited),
+      semilimited: await parseBanlistField(activeBanlist.semilimited),
+      unlimited: await parseBanlistField(activeBanlist.unlimited),
+    };
+
+    const suggestion = {
+      banned: await parseBanlistField(selectedSuggestion.banned),
+      limited: await parseBanlistField(selectedSuggestion.limited),
+      semilimited: await parseBanlistField(selectedSuggestion.semilimited),
+      unlimited: await parseBanlistField(selectedSuggestion.unlimited),
+    };
+
+    // Merge banlists using shared helper
+    const merged = await mergeBanlists(currentBanlist, suggestion);
+
+    // Create banlist for next session
+    await prisma.banlist.create({
+      data: {
+        sessionId: activeSession.number + 1,
+        ...merged,
+      },
+    });
+
+    // Mark session as having a moderator (skip actual moderator selection)
+    await prisma.session.update({
+      where: { id: activeSession.id },
+      data: {
+        moderatorId: -2, // Special value indicating "True Democracy" mode (-1 is RNG, -2 is True Democracy)
+      },
+    });
+
+    revalidatePath('/admin/moderator-selection');
+    revalidatePath('/banlist/voting');
+
+    return {
+      success: true,
+      selectedSuggestion: {
+        id: selectedSuggestion.id,
+        playerName: selectedSuggestion.player.name,
+      },
+    };
+  } catch (error) {
+    console.error('Error selecting most voted banlist suggestion:', error);
+    return {
+      success: false,
+      error: 'Failed to select most voted banlist',
     };
   }
 }

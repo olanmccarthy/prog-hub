@@ -1,26 +1,11 @@
 'use server';
 
 import { prisma } from '@lib/prisma';
-import { getCurrentUser } from '@lib/auth';
+import { requireAuth } from '@lib/serverUtils';
+import { getActiveSession } from '@lib/sessionHelpers';
+import { parseBanlistField, mergeBanlists } from '@lib/banlistHelpers';
 import { getMostRecentBanlist } from '../actions';
 import { revalidatePath } from 'next/cache';
-
-/**
- * Helper function to parse banlist field (handles both string and array)
- */
-function parseBanlistField(field: unknown): number[] {
-  if (!field) return [];
-  if (typeof field === 'string') {
-    if (field.trim() === '') return [];
-    try {
-      return JSON.parse(field) as number[];
-    } catch {
-      return [];
-    }
-  }
-  if (Array.isArray(field)) return field;
-  return [];
-}
 
 /**
  * Decode HTML apostrophe entities in card names
@@ -58,20 +43,21 @@ interface GetSuggestionsForVotingResult {
   totalPlayerCount?: number;
   isModerator?: boolean;
   chosenSuggestionId?: number | null;
+  isNonProduction?: boolean;
+  isAdmin?: boolean;
   error?: string;
 }
 
 export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsForVotingResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Get the active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return {
@@ -138,12 +124,12 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
 
     // Collect all unique card IDs from all suggestions
     const allCardIds = new Set<number>();
-    suggestions.forEach(s => {
-      parseBanlistField(s.banned).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.limited).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.semilimited).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.unlimited).forEach(id => allCardIds.add(id));
-    });
+    for (const s of suggestions) {
+      (await parseBanlistField(s.banned)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.limited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.semilimited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.unlimited)).forEach(id => allCardIds.add(id));
+    }
 
     // Batch fetch all cards in one query
     const cards = await prisma.card.findMany({
@@ -166,11 +152,11 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
 
     return {
       success: true,
-      suggestions: suggestions.map((s) => {
-        const banned = parseBanlistField(s.banned);
-        const limited = parseBanlistField(s.limited);
-        const semilimited = parseBanlistField(s.semilimited);
-        const unlimited = parseBanlistField(s.unlimited);
+      suggestions: await Promise.all(suggestions.map(async (s) => {
+        const banned = await parseBanlistField(s.banned);
+        const limited = await parseBanlistField(s.limited);
+        const semilimited = await parseBanlistField(s.semilimited);
+        const unlimited = await parseBanlistField(s.unlimited);
 
         return {
           id: s.id,
@@ -188,7 +174,7 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
           voteCount: s.votes.length,
           comment: s.comment || undefined,
         };
-      }),
+      })),
       currentUserId: user.playerId,
       hasVoted,
       userVotedIds,
@@ -198,6 +184,8 @@ export async function getBanlistSuggestionsForVoting(): Promise<GetSuggestionsFo
       totalPlayerCount: totalPlayers,
       isModerator,
       chosenSuggestionId: chosenSuggestion?.id || null,
+      isNonProduction: process.env.NODE_ENV !== 'production',
+      isAdmin: user.isAdmin,
     };
   } catch (error) {
     console.error('Error fetching suggestions for voting:', error);
@@ -246,152 +234,29 @@ async function createBanlistFromWinningSuggestion(
       return { success: false, error: 'Current banlist not found' };
     }
 
-    // Parse current lists and create Sets for lookup
-    // Ensure we're working with arrays of numbers, not strings
-    const currentBannedArray = parseBanlistField(currentBanlist.banned);
-    const currentLimitedArray = parseBanlistField(currentBanlist.limited);
-    const currentSemilimitedArray = parseBanlistField(currentBanlist.semilimited);
-    const currentUnlimitedArray = parseBanlistField(currentBanlist.unlimited);
-
-    // Double-check these are arrays (defensive programming)
-    if (!Array.isArray(currentBannedArray) || !Array.isArray(currentLimitedArray) ||
-        !Array.isArray(currentSemilimitedArray) || !Array.isArray(currentUnlimitedArray)) {
-      console.error('Current banlist fields are not arrays after parsing:', {
-        banned: currentBanlist.banned,
-        limited: currentBanlist.limited,
-        semilimited: currentBanlist.semilimited,
-        unlimited: currentBanlist.unlimited,
-      });
-      return { success: false, error: 'Current banlist data is corrupted' };
-    }
-
-    const currentBanned = new Set(currentBannedArray.filter(id => typeof id === 'number'));
-    const currentLimited = new Set(currentLimitedArray.filter(id => typeof id === 'number'));
-    const currentSemilimited = new Set(currentSemilimitedArray.filter(id => typeof id === 'number'));
-    const currentUnlimited = new Set(currentUnlimitedArray.filter(id => typeof id === 'number'));
-
-    // Build map of card locations from winning suggestion
-    // Ensure winning suggestion fields are arrays of numbers
-    const cardLocations = new Map<
-      number,
-      'banned' | 'limited' | 'semilimited' | 'unlimited'
-    >();
-
-    // Filter out non-number values from suggestions (defensive)
-    const suggestionBanned = Array.isArray(winningSuggestion.banned)
-      ? winningSuggestion.banned.filter(id => typeof id === 'number')
-      : [];
-    const suggestionLimited = Array.isArray(winningSuggestion.limited)
-      ? winningSuggestion.limited.filter(id => typeof id === 'number')
-      : [];
-    const suggestionSemilimited = Array.isArray(winningSuggestion.semilimited)
-      ? winningSuggestion.semilimited.filter(id => typeof id === 'number')
-      : [];
-    const suggestionUnlimited = Array.isArray(winningSuggestion.unlimited)
-      ? winningSuggestion.unlimited.filter(id => typeof id === 'number')
-      : [];
-
-    suggestionBanned.forEach((id) => cardLocations.set(id, 'banned'));
-    suggestionLimited.forEach((id) => cardLocations.set(id, 'limited'));
-    suggestionSemilimited.forEach((id) => cardLocations.set(id, 'semilimited'));
-    suggestionUnlimited.forEach((id) => cardLocations.set(id, 'unlimited'));
-
-    // Create new lists by merging
-    const newBanned: number[] = [];
-    const newLimited: number[] = [];
-    const newSemilimited: number[] = [];
-    const newUnlimited: number[] = [];
-
-    // Helper to add card to appropriate list
-    const addToList = (cardId: number, category: string) => {
-      // Extra safety: only add if it's actually a number
-      if (typeof cardId !== 'number' || isNaN(cardId)) {
-        console.warn(`Skipping invalid cardId: ${cardId} (type: ${typeof cardId})`);
-        return;
-      }
-
-      switch (category) {
-        case 'banned':
-          newBanned.push(cardId);
-          break;
-        case 'limited':
-          newLimited.push(cardId);
-          break;
-        case 'semilimited':
-          newSemilimited.push(cardId);
-          break;
-        case 'unlimited':
-          newUnlimited.push(cardId);
-          break;
-      }
+    // Parse current banlist
+    const current = {
+      banned: await parseBanlistField(currentBanlist.banned),
+      limited: await parseBanlistField(currentBanlist.limited),
+      semilimited: await parseBanlistField(currentBanlist.semilimited),
+      unlimited: await parseBanlistField(currentBanlist.unlimited),
     };
 
-    // Get all unique card IDs from current banlist
-    const allCurrentCards = new Set([
-      ...currentBanned,
-      ...currentLimited,
-      ...currentSemilimited,
-      ...currentUnlimited,
-    ]);
-
-    // Process each card from current banlist
-    allCurrentCards.forEach((cardId) => {
-      // If card is mentioned in suggestion, use new location; otherwise keep current
-      if (cardLocations.has(cardId)) {
-        addToList(cardId, cardLocations.get(cardId)!);
-      } else {
-        // Keep in current category
-        if (currentBanned.has(cardId)) addToList(cardId, 'banned');
-        else if (currentLimited.has(cardId)) addToList(cardId, 'limited');
-        else if (currentSemilimited.has(cardId))
-          addToList(cardId, 'semilimited');
-        else if (currentUnlimited.has(cardId)) addToList(cardId, 'unlimited');
-      }
-    });
-
-    // Add any new cards from suggestion that weren't in current banlist
-    cardLocations.forEach((category, cardId) => {
-      if (!allCurrentCards.has(cardId)) {
-        addToList(cardId, category);
-      }
-    });
-
-    // Final validation: ensure all arrays contain only numbers
-    const validateArray = (arr: unknown, name: string): boolean => {
-      if (!Array.isArray(arr)) {
-        console.error(`${name} is not an array:`, arr);
-        return false;
-      }
-      const nonNumbers = arr.filter(item => typeof item !== 'number' || isNaN(item));
-      if (nonNumbers.length > 0) {
-        console.error(`${name} contains non-number values:`, nonNumbers);
-        return false;
-      }
-      return true;
-    };
-
-    if (!validateArray(newBanned, 'newBanned') ||
-        !validateArray(newLimited, 'newLimited') ||
-        !validateArray(newSemilimited, 'newSemilimited') ||
-        !validateArray(newUnlimited, 'newUnlimited')) {
-      return { success: false, error: 'Generated banlist contains invalid data' };
-    }
+    // Merge banlists using shared helper
+    const merged = await mergeBanlists(current, winningSuggestion);
 
     console.log('Creating new banlist for session', currentBanlist.sessionId + 1, {
-      banned: newBanned.length,
-      limited: newLimited.length,
-      semilimited: newSemilimited.length,
-      unlimited: newUnlimited.length,
+      banned: merged.banned.length,
+      limited: merged.limited.length,
+      semilimited: merged.semilimited.length,
+      unlimited: merged.unlimited.length,
     });
 
     // Create new banlist for next session
     await prisma.banlist.create({
       data: {
         sessionId: currentBanlist.sessionId + 1,
-        banned: newBanned,
-        limited: newLimited,
-        semilimited: newSemilimited,
-        unlimited: newUnlimited,
+        ...merged,
       },
     });
 
@@ -410,15 +275,14 @@ export async function selectWinningSuggestion(
   suggestionId: number,
 ): Promise<SelectWinnerResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Get active session to check moderator
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return { success: false, error: 'No active session found' };
@@ -487,10 +351,10 @@ export async function selectWinningSuggestion(
     const banlistResult = await createBanlistFromWinningSuggestion(
       suggestion.banlistId,
       {
-        banned: parseBanlistField(suggestion.banned),
-        limited: parseBanlistField(suggestion.limited),
-        semilimited: parseBanlistField(suggestion.semilimited),
-        unlimited: parseBanlistField(suggestion.unlimited),
+        banned: await parseBanlistField(suggestion.banned),
+        limited: await parseBanlistField(suggestion.limited),
+        semilimited: await parseBanlistField(suggestion.semilimited),
+        unlimited: await parseBanlistField(suggestion.unlimited),
       },
     );
 
@@ -509,10 +373,10 @@ export async function selectWinningSuggestion(
         const { saveBanlistImage } = await import('@lib/banlistImage');
         await saveBanlistImage({
           sessionNumber: newBanlist.sessionId,
-          banned: parseBanlistField(newBanlist.banned),
-          limited: parseBanlistField(newBanlist.limited),
-          semilimited: parseBanlistField(newBanlist.semilimited),
-          unlimited: parseBanlistField(newBanlist.unlimited),
+          banned: await parseBanlistField(newBanlist.banned),
+          limited: await parseBanlistField(newBanlist.limited),
+          semilimited: await parseBanlistField(newBanlist.semilimited),
+          unlimited: await parseBanlistField(newBanlist.unlimited),
         });
         console.log(`Banlist image generated for session ${newBanlist.sessionId}`);
       } catch (imageError) {
@@ -549,10 +413,11 @@ export async function submitVotes(
   suggestionIds: number[],
 ): Promise<SubmitVotesResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Validate minimum votes
     if (suggestionIds.length < 2) {
@@ -620,15 +485,14 @@ export async function submitVotes(
 
 export async function clearWinningSuggestion(): Promise<SelectWinnerResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
     }
+    const user = authResult.user;
 
     // Get the active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return {
@@ -699,6 +563,96 @@ export async function clearWinningSuggestion(): Promise<SelectWinnerResult> {
       success: false,
       error:
         error instanceof Error ? error.message : 'Failed to clear selection',
+    };
+  }
+}
+
+export interface VoteDetail {
+  suggestionId: number;
+  playerName: string;
+  submittedBy: string;
+  voters: string[];
+}
+
+interface GetVoteDetailsResult {
+  success: boolean;
+  voteDetails?: VoteDetail[];
+  error?: string;
+}
+
+/**
+ * Get detailed vote information (who voted for what).
+ * Available in non-production environments or to admins.
+ */
+export async function getVoteDetails(): Promise<GetVoteDetailsResult> {
+  try {
+    const authResult = await requireAuth();
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
+    }
+    const user = authResult.user;
+
+    // Only allow in non-production environments OR for admins
+    if (process.env.NODE_ENV === 'production' && !user.isAdmin) {
+      return {
+        success: false,
+        error: 'Vote details are only available to admins in production',
+      };
+    }
+
+    // Get the active session
+    const activeSession = await getActiveSession();
+
+    if (!activeSession) {
+      return {
+        success: false,
+        error: 'No active session found',
+      };
+    }
+
+    // Get the banlist for this session
+    const banlist = await prisma.banlist.findFirst({
+      where: { sessionId: activeSession.number },
+    });
+
+    if (!banlist) {
+      return {
+        success: false,
+        error: 'No banlist found for the active session',
+      };
+    }
+
+    // Get all suggestions for this banlist
+    const suggestions = await prisma.banlistSuggestion.findMany({
+      where: { banlistId: banlist.id },
+      include: {
+        player: { select: { name: true } },
+        votes: {
+          include: {
+            player: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const voteDetails: VoteDetail[] = suggestions.map((suggestion) => ({
+      suggestionId: suggestion.id,
+      playerName: suggestion.player.name,
+      submittedBy: suggestion.player.name,
+      voters: suggestion.votes.map((vote) => vote.player.name),
+    }));
+
+    return {
+      success: true,
+      voteDetails,
+    };
+  } catch (error) {
+    console.error('Error fetching vote details:', error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to fetch vote details',
     };
   }
 }

@@ -1,6 +1,6 @@
-import { Box, Button, CircularProgress, Paper } from '@mui/material';
+import { Alert, Box, Button, CircularProgress } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { VotingBanlistCard } from './VotingBanlistCard';
+import { SuggestionGrid } from './SuggestionGrid';
 import type { BanlistSuggestionForVoting } from '../actions';
 
 interface ModeratorSelectionViewProps {
@@ -15,9 +15,8 @@ interface ModeratorSelectionViewProps {
 
 /**
  * Moderator-only view shown when all players have voted.
- * Displays suggestions with 2+ votes and crown icons for selection.
- * Moderator clicks crown to select (local state), then confirms with button to save to database.
- * Only shows suggestions that received at least 2 votes.
+ * Displays all suggestions with eligible ones (2+ votes) selectable via tick icons.
+ * Ineligible suggestions are grayed out. Moderator confirms selection with button.
  */
 export function ModeratorSelectionView({
   suggestions,
@@ -30,35 +29,19 @@ export function ModeratorSelectionView({
 }: ModeratorSelectionViewProps) {
   return (
     <>
-      {suggestions.map((suggestion) => {
-        const isOwnSuggestion = suggestion.playerId === currentUserId;
-        const isVoted = userVotedIds.includes(suggestion.id);
-        const isChosen = selectedWinner === suggestion.id;
+      <Alert severity="info" sx={{ mb: 3 }}>
+        You are the Moderator — select a banlist from the eligible suggestions below
+      </Alert>
 
-        return (
-          <Paper
-            key={suggestion.id}
-            sx={{
-              mb: 3,
-              p: 3,
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-            }}
-          >
-            <VotingBanlistCard
-              suggestion={suggestion}
-              isOwnSuggestion={isOwnSuggestion}
-              isSelected={false}
-              hasSubmitted={true}
-              isVoted={isVoted}
-              onToggleVote={() => {}}
-              showModeratorControls={true}
-              isChosen={isChosen}
-              onSelectWinner={onSelectWinner}
-            />
-          </Paper>
-        );
-      })}
+      <SuggestionGrid
+        suggestions={suggestions}
+        currentUserId={currentUserId}
+        userVotedIds={userVotedIds}
+        mode="moderator"
+        selectedWinner={selectedWinner}
+        onSelectWinner={onSelectWinner}
+        showEligibility
+      />
 
       {selectedWinner && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>

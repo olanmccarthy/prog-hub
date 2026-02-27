@@ -1,10 +1,12 @@
 'use server';
 
 import { prisma } from '@lib/prisma';
+import { Prisma } from '@prisma/client';
 import { getCurrentUser } from '@lib/auth';
 import { revalidatePath } from 'next/cache';
+import type { SessionModifierFields } from '@/src/types/sessionModifiers';
 
-export interface EventWheelEntry {
+export interface EventWheelEntry extends SessionModifierFields {
   id: number;
   name: string;
   description: string;
@@ -17,7 +19,7 @@ export interface GetEntriesResult {
   error?: string;
 }
 
-export interface CreateEntryInput {
+export interface CreateEntryInput extends SessionModifierFields {
   name: string;
   description: string;
   chance: number;
@@ -82,6 +84,22 @@ export async function getEventWheelEntries(): Promise<GetEntriesResult> {
         name: e.name,
         description: e.description,
         chance: e.chance,
+        doubleWalletPoints: e.doubleWalletPoints,
+        awardTwoVictoryPoints: e.awardTwoVictoryPoints,
+        oddPlacementBonus: e.oddPlacementBonus,
+        evenPlacementBonus: e.evenPlacementBonus,
+        reverseVpOrder: e.reverseVpOrder,
+        matchWinBonus: e.matchWinBonus,
+        adminHalveWallet: e.adminHalveWallet,
+        equalSplitWallet: e.equalSplitWallet,
+        halveAllWalletPoints: e.halveAllWalletPoints,
+        bountyHunter: e.bountyHunter,
+        earlyDecklistPublic: e.earlyDecklistPublic,
+        allowMultipleEventSpins: e.allowMultipleEventSpins,
+        skipModeratorRandomBanlist: e.skipModeratorRandomBanlist,
+        trueDemocracyBanlist: e.trueDemocracyBanlist,
+        gamblingEnabled: e.gamblingEnabled,
+        halvedPlayerIds: e.halvedPlayerIds as number[] | null,
       })),
     };
   } catch (error) {
@@ -133,6 +151,22 @@ export async function createEventWheelEntry(input: CreateEntryInput): Promise<Cr
         name: input.name,
         description: input.description,
         chance: input.chance,
+        doubleWalletPoints: input.doubleWalletPoints || false,
+        awardTwoVictoryPoints: input.awardTwoVictoryPoints || false,
+        oddPlacementBonus: input.oddPlacementBonus || false,
+        evenPlacementBonus: input.evenPlacementBonus || false,
+        reverseVpOrder: input.reverseVpOrder || false,
+        matchWinBonus: input.matchWinBonus || false,
+        adminHalveWallet: input.adminHalveWallet || false,
+        equalSplitWallet: input.equalSplitWallet || false,
+        halveAllWalletPoints: input.halveAllWalletPoints || false,
+        bountyHunter: input.bountyHunter || false,
+        earlyDecklistPublic: input.earlyDecklistPublic || false,
+        allowMultipleEventSpins: input.allowMultipleEventSpins || false,
+        skipModeratorRandomBanlist: input.skipModeratorRandomBanlist || false,
+        trueDemocracyBanlist: input.trueDemocracyBanlist || false,
+        gamblingEnabled: input.gamblingEnabled || false,
+        halvedPlayerIds: input.halvedPlayerIds || Prisma.JsonNull,
       },
     });
 
@@ -196,6 +230,22 @@ export async function updateEventWheelEntry(
         name: input.name,
         description: input.description,
         chance: input.chance,
+        doubleWalletPoints: input.doubleWalletPoints || false,
+        awardTwoVictoryPoints: input.awardTwoVictoryPoints || false,
+        oddPlacementBonus: input.oddPlacementBonus || false,
+        evenPlacementBonus: input.evenPlacementBonus || false,
+        reverseVpOrder: input.reverseVpOrder || false,
+        matchWinBonus: input.matchWinBonus || false,
+        adminHalveWallet: input.adminHalveWallet || false,
+        equalSplitWallet: input.equalSplitWallet || false,
+        halveAllWalletPoints: input.halveAllWalletPoints || false,
+        bountyHunter: input.bountyHunter || false,
+        earlyDecklistPublic: input.earlyDecklistPublic || false,
+        allowMultipleEventSpins: input.allowMultipleEventSpins || false,
+        skipModeratorRandomBanlist: input.skipModeratorRandomBanlist || false,
+        trueDemocracyBanlist: input.trueDemocracyBanlist || false,
+        gamblingEnabled: input.gamblingEnabled || false,
+        halvedPlayerIds: input.halvedPlayerIds || Prisma.JsonNull,
       },
     });
 

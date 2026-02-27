@@ -19,7 +19,7 @@ import {
   getAllBanlistSuggestions,
   type BanlistSuggestionHistory,
 } from './actions';
-import { CategoryCard } from '@components/CategoryCard';
+import { CategoryCard, zipCards } from '@components/CategoryCard';
 
 function SuggestedBanlistCard({
   suggestion,
@@ -72,10 +72,10 @@ function SuggestedBanlistCard({
           </Typography>
         </Box>
       )}
-      <CategoryCard title="Banned" cards={suggestion.bannedNames} />
-      <CategoryCard title="Limited" cards={suggestion.limitedNames} />
-      <CategoryCard title="Semi-Limited" cards={suggestion.semilimitedNames} />
-      <CategoryCard title="Unlimited" cards={suggestion.unlimitedNames} />
+      <CategoryCard title="Banned" cards={zipCards(suggestion.banned, suggestion.bannedNames)} />
+      <CategoryCard title="Limited" cards={zipCards(suggestion.limited, suggestion.limitedNames)} />
+      <CategoryCard title="Semi-Limited" cards={zipCards(suggestion.semilimited, suggestion.semilimitedNames)} />
+      <CategoryCard title="Unlimited" cards={zipCards(suggestion.unlimited, suggestion.unlimitedNames)} />
     </>
   );
 }
@@ -135,8 +135,22 @@ export default function BanlistSuggestionHistoryPage() {
     return filtered;
   }, [suggestions, selectedSession, selectedPlayer]);
 
+  // Group filtered suggestions by session number (descending) for grid display
+  const groupedBySession = useMemo(() => {
+    const groups = new Map<number, BanlistSuggestionHistory[]>();
+    for (const s of filteredSuggestions) {
+      const group = groups.get(s.sessionNumber);
+      if (group) {
+        group.push(s);
+      } else {
+        groups.set(s.sessionNumber, [s]);
+      }
+    }
+    return [...groups.entries()].sort(([a], [b]) => b - a);
+  }, [filteredSuggestions]);
+
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Typography
           variant="h3"
@@ -268,20 +282,39 @@ export default function BanlistSuggestionHistoryPage() {
           </Typography>
         </Paper>
       ) : (
-        filteredSuggestions.map((suggestion) => (
-          <Paper
-            key={suggestion.id}
-            sx={{
-              mb: 3,
-              p: 3,
-              backgroundColor: 'var(--bg-secondary)',
-              border: suggestion.chosen
-                ? '2px solid #4caf50'
-                : '1px solid var(--border-color)',
-            }}
-          >
-            <SuggestedBanlistCard suggestion={suggestion} />
-          </Paper>
+        groupedBySession.map(([sessionNumber, sessionSuggestions]) => (
+          <Box key={sessionNumber} sx={{ mb: 4 }}>
+            <Typography
+              variant="h5"
+              sx={{ color: 'var(--text-bright)', fontWeight: 'bold', mb: 2 }}
+            >
+              Session {sessionNumber}
+            </Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' },
+                gap: 3,
+              }}
+            >
+              {sessionSuggestions.map((suggestion) => (
+                <Paper
+                  key={suggestion.id}
+                  sx={{
+                    p: 3,
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: suggestion.chosen
+                      ? '2px solid var(--success-green)'
+                      : '2px solid var(--border-color)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <SuggestedBanlistCard suggestion={suggestion} />
+                </Paper>
+              ))}
+            </Box>
+          </Box>
         ))
       )}
     </Container>

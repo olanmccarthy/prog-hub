@@ -3,22 +3,29 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Alert,
-  CircularProgress,
   Paper,
   FormGroup,
   FormControlLabel,
   Checkbox,
   Chip,
 } from '@mui/material';
+import {
+  LoadingBox,
+  ErrorAlert,
+  SuccessAlert,
+  InfoAlert,
+  WarningAlert,
+  PrimaryButton,
+} from '@/src/components';
 import CasinoIcon from '@mui/icons-material/Casino';
 import EventWheel from '@components/EventWheel';
 import EventResultModal from '@components/EventResultModal';
 import {
   getModeratorSelectionStatus,
   spinModeratorWheel,
+  selectRandomBanlistSuggestion,
+  selectMostVotedBanlistSuggestion,
   type ModeratorSelectionStatusResult,
 } from './actions';
 
@@ -130,19 +137,56 @@ export default function ModeratorSelectionPage() {
     setShowResult(false);
   };
 
+  const handleRandomBanlist = async () => {
+    try {
+      setError(null);
+      setSuccess(null);
+      setLoading(true);
+
+      const result = await selectRandomBanlistSuggestion();
+
+      if (!result.success || !result.selectedSuggestion) {
+        setError(result.error || 'Failed to select random banlist');
+        setLoading(false);
+        return;
+      }
+
+      setSuccess(
+        `Random banlist selected! ${result.selectedSuggestion.playerName}'s suggestion will be used.`
+      );
+      await loadStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to select random banlist');
+      setLoading(false);
+    }
+  };
+
+  const handleTrueDemocracy = async () => {
+    try {
+      setError(null);
+      setSuccess(null);
+      setLoading(true);
+
+      const result = await selectMostVotedBanlistSuggestion();
+
+      if (!result.success || !result.selectedSuggestion) {
+        setError(result.error || 'Failed to select most voted banlist');
+        setLoading(false);
+        return;
+      }
+
+      setSuccess(
+        `Most voted banlist selected! ${result.selectedSuggestion.playerName}'s suggestion will be used.`
+      );
+      await loadStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to select most voted banlist');
+      setLoading(false);
+    }
+  };
+
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   // Prepare wheel segments from eligible players
@@ -164,35 +208,20 @@ export default function ModeratorSelectionPage() {
         Moderator Selection
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
       {/* Already Selected State */}
       {status?.alreadySelected && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Moderator has already been selected for Session #{status.activeSessionNumber}
-          {status.selectedModeratorName && (
-            <Typography component="span" sx={{ fontWeight: 'bold', ml: 1 }}>
-              - {status.selectedModeratorName}
-            </Typography>
-          )}
-        </Alert>
+        <SuccessAlert
+          message={`Moderator has already been selected for Session #${status.activeSessionNumber}${status.selectedModeratorName ? ` - ${status.selectedModeratorName}` : ''}`}
+          onClose={() => {}}
+        />
       )}
 
       {/* Not Ready State */}
       {!status?.canSpin && !status?.alreadySelected && status?.reason && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          {status.reason}
-        </Alert>
+        <WarningAlert message={status.reason} onClose={() => {}} />
       )}
 
       {/* Player Selection Section */}
@@ -258,8 +287,86 @@ export default function ModeratorSelectionPage() {
         </Paper>
       )}
 
-      {/* Moderator Wheel Section */}
-      {!status?.alreadySelected && (
+      {/* RNG Moderation Mode: Random Banlist Selection */}
+      {!status?.alreadySelected && status?.useRandomBanlist && (
+        <Paper
+          sx={{
+            p: 3,
+            mb: 3,
+            backgroundColor: 'var(--bg-elevated)',
+            border: '2px solid var(--warning)',
+            color: 'var(--text-bright)',
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h6" sx={{ color: 'var(--warning)' }}>
+              {status?.activeSessionNumber && `Session #${status.activeSessionNumber} - RNG Moderation`}
+            </Typography>
+
+            <InfoAlert
+              message="RNG Moderation is active! No moderator will be selected. Instead, a random banlist suggestion with 2+ votes will be chosen automatically."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
+
+            <PrimaryButton
+              size="large"
+              startIcon={<CasinoIcon />}
+              onClick={handleRandomBanlist}
+              disabled={!status?.canSpin || loading}
+              sx={{ px: 4, py: 1.5 }}
+            >
+              {loading ? 'Selecting...' : 'Choose Random Suggestion'}
+            </PrimaryButton>
+          </Box>
+        </Paper>
+      )}
+
+      {/* True Democracy Mode: Most Voted Banlist Selection */}
+      {!status?.alreadySelected && status?.useTrueDemocracy && (
+        <Paper
+          sx={{
+            p: 3,
+            mb: 3,
+            backgroundColor: 'var(--bg-elevated)',
+            border: '2px solid var(--success)',
+            color: 'var(--text-bright)',
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h6" sx={{ color: 'var(--success)' }}>
+              {status?.activeSessionNumber && `Session #${status.activeSessionNumber} - True Democracy`}
+            </Typography>
+
+            <InfoAlert
+              message="True Democracy is active! No moderator will be selected. Instead, the banlist suggestion with the most votes will be chosen automatically. In case of a tie, one will be randomly selected."
+              onClose={() => {}}
+              sx={{ width: '100%', maxWidth: 600 }}
+            />
+
+            <PrimaryButton
+              size="large"
+              startIcon={<CasinoIcon />}
+              onClick={handleTrueDemocracy}
+              disabled={!status?.canSpin || loading}
+              sx={{
+                px: 4,
+                py: 1.5,
+                backgroundColor: status?.canSpin ? 'var(--success)' : undefined,
+                '&:hover': {
+                  backgroundColor: status?.canSpin ? 'var(--success)' : undefined,
+                  filter: status?.canSpin ? 'brightness(1.2)' : 'none',
+                },
+              }}
+            >
+              {loading ? 'Selecting...' : 'Choose Most Voted Suggestion'}
+            </PrimaryButton>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Normal Mode: Moderator Wheel Section */}
+      {!status?.alreadySelected && !status?.useRandomBanlist && !status?.useTrueDemocracy && (
         <Paper
           sx={{
             p: 3,
@@ -285,37 +392,19 @@ export default function ModeratorSelectionPage() {
             )}
 
             {/* Spin Button */}
-            <Button
-              variant="contained"
+            <PrimaryButton
               size="large"
-              startIcon={spinning ? <CircularProgress size={20} /> : <CasinoIcon />}
+              startIcon={<CasinoIcon />}
               onClick={handleSpin}
               disabled={!status?.canSpin || spinning || selectedPlayers.size === 0}
-              sx={{
-                backgroundColor:
-                  status?.canSpin && selectedPlayers.size > 0
-                    ? 'var(--accent-primary)'
-                    : 'var(--grey-300)',
-                '&:hover': {
-                  backgroundColor:
-                    status?.canSpin && selectedPlayers.size > 0
-                      ? 'var(--accent-blue-hover)'
-                      : 'var(--grey-300)',
-                },
-                '&:disabled': {
-                  backgroundColor: 'var(--grey-300)',
-                  color: 'var(--text-secondary)',
-                },
-                px: 4,
-                py: 1.5,
-              }}
+              sx={{ px: 4, py: 1.5 }}
             >
               {spinning
                 ? 'Spinning...'
                 : selectedPlayers.size === 0
                 ? 'Select Players First'
                 : 'Spin the Wheel'}
-            </Button>
+            </PrimaryButton>
           </Box>
         </Paper>
       )}

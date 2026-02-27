@@ -1,10 +1,12 @@
 "use server";
 
 import { prisma } from "@lib/prisma";
-import { getCurrentUser } from "@lib/auth";
+import { requireAuth, requireAdmin } from "@lib/serverUtils";
+import { getActiveSession } from "@lib/sessionHelpers";
 import { revalidatePath } from "next/cache";
 import { notifyStandings } from "@lib/discordClient";
 import { saveDeckImage } from "@lib/deckImage";
+import { parseBanlistField } from "@lib/banlistHelpers";
 
 export interface PairingData {
   id: number;
@@ -41,10 +43,7 @@ export async function getPairings(
     // If no sessionId provided, get the active session
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const activeSession = await prisma.session.findFirst({
-        where: { active: true },
-        select: { id: true },
-      });
+      const activeSession = await getActiveSession();
 
       if (!activeSession) {
         return {
@@ -101,13 +100,14 @@ export async function updatePairing(
 ): Promise<UpdatePairingResult> {
   try {
     // Check if user is logged in
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
+    const authResult = await requireAuth();
+    if (!authResult.success) {
       return {
         success: false,
         error: "You must be logged in to update scores",
       };
     }
+    const currentUser = authResult.user;
 
     // Verify the player exists in the database
     const player = await prisma.player.findUnique({
@@ -275,10 +275,7 @@ export async function getStandings(
     // If no sessionId provided, get the active session
     let currentSessionId = sessionId;
     if (!currentSessionId) {
-      const activeSession = await prisma.session.findFirst({
-        where: { active: true },
-        select: { id: true },
-      });
+      const activeSession = await getActiveSession();
 
       if (!activeSession) {
         return {
@@ -780,9 +777,9 @@ export async function checkIsFinalized(sessionId: number): Promise<IsFinalizedRe
  */
 export async function checkIsAdmin(): Promise<IsAdminResult> {
   try {
-    const currentUser = await getCurrentUser();
+    const authResult = await requireAuth();
     return {
-      isAdmin: currentUser?.isAdmin || false,
+      isAdmin: authResult.success ? (authResult.user.isAdmin ?? false) : false,
     };
   } catch (error) {
     console.error("Error checking admin status:", error);
@@ -798,9 +795,7 @@ export async function checkIsAdmin(): Promise<IsAdminResult> {
 export async function canFinalizeStandings(sessionId: number): Promise<CanFinalizeResult> {
   try {
     // Get the active session
-    const activeSession = await prisma.session.findFirst({
-      where: { active: true },
-    });
+    const activeSession = await getActiveSession();
 
     if (!activeSession) {
       return {
@@ -845,8 +840,8 @@ export async function canFinalizeStandings(sessionId: number): Promise<CanFinali
 export async function finalizeStandings(sessionId: number): Promise<FinalizeResult> {
   try {
     // Check permissions
-    const currentUser = await getCurrentUser();
-    if (!currentUser?.isAdmin) {
+    const authResult = await requireAdmin();
+    if (!authResult.success) {
       return {
         success: false,
         error: "Unauthorized: Only admins can finalize standings",
@@ -894,6 +889,22 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
       },
     });
 
+    // Resolve gambling bets if enabled
+    const modifiers = await prisma.sessionModifier.findUnique({
+      where: { sessionId },
+    });
+
+    if (modifiers?.gamblingEnabled) {
+      const { resolveBets } = await import('../betting/actions');
+      const betResult = await resolveBets(sessionId);
+
+      if (betResult.success) {
+        console.log(`Resolved ${betResult.betsResolved} bets for session ${sessionId}`);
+      } else {
+        console.error(`Failed to resolve bets: ${betResult.error}`);
+      }
+    }
+
     // Generate deck images for all decklists in this session
     await generateDecklistImages(sessionId);
 
@@ -923,7 +934,7 @@ export async function finalizeStandings(sessionId: number): Promise<FinalizeResu
 /**
  * Generate deck images for all decklists in a session
  */
-async function generateDecklistImages(sessionId: number): Promise<void> {
+export async function generateDecklistImages(sessionId: number): Promise<void> {
   try {
     // Get the session to find the banlist
     const session = await prisma.session.findUnique({
@@ -966,20 +977,10 @@ async function generateDecklistImages(sessionId: number): Promise<void> {
         let banlistForImage = undefined;
         if (banlist) {
           try {
-            const parseBanlistField = (field: string | number[] | unknown): number[] => {
-              if (!field) return [];
-              if (typeof field === 'string') {
-                if (field.trim() === '') return [];
-                return JSON.parse(field) as number[];
-              }
-              if (Array.isArray(field)) return field;
-              return [];
-            };
-
             banlistForImage = {
-              banned: parseBanlistField(banlist.banned),
-              limited: parseBanlistField(banlist.limited),
-              semilimited: parseBanlistField(banlist.semilimited),
+              banned: await parseBanlistField(banlist.banned),
+              limited: await parseBanlistField(banlist.limited),
+              semilimited: await parseBanlistField(banlist.semilimited),
             };
           } catch (parseError) {
             console.warn(`Failed to parse banlist for session ${session.number}, generating without banlist indicators:`, parseError);

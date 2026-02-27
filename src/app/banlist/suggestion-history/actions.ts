@@ -1,23 +1,8 @@
 "use server";
 
 import { prisma } from "@lib/prisma";
+import { parseBanlistField } from "@lib/banlistHelpers";
 
-/**
- * Helper function to parse banlist field (handles both string and array)
- */
-function parseBanlistField(field: unknown): number[] {
-  if (!field) return [];
-  if (typeof field === 'string') {
-    if (field.trim() === '') return [];
-    try {
-      return JSON.parse(field) as number[];
-    } catch {
-      return [];
-    }
-  }
-  if (Array.isArray(field)) return field;
-  return [];
-}
 
 /**
  * Decode HTML apostrophe entities in card names
@@ -78,12 +63,12 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
 
     // Collect all unique card IDs from all suggestions
     const allCardIds = new Set<number>();
-    filteredSuggestions.forEach(s => {
-      parseBanlistField(s.banned).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.limited).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.semilimited).forEach(id => allCardIds.add(id));
-      parseBanlistField(s.unlimited).forEach(id => allCardIds.add(id));
-    });
+    for (const s of filteredSuggestions) {
+      (await parseBanlistField(s.banned)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.limited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.semilimited)).forEach(id => allCardIds.add(id));
+      (await parseBanlistField(s.unlimited)).forEach(id => allCardIds.add(id));
+    }
 
     // Batch fetch all cards in one query
     const cards = await prisma.card.findMany({
@@ -106,11 +91,11 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
 
     return {
       success: true,
-      suggestions: filteredSuggestions.map(s => {
-        const banned = parseBanlistField(s.banned);
-        const limited = parseBanlistField(s.limited);
-        const semilimited = parseBanlistField(s.semilimited);
-        const unlimited = parseBanlistField(s.unlimited);
+      suggestions: await Promise.all(filteredSuggestions.map(async s => {
+        const banned = await parseBanlistField(s.banned);
+        const limited = await parseBanlistField(s.limited);
+        const semilimited = await parseBanlistField(s.semilimited);
+        const unlimited = await parseBanlistField(s.unlimited);
 
         return {
           id: s.id,
@@ -129,7 +114,7 @@ export async function getAllBanlistSuggestions(): Promise<GetAllBanlistSuggestio
           moderatorName: s.moderator?.name || null,
           voters: s.votes.map(v => v.player.name),
         };
-      }),
+      })),
     };
   } catch (error) {
     console.error("Error fetching banlist suggestions:", error);

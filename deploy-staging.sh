@@ -14,10 +14,10 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-# Pull latest changes from main branch (or specify a different branch)
-echo "Pulling latest code from main branch..."
+# Pull latest changes from staging branch
+echo "Pulling latest code from staging branch..."
 git fetch origin
-git reset --hard origin/main
+git reset --hard origin/staging
 
 # Stop running staging containers ONLY
 echo "Stopping staging containers..."

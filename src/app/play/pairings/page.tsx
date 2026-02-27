@@ -6,9 +6,8 @@ import {
   Typography,
   ToggleButton,
   ToggleButtonGroup,
-  CircularProgress,
-  Alert,
 } from "@mui/material";
+import { LoadingBox, ErrorAlert } from '@/src/components';
 import {
   getPairings,
   updatePairing,
@@ -192,18 +191,7 @@ export default function PairingsPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          minHeight: "400px",
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -212,11 +200,7 @@ export default function PairingsPage() {
         Pairings & Standings
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
 
       <Box sx={{ mb: 3, display: "flex", justifyContent: "center" }}>
         <ToggleButtonGroup

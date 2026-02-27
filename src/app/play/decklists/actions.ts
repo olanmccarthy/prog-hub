@@ -3,6 +3,7 @@
 import { prisma } from "@lib/prisma";
 import { getCurrentUser } from "@lib/auth";
 import { saveDeckImage } from "@lib/deckImage/saveDeckImage";
+import { parseBanlistField } from "@lib/banlistHelpers";
 
 export interface DecklistWithDetails {
   id: number;
@@ -230,15 +231,28 @@ export async function getDecklists(
       return Array.isArray(field) ? field : [];
     };
 
+    // Fetch session modifiers for all sessions
+    const sessionModifiersMap = new Map();
+    for (const sessionId of sessionIds) {
+      const modifiers = await prisma.sessionModifier.findUnique({
+        where: { sessionId },
+      });
+      sessionModifiersMap.set(sessionId, modifiers);
+    }
+
     // Check if standings are finalized for each session and get placement
     const decklistsWithDetails: DecklistWithDetails[] = decklists.map(decklist => {
-      const standingsFinalized =
+      // Check if placements are filled
+      const placementsFilled =
         decklist.session.first !== null &&
         decklist.session.second !== null &&
         decklist.session.third !== null &&
         decklist.session.fourth !== null &&
         decklist.session.fifth !== null &&
         decklist.session.sixth !== null;
+
+      // Standings are considered finalized when all placements are filled
+      const standingsFinalized = placementsFilled;
 
       // Get match record
       const recordKey = `${decklist.sessionId}-${decklist.playerId}`;
@@ -280,8 +294,13 @@ export async function getDecklists(
       // Always show completed sessions
       if (decklist.sessionComplete) return true;
 
-      // For active session, only show if standings finalized or it's the user's own deck
+      // For active session
       if (decklist.sessionId === activeSession?.id) {
+        // Modifier 7: Early decklist public (show all decklists before standings finalized)
+        const modifiers = sessionModifiersMap.get(decklist.sessionId);
+        if (modifiers?.earlyDecklistPublic) return true;
+
+        // Otherwise: show if standings finalized or own deck
         return decklist.standingsFinalized || decklist.playerId === user.playerId;
       }
 
@@ -395,20 +414,6 @@ function parseDeckField(field: unknown): number[] {
   return [];
 }
 
-function parseBanlistField(field: unknown): number[] {
-  if (typeof field === 'string') {
-    try {
-      const parsed = JSON.parse(field);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  if (Array.isArray(field)) {
-    return field;
-  }
-  return [];
-}
 
 interface RegenerateDeckImageResult {
   success: boolean;
@@ -460,10 +465,10 @@ export async function regenerateDeckImage(
     const banlistData = banlist
       ? {
           sessionNumber: decklist.session.number,
-          banned: parseBanlistField(banlist.banned),
-          limited: parseBanlistField(banlist.limited),
-          semilimited: parseBanlistField(banlist.semilimited),
-          unlimited: parseBanlistField(banlist.unlimited),
+          banned: await parseBanlistField(banlist.banned),
+          limited: await parseBanlistField(banlist.limited),
+          semilimited: await parseBanlistField(banlist.semilimited),
+          unlimited: await parseBanlistField(banlist.unlimited),
         }
       : undefined;
 

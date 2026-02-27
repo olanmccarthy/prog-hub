@@ -5,9 +5,8 @@ import {
   Container,
   Typography,
   Box,
-  Alert,
-  CircularProgress,
 } from '@mui/material';
+import { LoadingBox, ErrorAlert, PrimaryButton } from '@/src/components';
 import {
   getBanlistSuggestionsForVoting,
   submitVotes,
@@ -20,6 +19,7 @@ import { VotingComplete } from './components/VotingComplete';
 import { PlayerVotingView } from './components/PlayerVotingView';
 import { PostVotingView } from './components/PostVotingView';
 import { ModeratorSelectionView } from './components/ModeratorSelectionView';
+import { VoteDetailsView } from './components/VoteDetailsView';
 
 /**
  * Main voting page component that manages all state and routes to appropriate view.
@@ -42,6 +42,9 @@ export default function BanlistVotingPage() {
   const [isModerator, setIsModerator] = useState(false);
   const [selectedWinner, setSelectedWinner] = useState<number | null>(null);
   const [confirmedWinner, setConfirmedWinner] = useState<number | null>(null);
+  const [isNonProduction, setIsNonProduction] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showVoteDetails, setShowVoteDetails] = useState(false);
 
   useEffect(() => {
     fetchSuggestions();
@@ -64,6 +67,8 @@ export default function BanlistVotingPage() {
       setIsModerator(result.isModerator || false);
       setSelectedWinner(result.chosenSuggestionId || null);
       setConfirmedWinner(result.chosenSuggestionId || null);
+      setIsNonProduction(result.isNonProduction || false);
+      setIsAdmin(result.isAdmin || false);
     } else {
       setError(result.error || 'Failed to load suggestions');
     }
@@ -143,12 +148,7 @@ export default function BanlistVotingPage() {
   const randomizedSuggestions = useMemo(() => {
     if (suggestions.length === 0) return [];
 
-    const allPlayersVoted = votedPlayerCount >= totalPlayerCount;
-    const filtered = allPlayersVoted
-      ? suggestions.filter((s) => s.voteCount >= 2)
-      : suggestions;
-
-    const shuffled = [...filtered];
+    const shuffled = [...suggestions];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const seed = shuffled[i].id + shuffled[0].id;
       const j = Math.floor((seed % 1000) / 1000 * (i + 1));
@@ -160,10 +160,8 @@ export default function BanlistVotingPage() {
 
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-          <CircularProgress />
-        </Box>
+      <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, sm: 3, md: 4 } }}>
+        <LoadingBox minHeight="400px" />
       </Container>
     );
   }
@@ -173,16 +171,28 @@ export default function BanlistVotingPage() {
     isModerator && hasVoted && allPlayersVoted && !confirmedWinner;
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" sx={{ mb: 3, color: 'var(--text-bright)' }}>
         Banlist Voting
         {sessionNumber && ` - Session ${sessionNumber}`}
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+
+      {/* Admin button to toggle vote details (only in production) */}
+      {!isNonProduction && isAdmin && submissionCount >= totalPlayerCount && (
+        <Box sx={{ mb: 3 }}>
+          <PrimaryButton
+            onClick={() => setShowVoteDetails(!showVoteDetails)}
+          >
+            {showVoteDetails ? 'Hide Vote Details' : 'Show Vote Details (Admin)'}
+          </PrimaryButton>
+        </Box>
+      )}
+
+      {/* Show vote details in non-production OR when admin enables it */}
+      {((isNonProduction || (isAdmin && showVoteDetails)) && submissionCount >= totalPlayerCount) && (
+        <VoteDetailsView />
       )}
 
       {confirmedWinner ? (
@@ -190,6 +200,10 @@ export default function BanlistVotingPage() {
           isModerator={isModerator}
           onChangeSelection={handleClearWinner}
           isChanging={submitting}
+          suggestions={randomizedSuggestions}
+          confirmedWinnerId={confirmedWinner}
+          currentUserId={currentUserId}
+          userVotedIds={userVotedIds}
         />
       ) : submissionCount < totalPlayerCount ? (
         <WaitingForSubmissions
@@ -219,8 +233,6 @@ export default function BanlistVotingPage() {
         <PostVotingView
           votedPlayerCount={votedPlayerCount}
           totalPlayerCount={totalPlayerCount}
-          isModerator={isModerator}
-          selectedWinner={selectedWinner}
           suggestions={randomizedSuggestions}
           currentUserId={currentUserId}
           userVotedIds={userVotedIds}

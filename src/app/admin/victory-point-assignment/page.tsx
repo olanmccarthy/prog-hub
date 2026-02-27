@@ -3,10 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Alert,
-  CircularProgress,
   Paper,
   Table,
   TableBody,
@@ -16,6 +13,14 @@ import {
   TableRow,
   Chip,
 } from '@mui/material';
+import {
+  LoadingBox,
+  ErrorAlert,
+  SuccessAlert,
+  InfoAlert,
+  PrimaryButton,
+  SecondaryButton,
+} from '@/src/components';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import {
   getVictoryPointStatus,
@@ -44,6 +49,17 @@ export default function VictoryPointAssignmentPage() {
       if (!result.success && result.error) {
         setError(result.error);
       }
+
+      // Set initial offer index based on reverseVpOrder modifier
+      if (result.success && result.rankedPlayers.length > 0) {
+        if (result.reverseVpOrder) {
+          // Start from last place (6th) when reversed
+          setCurrentOfferIndex(result.rankedPlayers.length - 1);
+        } else {
+          // Start from 1st place normally
+          setCurrentOfferIndex(0);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load status');
     } finally {
@@ -65,7 +81,7 @@ export default function VictoryPointAssignmentPage() {
       if (result.success) {
         setSuccess(result.message || 'Victory point assigned successfully!');
         await loadStatus();
-        setCurrentOfferIndex(0);
+        // currentOfferIndex will be reset by loadStatus based on reverseVpOrder
       } else {
         setError(result.error || 'Failed to assign victory point');
       }
@@ -79,27 +95,26 @@ export default function VictoryPointAssignmentPage() {
   const handlePassVictoryPoint = () => {
     if (!status || !status.rankedPlayers) return;
 
-    // If this is the last player, automatically assign to them
-    if (currentOfferIndex === status.rankedPlayers.length - 1) {
+    const isReversed = status.reverseVpOrder;
+    const isLastOffer = isReversed
+      ? currentOfferIndex === 0 // Last offer is at index 0 when reversed (1st place)
+      : currentOfferIndex === status.rankedPlayers.length - 1; // Last offer is at last index normally (6th place)
+
+    // If this is the last player in the sequence, automatically assign to them
+    if (isLastOffer) {
       handleTakeVictoryPoint();
     } else {
-      setCurrentOfferIndex(currentOfferIndex + 1);
+      // Move to next player in the sequence
+      if (isReversed) {
+        setCurrentOfferIndex(currentOfferIndex - 1); // Move up (6th -> 5th -> 4th...)
+      } else {
+        setCurrentOfferIndex(currentOfferIndex + 1); // Move down (1st -> 2nd -> 3rd...)
+      }
     }
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -113,28 +128,18 @@ export default function VictoryPointAssignmentPage() {
         )}
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
       {!status?.canAssign && status?.reason && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          {status.reason}
-        </Alert>
+        <InfoAlert message={status.reason} onClose={() => {}} />
       )}
 
       {status?.alreadyAssigned && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Victory points have already been assigned for this session.
-        </Alert>
+        <SuccessAlert
+          message="Victory points have already been assigned for this session."
+          onClose={() => {}}
+        />
       )}
 
       {/* Instructions */}
@@ -149,16 +154,26 @@ export default function VictoryPointAssignmentPage() {
         >
           <Typography variant="h6" sx={{ color: 'var(--text-bright)', mb: 2 }}>
             Instructions
+            {status.reverseVpOrder && (
+              <Chip
+                label="TOPSY TURVY"
+                size="small"
+                sx={{ ml: 2, backgroundColor: 'var(--warning)', color: '#000' }}
+              />
+            )}
           </Typography>
           <Typography sx={{ color: 'var(--text-primary)', mb: 1 }}>
-            Starting from 1st place, each player is offered the victory point. If they choose to take it:
+            {status.reverseVpOrder
+              ? 'Starting from LAST PLACE (6th), each player is offered the victory point moving UP the rankings.'
+              : 'Starting from 1st place, each player is offered the victory point.'
+            } If they choose to take it:
           </Typography>
           <Box component="ul" sx={{ color: 'var(--text-primary)', pl: 3, mb: 1 }}>
-            <li>They receive 1 victory point</li>
+            <li>They receive {status.awardTwoVictoryPoints ? '2 victory points' : '1 victory point'}</li>
             <li>All other players (except last place) receive wallet points based on their placement</li>
           </Box>
           <Typography sx={{ color: 'var(--text-primary)' }}>
-            If they pass, the offer moves to the next player in the rankings. If everyone passes, last place automatically receives the victory point.
+            If they pass, the offer moves to the next player in the sequence. If everyone passes, {status.reverseVpOrder ? 'first' : 'last'} place automatically receives the victory point.
           </Typography>
         </Paper>
       )}
@@ -197,6 +212,11 @@ export default function VictoryPointAssignmentPage() {
                 {status.rankedPlayers.map((player, index) => {
                   const isCurrentOffer = status.canAssign && !status.alreadyAssigned && index === currentOfferIndex;
                   const isLastPlace = index === status.rankedPlayers.length - 1;
+
+                  // Determine who is forced to take VP (last in the sequence)
+                  const isForcedToTake = status.reverseVpOrder
+                    ? index === 0 // Reversed: 1st place is forced
+                    : isLastPlace; // Normal: 6th place is forced
 
                   return (
                     <TableRow
@@ -248,52 +268,45 @@ export default function VictoryPointAssignmentPage() {
                         <TableCell align="center">
                           {isCurrentOffer ? (
                             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                              <Button
-                                variant="contained"
+                              <PrimaryButton
                                 size="small"
-                                startIcon={assigning ? <CircularProgress size={16} /> : <EmojiEventsIcon />}
+                                startIcon={<EmojiEventsIcon />}
                                 onClick={handleTakeVictoryPoint}
                                 disabled={assigning}
-                                sx={{
-                                  backgroundColor: 'var(--accent-primary)',
-                                  '&:hover': {
-                                    backgroundColor: 'var(--accent-blue-hover)',
-                                  },
-                                }}
                               >
-                                {isLastPlace ? 'Assign VP' : 'Take VP'}
-                              </Button>
-                              {!isLastPlace && (
-                                <Button
-                                  variant="outlined"
+                                {isForcedToTake
+                                  ? (status.awardTwoVictoryPoints ? 'Assign 2 VP' : 'Assign VP')
+                                  : (status.awardTwoVictoryPoints ? 'Take 2 VP' : 'Take VP')
+                                }
+                              </PrimaryButton>
+                              {!isForcedToTake && (
+                                <SecondaryButton
                                   size="small"
                                   onClick={handlePassVictoryPoint}
                                   disabled={assigning}
-                                  sx={{
-                                    borderColor: 'var(--text-secondary)',
-                                    color: 'var(--text-secondary)',
-                                    '&:hover': {
-                                      borderColor: 'var(--text-primary)',
-                                      color: 'var(--text-primary)',
-                                      backgroundColor: 'var(--hover-light-grey)',
-                                    },
-                                  }}
                                 >
                                   Pass
-                                </Button>
+                                </SecondaryButton>
                               )}
                             </Box>
-                          ) : index < currentOfferIndex ? (
-                            <Chip
-                              label="Passed"
-                              size="small"
-                              sx={{ backgroundColor: 'var(--grey-badge)', color: 'var(--text-secondary)' }}
-                            />
-                          ) : (
-                            <Typography sx={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                              Waiting...
-                            </Typography>
-                          )}
+                          ) : (() => {
+                              // Determine if this player has already passed
+                              const hasPassed = status.reverseVpOrder
+                                ? index > currentOfferIndex // Reversed: higher index = already passed
+                                : index < currentOfferIndex; // Normal: lower index = already passed
+
+                              return hasPassed ? (
+                                <Chip
+                                  label="Passed"
+                                  size="small"
+                                  sx={{ backgroundColor: 'var(--grey-badge)', color: 'var(--text-secondary)' }}
+                                />
+                              ) : (
+                                <Typography sx={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                  Waiting...
+                                </Typography>
+                              );
+                            })()}
                         </TableCell>
                       )}
                     </TableRow>

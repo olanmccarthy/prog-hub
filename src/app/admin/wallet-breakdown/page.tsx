@@ -3,22 +3,10 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
-  Button,
   Typography,
-  Alert,
-  CircularProgress,
-  Paper,
-  Table,
-  TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
   TableRow,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   Chip,
 } from '@mui/material';
@@ -26,6 +14,15 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import {
+  LoadingBox,
+  StyledDialog,
+  ErrorAlert,
+  SuccessAlert,
+  StyledTable,
+  PrimaryButton,
+  SecondaryButton,
+} from '@/src/components';
 import {
   getWalletPointBreakdowns,
   createWalletPointBreakdown,
@@ -164,18 +161,7 @@ export default function WalletBreakdownPage() {
   };
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingBox minHeight="400px" />;
   }
 
   return (
@@ -184,78 +170,33 @@ export default function WalletBreakdownPage() {
         <Typography variant="h4" sx={{ color: 'var(--text-bright)' }}>
           Wallet Point Breakdowns
         </Typography>
-        <Button
-          variant="contained"
+        <PrimaryButton
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
-          sx={{
-            backgroundColor: 'var(--accent-primary)',
-            '&:hover': {
-              backgroundColor: 'var(--accent-blue-hover)',
-            },
-          }}
         >
           Create New Breakdown
-        </Button>
+        </PrimaryButton>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      <ErrorAlert message={error} onClose={() => setError(null)} />
+      <SuccessAlert message={success} onClose={() => setSuccess(null)} />
 
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
-
-      <TableContainer
-        component={Paper}
-        sx={{
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-        }}
+      <StyledTable
+        columns={[
+          { label: 'Name', align: 'left' },
+          { label: '1st Place', align: 'center' },
+          { label: '2nd Place', align: 'center' },
+          { label: '3rd Place', align: 'center' },
+          { label: '4th Place', align: 'center' },
+          { label: '5th Place', align: 'center' },
+          { label: '6th Place', align: 'center' },
+          { label: 'Status', align: 'center' },
+          { label: 'Actions', align: 'center' },
+        ]}
+        isEmpty={breakdowns.length === 0}
+        emptyMessage="No breakdowns configured. Create one to get started."
       >
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }}>Name</TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                1st Place
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                2nd Place
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                3rd Place
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                4th Place
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                5th Place
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                6th Place
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                Status
-              </TableCell>
-              <TableCell sx={{ color: 'var(--text-bright)', fontWeight: 'bold' }} align="center">
-                Actions
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {breakdowns.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ color: 'var(--text-secondary)', py: 4 }}>
-                  No breakdowns configured. Create one to get started.
-                </TableCell>
-              </TableRow>
-            ) : (
+        {breakdowns.length > 0 && (
               breakdowns.map((breakdown) => (
                 <TableRow key={breakdown.id}>
                   <TableCell sx={{ color: 'var(--text-primary)' }}>{breakdown.name}</TableCell>
@@ -286,18 +227,12 @@ export default function WalletBreakdownPage() {
                         icon={<CheckCircleIcon />}
                       />
                     ) : (
-                      <Button
+                      <SecondaryButton
                         size="small"
                         onClick={() => handleSetActive(breakdown.id)}
-                        sx={{
-                          color: 'var(--accent-primary)',
-                          '&:hover': {
-                            backgroundColor: 'var(--bg-tertiary)',
-                          },
-                        }}
                       >
                         Set Active
-                      </Button>
+                      </SecondaryButton>
                     )}
                   </TableCell>
                   <TableCell align="center">
@@ -327,29 +262,26 @@ export default function WalletBreakdownPage() {
                   </TableCell>
                 </TableRow>
               ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+        )}
+      </StyledTable>
 
       {/* Create/Edit Dialog */}
-      <Dialog
+      <StyledDialog
         open={dialogOpen}
         onClose={handleCloseDialog}
+        title={editingId ? 'Edit Breakdown' : 'Create New Breakdown'}
         maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-primary)',
-          },
-        }}
+        actions={
+          <>
+            <SecondaryButton onClick={handleCloseDialog}>
+              Cancel
+            </SecondaryButton>
+            <PrimaryButton onClick={handleSubmit}>
+              {editingId ? 'Update' : 'Create'}
+            </PrimaryButton>
+          </>
+        }
       >
-        <DialogTitle sx={{ color: 'var(--text-bright)' }}>
-          {editingId ? 'Edit Breakdown' : 'Create New Breakdown'}
-        </DialogTitle>
-        <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
             <TextField
               label="Name"
@@ -495,33 +427,7 @@ export default function WalletBreakdownPage() {
               }}
             />
           </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button
-            onClick={handleCloseDialog}
-            sx={{
-              color: 'var(--text-secondary)',
-              '&:hover': {
-                backgroundColor: 'var(--bg-tertiary)',
-              },
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            sx={{
-              backgroundColor: 'var(--accent-primary)',
-              '&:hover': {
-                backgroundColor: 'var(--accent-blue-hover)',
-              },
-            }}
-          >
-            {editingId ? 'Update' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      </StyledDialog>
     </Box>
   );
 }
