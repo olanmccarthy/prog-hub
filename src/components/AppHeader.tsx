@@ -82,6 +82,7 @@ const allNavigationRoutes = [
       { label: 'Player Stats', path: '/stats' },
       { label: 'Set Stats', path: '/stats/set-purchases' },
       { label: 'Meta Analysis', path: '/stats/meta-analysis' },
+      { label: 'Spending History', path: '/spending' },
     ],
   },
   {
